@@ -63,14 +63,26 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+// Polynomial smooth minimum: a rounded union with no crease where the two
+// distances meet.
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+// Wide enough to close the gap between neighbouring panels, so the outer
+// border runs around the whole shell as one ring.
+const float OUTER_BLEND = 48.0;
+
 struct Panels {
   float shell;   // nearest panel or sidebar edge, negative inside
+  float outer;   // the panels fused into one block, negative inside
   float sidebar; // nearest sidebar edge
   float composer;
 };
 
 Panels panels(vec2 p) {
-  Panels result = Panels(1e5, 1e5, 1e5);
+  Panels result = Panels(1e5, 1e5, 1e5, 1e5);
   for (int i = 0; i < MAX_SURFACES; i++) {
     if (i >= uSurfaceCount) break;
     float d = sdRoundRect(p, uSurfaceRect[i], uSurfaceShape[i].x);
@@ -79,6 +91,7 @@ Panels panels(vec2 p) {
       result.composer = min(result.composer, d);
     } else {
       result.shell = min(result.shell, d);
+      result.outer = smin(result.outer, d, OUTER_BLEND);
       if (kind == 1) result.sidebar = min(result.sidebar, d);
     }
   }
@@ -108,10 +121,12 @@ float surfaceHeight(vec2 p) {
   float minSide = min(uViewport.x, uViewport.y);
   float h = ribbons(p / minSide) * minSide * 0.3;
   Panels d = panels(p);
-  h += bezel(d.shell, 16.0, 13.0, 2.5);
+  h += bezel(d.outer, 16.0, 13.0, 2.5);
+  // The channel between panels is a shallow groove, not a second bezel.
+  h += bezel(d.shell, 3.0, 4.0, 2.0) * smoothstep(0.0, -4.5, d.outer);
   h += bezel(d.composer, 9.0, 9.0, 2.0);
   // After a layout change the metal around the edges sloshes once and settles.
-  float outside = max(d.shell, 0.0);
+  float outside = max(d.outer, 0.0);
   h += sin(outside * 0.11 - uSettle.x * 11.0) * exp(-outside / 70.0) * 7.0 * uSettle.y;
   return h;
 }
@@ -208,7 +223,7 @@ void main() {
   // Emissive blue bleeding out from under the panel edges, strongest where a
   // ribbon crest runs into the edge.
   float crest = smoothstep(0.35, 1.05, ribbon);
-  vec3 edgeGlow = BLUE * (0.18 + 0.9 * crest) * exp(-max(d.shell, 0.0) / 22.0);
+  vec3 edgeGlow = BLUE * (0.18 + 0.9 * crest) * exp(-max(d.outer, 0.0) / 22.0);
   vec3 frame = metal + edgeGlow + pulse(p);
 
   // The sidebar is smoked glass: the sharp metal stays legible behind it, just
@@ -233,10 +248,18 @@ void main() {
   panel = mix(panel, composerRim, composerHalo * 0.9);
   panel += composerLight(p, d.composer) * composerFade;
 
+  // Between panels: dimmed metal and a soft blue line, which hand back to the
+  // full border where the channel meets the window edge.
+  float channelDepth = smoothstep(0.0, 4.5, -d.outer);
+  vec3 channel = smoked * 0.3 + BLUE * (0.03 + 0.1 * crest);
+  channel = mix(frame, channel, channelDepth);
+
   float inSidebar = clamp(0.5 - d.sidebar / aa, 0.0, 1.0);
   vec3 interior = mix(panel, sidebar, inSidebar);
-  float outside = clamp(0.5 + d.shell / aa, 0.0, 1.0);
-  vec3 color = mix(interior, frame, outside);
+  float inPanel = clamp(0.5 - d.shell / aa, 0.0, 1.0);
+  vec3 shell = mix(channel, interior, inPanel);
+  float outside = clamp(0.5 + d.outer / aa, 0.0, 1.0);
+  vec3 color = mix(shell, frame, outside);
 
   // A lit hairline just inside each panel edge keeps the glass crisp.
   float hairline = exp(-abs(d.shell + 0.6) * uPixelRatio * 1.4);
@@ -244,7 +267,7 @@ void main() {
 
   color = toneMap(color);
   // The base is sRGB so the panel interior matches the CSS canvas exactly.
-  color += uBase * (1.0 - outside) * (1.0 - composerHalo * (1.0 - inSidebar));
+  color += uBase * inPanel * (1.0 - composerHalo * (1.0 - inSidebar));
   outColor = vec4(color + dither, 1.0);
 }
 `;

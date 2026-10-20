@@ -2498,6 +2498,21 @@ html.dark[data-chrome-shell] [data-app-sidebar] > [data-slot="sidebar-inner"] {
   background: transparent;
 }
 
+/* The resize rail spans the full window height; its hover line would cut
+   through the outer border, so it stays within the panels and glows along
+   the channel between them instead. */
+html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar="rail"]::after {
+  top: calc(var(--chrome-gap) + var(--chrome-radius));
+  bottom: calc(var(--chrome-gap) + var(--chrome-radius));
+  left: calc(50% + var(--chrome-gap) / 2 - 1px);
+  border-radius: 9999px;
+}
+
+html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar="rail"]:hover::after {
+  background: linear-gradient(transparent, rgb(96 165 250 / 60%) 30% 70%, transparent);
+  box-shadow: 0 0 10px rgb(59 130 246 / 45%);
+}
+
 html.dark[data-chrome-shell] [data-slot="sidebar-inset"] {
   --background: transparent;
   height: calc(100dvh - 2 * var(--chrome-gap));
