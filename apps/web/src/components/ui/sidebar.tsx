@@ -6,6 +6,7 @@ import * as React from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
 import { Input, type InputProps } from "~/components/ui/input";
+import { trackChromePanel } from "~/components/chrome/chromeSurfaces";
 import { MorphIcon } from "~/components/MorphIcon";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import {
@@ -585,6 +586,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
         className,
       )}
       data-slot="sidebar-inset"
+      ref={trackChromePanel}
       {...props}
     />
   );

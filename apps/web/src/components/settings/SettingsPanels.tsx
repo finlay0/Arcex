@@ -539,6 +539,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Contrast"]
       : []),
     ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
+    ...(settings.chromeShell !== DEFAULT_UNIFIED_SETTINGS.chromeShell ? ["Liquid chrome"] : []),
     ...(settings.diffColorScheme !== DEFAULT_UNIFIED_SETTINGS.diffColorScheme
       ? ["Diff colors"]
       : []),
@@ -738,6 +739,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
+      chromeShell: DEFAULT_UNIFIED_SETTINGS.chromeShell,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -1222,6 +1224,28 @@ export function AppearanceSettingsPanel() {
                 value={settings.glassOpacity}
               />
             </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("chrome-shell")}
+          description="Frame the app in reflective liquid metal. Dark appearance on desktop-width windows only."
+          resetAction={
+            settings.chromeShell !== DEFAULT_UNIFIED_SETTINGS.chromeShell ? (
+              <SettingResetButton
+                label="liquid chrome"
+                onClick={() =>
+                  updateSettings({ chromeShell: DEFAULT_UNIFIED_SETTINGS.chromeShell })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.chromeShell}
+              onCheckedChange={(checked) => updateSettings({ chromeShell: Boolean(checked) })}
+              aria-label="Liquid chrome"
+            />
           }
         />
 

@@ -227,6 +227,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparent transparency solid menus dialogs composer"],
   },
   {
+    id: "chrome-shell",
+    title: "Liquid chrome",
+    to: "/settings/appearance",
+    searchTerms: ["metal reflective frame background backdrop shader webgl gpu"],
+  },
+  {
     id: "diff-color-scheme",
     title: "Diff colors",
     to: "/settings/appearance",

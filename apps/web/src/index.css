@@ -2452,3 +2452,57 @@ code {
     }
   }
 }
+
+/* Liquid chrome shell (components/chrome/ChromeShell.tsx). The WebGL backdrop
+   paints the metal frame and every panel interior, so the shell surfaces lift
+   off the window edge and go transparent over it. --background must match
+   PANEL_BASE in chromeController.ts: anything still painting it inside a panel
+   then blends into the backdrop instead of showing as a slab. */
+html.dark[data-chrome-shell] {
+  --chrome-gap: 12px;
+  --chrome-radius: 18px;
+  --background: #050608;
+  --sidebar: transparent;
+  --sidebar-stage-fade: transparent;
+}
+
+/* Viewport-fixed titlebar controls follow the panels in off the window edge.
+   Their absolute siblings already sit inside a panel, so the shared
+   --workspace-controls-* offsets stay untouched. */
+html.dark[data-chrome-shell]:not(.wco) [data-sidebar-control] {
+  translate: var(--chrome-gap) var(--chrome-gap);
+}
+
+html.dark[data-chrome-shell]:not(.wco) .fixed[data-workspace-titlebar-controls] {
+  translate: calc(-1 * var(--chrome-gap)) var(--chrome-gap);
+}
+
+/* syncBrowserChromeTheme writes inline backgrounds on both; the body one would
+   paint over the backdrop canvas. */
+html.dark[data-chrome-shell] {
+  background-color: #000 !important;
+}
+
+html.dark[data-chrome-shell] body {
+  background-color: transparent !important;
+}
+
+html.dark[data-chrome-shell] [data-app-sidebar][data-slot="sidebar-container"] {
+  padding: var(--chrome-gap) 0 var(--chrome-gap) var(--chrome-gap);
+  border-width: 0;
+}
+
+html.dark[data-chrome-shell] [data-app-sidebar] > [data-slot="sidebar-inner"] {
+  overflow: hidden;
+  border-radius: var(--chrome-radius);
+  background: transparent;
+}
+
+html.dark[data-chrome-shell] [data-slot="sidebar-inset"] {
+  --background: transparent;
+  height: calc(100dvh - 2 * var(--chrome-gap));
+  margin: var(--chrome-gap);
+  overflow: hidden;
+  border-radius: var(--chrome-radius);
+  background: transparent;
+}

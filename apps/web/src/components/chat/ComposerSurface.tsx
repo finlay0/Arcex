@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 
+import { trackChromeComposer } from "~/components/chrome/chromeSurfaces";
 import { cn } from "~/lib/utils";
 
 function Shell({
@@ -45,6 +46,7 @@ function Host({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-host"
+      ref={trackChromeComposer}
       className={cn(
         "relative z-10 w-full rounded-3xl shadow-composer after:z-1 dark:shadow-none",
         outlineClasses,

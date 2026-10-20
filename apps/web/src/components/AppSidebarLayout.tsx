@@ -30,6 +30,8 @@ import {
   usePanelAnimationSettings,
   usePanelNavigationSuppression,
 } from "../panelAnimations";
+import { ChromeShell } from "./chrome/ChromeShell";
+import { trackChromeSidebar } from "./chrome/chromeSurfaces";
 import LegacyThreadSidebar from "./LegacySidebar";
 import { useThreadVisitedMigration } from "../hooks/useThreadVisitedMigration";
 import ThreadSidebar from "./Sidebar";
@@ -323,12 +325,14 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         defaultOpen
         style={sidebarProviderStyle}
       >
+        <ChromeShell />
         <SidebarBrandWidthProbe onWidthChange={setBrandWidth} />
         <ProjectProjectionRetention />
         <Sidebar
           side="left"
           collapsible="offcanvas"
           data-app-sidebar=""
+          ref={trackChromeSidebar}
           role="navigation"
           aria-label={isOnSettings ? "Settings" : "Threads"}
           resizable={{
