@@ -20,7 +20,12 @@ export interface ChromeFrame {
   readonly height: number;
   readonly pixelRatio: number;
   readonly surfaces: ReadonlyArray<ChromeSurfaceRect>;
-  readonly pointer: { readonly x: number; readonly y: number; readonly strength: number };
+  /** Seconds of ambient drift; frozen while motion is paused. */
+  readonly time: number;
+  /** 0..1, how strongly the composer rim glows. */
+  readonly composerFocus: number;
+  /** Ripple phase in seconds and its remaining energy after a layout change. */
+  readonly settle: { readonly phase: number; readonly energy: number };
   readonly pulse: {
     readonly x: number;
     readonly y: number;
@@ -84,7 +89,10 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
     surfaceRect: uniform("uSurfaceRect"),
     surfaceShape: uniform("uSurfaceShape"),
     surfaceCount: uniform("uSurfaceCount"),
-    pointer: uniform("uPointer"),
+    time: uniform("uTime"),
+    composer: uniform("uComposer"),
+    composerShape: uniform("uComposerShape"),
+    settle: uniform("uSettle"),
     pulse: uniform("uPulse"),
     base: uniform("uBase"),
   };
@@ -115,7 +123,17 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
       gl.uniform4fv(locations.surfaceRect, rects);
       gl.uniform2fv(locations.surfaceShape, shapes);
       gl.uniform1i(locations.surfaceCount, count);
-      gl.uniform3f(locations.pointer, frame.pointer.x, frame.pointer.y, frame.pointer.strength);
+      const composer = frame.surfaces.find((surface) => surface.kind === "composer");
+      gl.uniform1f(locations.time, frame.time);
+      gl.uniform4f(
+        locations.composer,
+        composer?.x ?? 0,
+        composer?.y ?? 0,
+        composer?.width ?? 0,
+        composer?.height ?? 0,
+      );
+      gl.uniform2f(locations.composerShape, composer?.radius ?? 0, frame.composerFocus);
+      gl.uniform2f(locations.settle, frame.settle.phase, frame.settle.energy);
       gl.uniform4f(
         locations.pulse,
         frame.pulse.x,
