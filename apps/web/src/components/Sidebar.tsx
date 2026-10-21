@@ -71,6 +71,7 @@ import {
   AlarmClockOffIcon,
   ArrowRightLeftIcon,
   CheckIcon,
+  ChevronDownIcon,
   CircleAlertIcon,
   CircleCheckIcon,
   CircleDashedIcon,
@@ -79,6 +80,7 @@ import {
   FolderIcon,
   GitBranchIcon,
   ListFilterIcon,
+  MessageCircleIcon,
   MessageCircleQuestionIcon,
   PinIcon,
   PinOffIcon,
@@ -277,7 +279,7 @@ import {
   ComboboxTrigger,
   useComboboxFilter,
 } from "./ui/combobox";
-import { SidebarContent, SidebarGroup, useSidebar } from "./ui/sidebar";
+import { SidebarContent, SidebarGroup, SidebarMenuButton, useSidebar } from "./ui/sidebar";
 import { SidebarChromeFooter, SidebarChromeHeader } from "./sidebar/SidebarChrome";
 import { SidebarHeaderIconButton, SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
@@ -1546,6 +1548,11 @@ const dropVerbBadge: Record<SidebarDropVerb, ReactNode> = {
 type SidebarThreadRowProps = {
   thread: SidebarThreadSummary;
   variant: "card" | "slim";
+  /**
+   * What leads a slim row. Rows inside a single project's scope don't need
+   * its favicon, so the chrome layout marks them as threads instead.
+   */
+  leadingIcon?: "project" | "thread";
   variantAction: SidebarSweepAction;
   settlementSupported: boolean;
   snoozeSupported: boolean;
@@ -2144,7 +2151,13 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                   "opacity-40 grayscale group-focus-within/sidebar-row:opacity-100 group-focus-within/sidebar-row:grayscale-0 group-hover/sidebar-row:opacity-100 group-hover/sidebar-row:grayscale-0",
               )}
             >
-              {props.project ? <ProjectFavicon project={props.project} className="size-4" /> : null}
+              {props.leadingIcon === "thread" ? (
+                <span data-sidebar-row-icon="" className="flex items-center justify-center">
+                  <MessageCircleIcon className="size-4" />
+                </span>
+              ) : props.project ? (
+                <ProjectFavicon project={props.project} className="size-4" />
+              ) : null}
             </span>
             {draftIndicator}
             {title}
@@ -4589,25 +4602,53 @@ export default function Sidebar() {
                     setProjectScopeKey(item.value === "all" ? null : item.value);
                   }}
                 >
-                  <ComboboxTrigger
-                    render={
-                      <SidebarHeaderIconButton
-                        label={
-                          scopedProjectGroup
-                            ? `Filter threads by project: ${scopedProjectGroup.displayName}`
-                            : "Filter threads by project"
-                        }
-                      />
-                    }
-                  >
-                    {scopedProjectGroup ? (
-                      <span className="flex shrink-0">
+                  {chromeShellActive ? (
+                    // The chrome header names the scope outright, as a row
+                    // under its Projects label, instead of an icon button.
+                    <ComboboxTrigger
+                      render={
+                        <SidebarMenuButton
+                          type="button"
+                          aria-label={
+                            scopedProjectGroup
+                              ? `Filter threads by project: ${scopedProjectGroup.displayName}`
+                              : "Filter threads by project"
+                          }
+                          data-sidebar-project-scope=""
+                        />
+                      }
+                    >
+                      {scopedProjectGroup ? (
                         <ProjectFavicon project={scopedProjectGroup} className="size-4" />
+                      ) : (
+                        <FolderIcon />
+                      )}
+                      <span className="min-w-0 truncate">
+                        {scopedProjectGroup?.displayName ?? "All projects"}
                       </span>
-                    ) : (
-                      <ListFilterIcon className="size-4" />
-                    )}
-                  </ComboboxTrigger>
+                      <ChevronDownIcon />
+                    </ComboboxTrigger>
+                  ) : (
+                    <ComboboxTrigger
+                      render={
+                        <SidebarHeaderIconButton
+                          label={
+                            scopedProjectGroup
+                              ? `Filter threads by project: ${scopedProjectGroup.displayName}`
+                              : "Filter threads by project"
+                          }
+                        />
+                      }
+                    >
+                      {scopedProjectGroup ? (
+                        <span className="flex shrink-0">
+                          <ProjectFavicon project={scopedProjectGroup} className="size-4" />
+                        </span>
+                      ) : (
+                        <ListFilterIcon className="size-4" />
+                      )}
+                    </ComboboxTrigger>
+                  )}
                   <ComboboxPopup
                     align="start"
                     anchor={headerSearchRef}
@@ -4705,6 +4746,8 @@ export default function Sidebar() {
               searchResultCount={threadSearchResults.length}
               activeSearchResultIndex={activeSearchResultIndex}
               onClearSearch={clearThreadSearch}
+              layout={chromeShellActive ? "chrome" : "compact"}
+              searchShortcutLabel={shortcutLabelForCommand(keybindings, "commandPalette.toggle")}
             />
           </SidebarGroup>
         }
@@ -4835,6 +4878,9 @@ export default function Sidebar() {
                             }
                             thread={thread}
                             variant={rowVariant}
+                            leadingIcon={
+                              chromeShellActive && scopedProjectGroup ? "thread" : "project"
+                            }
                             variantAction={
                               section === "snoozed"
                                 ? "unsnooze"

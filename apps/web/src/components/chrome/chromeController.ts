@@ -20,7 +20,7 @@ const SETTLE_KICK = 0.35;
 const PULSE_DURATION_MS = 820;
 
 // Matches --background under html[data-chrome-shell] in index.css.
-const PANEL_BASE: readonly [number, number, number] = [5 / 255, 6 / 255, 8 / 255];
+const PANEL_BASE: readonly [number, number, number] = [4 / 255, 8 / 255, 11 / 255];
 
 export interface ChromeController {
   /** Sends a short light pulse into a point on screen, in CSS pixels. */
