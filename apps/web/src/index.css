@@ -2729,3 +2729,30 @@ html.dark[data-chrome-shell] [data-user-message-surface] {
   font-size: 1.0625rem;
   color: rgb(241 245 249);
 }
+
+/* Composer interior and send button, per the mockup: a navy well and a
+   large lit blue send control. */
+html.dark[data-chrome-shell] [data-chat-composer-main-surface] {
+  background: linear-gradient(180deg, rgb(12 19 33 / 92%), rgb(6 10 17 / 96%));
+}
+
+html.dark[data-chrome-shell] [data-slot="composer-host"] button[type="submit"] {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+html.dark[data-chrome-shell] [data-slot="composer-host"] button[type="submit"] svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Chat text runs a size larger than the stock lane, as in the mockup. */
+html.dark[data-chrome-shell] [data-message-role="assistant"] [data-thread-find-text] {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+html.dark[data-chrome-shell] .chat-author-avatar {
+  width: 2.625rem;
+  height: 2.625rem;
+}

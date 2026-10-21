@@ -208,7 +208,7 @@ vec3 composerLight(vec2 p, float d) {
   // A heavy rolled ring, then a thin bright inner lip.
   float rim = exp(-pow((d - 3.0) / 3.6, 2.0));
   float lip = exp(-pow((d - 0.6) / 1.0, 2.0));
-  float halo = exp(-max(d, 0.0) / (20.0 + 12.0 * focus)) * step(-0.5, d);
+  float halo = exp(-max(d, 0.0) / (12.0 + 8.0 * focus)) * step(-0.5, d);
 
   vec3 ringWhite = mix(ICE, vec3(1.0), 0.55);
   vec3 light = ringWhite * rim * (1.05 * topLit + comets * (1.2 + 1.4 * focus));
@@ -279,7 +279,9 @@ void main() {
     panel = frost / (1.0 + frost) * 1.6 * 0.07 * edgeFade;
   }
   float composerFade = smoothstep(140.0, 70.0, d.composer);
-  float composerHalo = exp(-max(d.composer, 0.0) / 22.0) * step(0.0, d.composer) * composerFade;
+  // The panel stays dark up to the ring: only a tight band of metal shows,
+  // which is what lets the ring merge with the bottom bezel below it.
+  float composerHalo = exp(-max(d.composer, 0.0) / 7.0) * step(0.0, d.composer) * composerFade;
   vec3 composerRim = metal * 0.85 + BLUE * (0.25 + 0.75 * crest) * 0.6;
   panel = mix(panel, composerRim, composerHalo * 0.9);
   panel += composerLight(p, d.composer) * composerFade;
