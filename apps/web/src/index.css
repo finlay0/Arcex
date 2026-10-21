@@ -2459,13 +2459,14 @@ code {
    PANEL_BASE in chromeController.ts: anything still painting it inside a panel
    then blends into the backdrop instead of showing as a slab. */
 html.dark[data-chrome-shell] {
-  --chrome-gap: 6px;
-  /* The main panel sits further off the sidebar: that strip is the channel
-     the sidebar's rolled edge drops into. */
-  --chrome-gap-start: 30px;
-  --chrome-radius: 16px;
-  --chrome-panel-radius-start: 48px;
-  --chrome-panel-radius-end: 44px;
+  /* Matched to the chrome plate's frame (chromeShader.ts CHROME_PLATE), so
+     its panel rim lands on the panel's edges without stretching. */
+  --chrome-gap: 16px;
+  /* The narrow channel the sidebar glass's rolled edge drops into. */
+  --chrome-gap-start: 10px;
+  --chrome-radius: 22px;
+  --chrome-panel-radius-start: 46px;
+  --chrome-panel-radius-end: 46px;
   --background: #04080b;
   --sidebar: transparent;
   --sidebar-stage-fade: transparent;
