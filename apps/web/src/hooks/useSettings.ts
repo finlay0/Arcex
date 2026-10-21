@@ -383,16 +383,19 @@ export function resolveEnvironmentIdentificationMode(input: {
   settingsHydrated: boolean;
   paletteThemeActive?: boolean;
   paletteThemeAllowsArtwork?: boolean;
+  /** The liquid chrome shell frames the sidebar itself; stage artwork would sit under the logo. */
+  chromeShellActive?: boolean;
 }): EnvironmentIdentificationMode {
   if (!input.settingsHydrated) return "none";
-  return input.paletteThemeActive && !input.paletteThemeAllowsArtwork && input.mode === "artwork"
-    ? "pill"
-    : input.mode;
+  if (input.mode !== "artwork") return input.mode;
+  if (input.chromeShellActive) return "pill";
+  return input.paletteThemeActive && !input.paletteThemeAllowsArtwork ? "pill" : input.mode;
 }
 
 export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMode {
   const settingsHydrated = useClientSettingsHydrated();
   const mode = useClientSettings((settings) => settings.environmentIdentificationMode);
+  const chromeShell = useClientSettings((settings) => settings.chromeShell);
   const { resolvedTheme, theme, themeHalves } = useTheme();
   const previewSidebarArtwork = useSyncExternalStore(
     subscribeToThemePreview,
@@ -406,6 +409,7 @@ export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMod
     settingsHydrated,
     paletteThemeActive: previewSidebarArtwork !== null || activeThemeDefinition !== null,
     paletteThemeAllowsArtwork: previewSidebarArtwork ?? themeAllowsSidebarArtwork(activeTheme),
+    chromeShellActive: chromeShell && resolvedTheme === "dark",
   });
 }
 

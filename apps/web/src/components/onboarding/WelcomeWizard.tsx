@@ -84,7 +84,7 @@ import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { CloudEnvironmentConnectRows } from "../cloud/CloudEnvironmentConnectList";
 import { presentSavedCloudEnvironmentConnection } from "../cloud/cloudEnvironmentConnectionPresentation";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import arcexLockupUrl from "~/assets/arcex-lockup.webp";
+import { ArcexLockup } from "../ArcexLockup";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CommandBlock } from "../CommandBlock";
@@ -230,19 +230,7 @@ export function WelcomeWizard({
         bottomStickOnMobile={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
-        <WizardHeader
-          title="Set up Arcex"
-          identity={
-            <img
-              alt="Arcex"
-              className="h-8 w-auto shrink-0 select-none"
-              draggable={false}
-              height={128}
-              src={arcexLockupUrl}
-              width={480}
-            />
-          }
-        >
+        <WizardHeader title="Set up Arcex" identity={<ArcexLockup />}>
           <WizardSteps
             steps={ONBOARDING_STAGES}
             currentStep={stageIndex}

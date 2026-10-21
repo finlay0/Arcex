@@ -397,6 +397,25 @@ describe("resolveEnvironmentIdentificationMode", () => {
     ).toBe("none");
   });
 
+  it("uses a pill instead of artwork under the chrome shell", () => {
+    expect(
+      resolveEnvironmentIdentificationMode({
+        mode: "artwork",
+        settingsHydrated: true,
+        paletteThemeActive: true,
+        paletteThemeAllowsArtwork: true,
+        chromeShellActive: true,
+      }),
+    ).toBe("pill");
+    expect(
+      resolveEnvironmentIdentificationMode({
+        mode: "none",
+        settingsHydrated: true,
+        chromeShellActive: true,
+      }),
+    ).toBe("none");
+  });
+
   it("keeps artwork when the palette theme opts into it", () => {
     expect(
       resolveEnvironmentIdentificationMode({
