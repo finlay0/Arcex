@@ -6,17 +6,6 @@ export const CHROME_SURFACE_KIND_INDEX = {
   composer: 2,
 } as const;
 
-// Landmarks in the chrome plate (assets/chrome-plate.webp), in its own pixels:
-// the main panel's edges and the composer input's edges. The plate is the
-// mockup's chrome with its interface painted out; these are where the shader
-// pins it to the live layout.
-export const CHROME_PLATE = {
-  width: 1755,
-  height: 896,
-  panel: { left: 318, top: 20, right: 1746, bottom: 878 },
-  composer: { left: 596, top: 710, right: 1458, bottom: 850 },
-} as const;
-
 export const CHROME_VERTEX_SHADER = /* glsl */ `#version 300 es
 void main() {
   vec2 corner = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -27,12 +16,14 @@ void main() {
 // Everything is computed in CSS pixels with a top-left origin so surface
 // rects from getBoundingClientRect can be passed through untouched.
 //
-// The chrome is baked: a plate of the mockup's liquid metal, mapped piecewise
-// so its panel edges land on the live panel's edges at any window size, with
-// the composer's ring nine-sliced onto wherever the composer sits. The shader
-// animates it: the metal wobbles slowly like a liquid, a soft light sweeps
-// across its highlights, the blue breathes, comets run the composer ring and
-// navigation sends a pulse into the sidebar.
+// The window is sculpted black glass-metal. Under the sidebar it is a set of
+// rounded slabs: an upper slab behind the navigation, a sweep that leaves the
+// window's left edge low down and rises into the channel, a ribbon under the
+// sweep and a pillow beside the channel. The content panels and the composer
+// sit in thin rolled frames. Every edge is a broad bevel, lit in screen space:
+// a key light from the upper right paints wide white highlights on the edges
+// that face it and a soft sheen on gently tilted faces, a top light catches
+// upward edges, and blue light comes from below. The forms drift slowly.
 export const CHROME_FRAGMENT_SHADER = /* glsl */ `#version 300 es
 precision highp float;
 
@@ -50,28 +41,13 @@ uniform vec2 uComposerShape; // radius, focus 0..1
 uniform vec2 uSettle;        // ripple phase in seconds, energy 0..1
 uniform vec4 uPulse;
 uniform vec3 uBase;
-uniform sampler2D uPlate;
-uniform vec4 uPanelBox;      // live content panels' bounds: left, top, right, bottom
 
 out vec4 outColor;
 
-const vec2 PLATE_SIZE = vec2(${CHROME_PLATE.width}.0, ${CHROME_PLATE.height}.0);
-const vec4 PLATE_PANEL = vec4(
-  ${CHROME_PLATE.panel.left}.0, ${CHROME_PLATE.panel.top}.0,
-  ${CHROME_PLATE.panel.right}.0, ${CHROME_PLATE.panel.bottom}.0
-);
-const vec4 PLATE_COMPOSER = vec4(
-  ${CHROME_PLATE.composer.left}.0, ${CHROME_PLATE.composer.top}.0,
-  ${CHROME_PLATE.composer.right}.0, ${CHROME_PLATE.composer.bottom}.0
-);
-// How far past the composer's edges its ring and glow reach in the plate.
-const float RING_REACH = 26.0;
-// The nine-slice corners: the ring keeps its true shape inside these.
-const float RING_CORNER = 64.0;
-
-const vec3 BLUE = vec3(0.06, 0.36, 1.0);
-const vec3 ICE = vec3(0.62, 0.8, 1.0);
+const vec3 BLUE = vec3(0.1, 0.45, 1.0);
+const vec3 WHITE = vec3(0.92, 0.96, 1.0);
 const float TAU = 6.2831853;
+const float WINDOW_RADIUS = 18.0;
 
 float sdRoundRect(vec2 p, vec4 rect, vec4 radii) {
   vec2 halfSize = rect.zw * 0.5;
@@ -85,13 +61,29 @@ float hash(vec2 p) {
   return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
 }
 
+float gauss(float x, float mean, float width) {
+  return exp(-pow((x - mean) / width, 2.0));
+}
+
+// Polynomial smooth minimum: a rounded union with no crease where the two
+// distances meet.
+float smin(float a, float b, float k) {
+  float h = max(k - abs(a - b), 0.0) / k;
+  return min(a, b) - h * h * k * 0.25;
+}
+
+// Wide enough to close the gap between neighbouring panels, so the frame runs
+// around them as one ring.
+const float OUTER_BLEND = 48.0;
+
 struct Panels {
-  float shell;   // nearest content panel edge, negative inside
+  float shell; // nearest content panel edge, negative inside
+  float outer; // content panels fused into one block, negative inside
   float composer;
 };
 
 Panels panels(vec2 p) {
-  Panels result = Panels(1e5, 1e5);
+  Panels result = Panels(1e5, 1e5, 1e5);
   for (int i = 0; i < MAX_SURFACES; i++) {
     if (i >= uSurfaceCount) break;
     int kind = int(uSurfaceKind[i] + 0.5);
@@ -100,59 +92,117 @@ Panels panels(vec2 p) {
       result.composer = min(result.composer, d);
     } else if (kind == 0) {
       result.shell = min(result.shell, d);
+      result.outer = smin(result.outer, d, OUTER_BLEND);
     }
   }
   return result;
 }
 
-// Three linear pieces, pinning live0 and live1 to plate0 and plate1, so the
-// plate stretches between the panel edges and outside them independently.
-float pin(float x, float live0, float live1, float liveEnd, float plate0, float plate1, float plateEnd) {
-  // With the sidebar collapsed the leading strip is a few pixels wide; it
-  // shows the plate at its own scale beside the panel rather than the whole
-  // sidebar artwork squeezed flat.
-  float leadScale = mix(1.0, plate0 / max(live0, 1.0), smoothstep(120.0, 220.0, live0));
-  if (x < live0) return plate0 - (live0 - x) * leadScale;
-  if (x > live1) return plate1 + (x - live1) / max(liveEnd - live1, 1.0) * (plateEnd - plate1);
-  return plate0 + (x - live0) / max(live1 - live0, 1.0) * (plate1 - plate0);
+// A rounded bevel rising from a boundary: steepest at the boundary and level
+// by the radius, so each edge carries a broad band of changing normals.
+float bevel(float d, float height, float radius) {
+  float t = clamp(d / radius, 0.0, 1.0);
+  return height * (1.0 - (1.0 - t) * (1.0 - t));
 }
 
-// Nine-slice along one axis: within RING_CORNER of either edge the plate keeps
-// its scale, so the ring's rounded ends never stretch.
-float slice(float x, float live0, float live1, float plate0, float plate1) {
-  float corner = min(RING_CORNER, 0.5 * (live1 - live0));
-  if (x < live0 + corner) return plate0 + (x - live0);
-  if (x > live1 - corner) return plate1 + (x - live1);
-  float t = (x - live0 - corner) / max(live1 - live0 - 2.0 * corner, 1.0);
-  return mix(plate0 + corner, plate1 - corner, t);
+// The sculpted forms are laid out across the sidebar, in u from the window's
+// left edge to the channel, and down the window in v. Set once per pixel.
+float gSculptX = 0.0;
+
+// The sidebar's edge along the channel: it bulges toward the panel beside
+// the navigation and runs straight beside the pillow.
+float channelEdge(float v) {
+  float bulge = pow(max(sin(clamp(v / 0.56, 0.0, 1.0) * 3.14159), 0.0), 0.8);
+  return gSculptX + 16.0 * bulge + 10.0 * smoothstep(0.85, 1.0, v);
 }
 
-vec3 plate(vec2 q) {
-  return texture(uPlate, q / PLATE_SIZE).rgb;
+// Signed distances into the slabs, positive inside: x the upper slab, y the
+// ribbon under the sweep, z the pillow.
+vec3 slabDistances(vec2 p) {
+  float H = uViewport.y;
+  float u = p.x / gSculptX;
+  float v = p.y / H;
+  float drift = 0.008 * sin(uTime * 0.09 + u * 2.4);
+  float pxPerU = gSculptX / H;
+  // The sweep: the upper slab's lower edge, an S-curve fitted to the mockup,
+  // and the ribbon's top just below it.
+  float vA = 0.78 - 0.05 * u - 0.35 * u * u + 0.2 * u * u * u + drift;
+  float slopeA = (-0.05 - 0.7 * u + 0.6 * u * u) / pxPerU;
+  float scaleA = 1.0 / sqrt(1.0 + slopeA * slopeA);
+  float dA = (vA - v) * H * scaleA;
+  float vB = vA + 0.03;
+  float dB = (v - vB) * H * scaleA;
+  // The pillow's flank: it leaves the sweep partway along and runs down to
+  // the window's bottom-left corner.
+  float vF = 0.647 + 0.348 * (0.79 - u) / 0.69 + 0.006 * sin(uTime * 0.07 + u * 3.0);
+  float slopeF = -0.504 / pxPerU;
+  float dF = (v - vF) * H / sqrt(1.0 + slopeF * slopeF);
+  float dEdge = channelEdge(v) - p.x;
+  float dTop = p.y - 1.0;
+  // The sweep and the ribbon run on out of the window's left edge; only the
+  // upper slab's top corner rounds there.
+  float dLeft = p.x + 6.0;
+  float upper = smin(smin(dA, dEdge, 90.0), smin(dTop, dLeft, 40.0), 30.0);
+  float ribbon = smin(smin(dB, -dF, 30.0), dEdge, 30.0);
+  float pillow = smin(smin(dB, dF, 50.0), dEdge, 50.0);
+  return vec3(upper, ribbon, pillow);
 }
 
-// A slow liquid wobble in plate space, stirred harder for a moment after a
-// layout change. Thin lines shimmer at full strength, so callers scale it.
-vec2 wobble(vec2 q, float strength) {
-  float t = uTime;
-  float amount = (0.7 + 4.0 * uSettle.y) * strength;
-  return q + amount * vec2(
-    sin(q.y * 0.031 + t * 0.55) + 0.5 * sin(q.y * 0.077 - t * 0.83 + q.x * 0.011),
-    cos(q.x * 0.027 + t * 0.47) + 0.5 * cos(q.x * 0.069 + t * 0.71 - q.y * 0.013)
-  );
+float sculpt(vec2 p) {
+  if (gSculptX < 40.0) return 0.0;
+  vec3 s = slabDistances(p);
+  float v = p.y / uViewport.y;
+  float u = p.x / gSculptX;
+  float h = bevel(s.x, 22.0, 26.0) + bevel(s.y, 18.0, 14.0) + bevel(s.z, 20.0, 18.0);
+  // The pillow domes up, so the side of it toward the sweep and the channel
+  // turns to the key in a broad sheen.
+  h += bevel(s.z, 50.0, 80.0);
+  // A second, much wider roll on each slab's edge: the glass thickening
+  // toward its rim, which turns broad bands of each face toward the light.
+  h += bevel(s.x, 26.0, 90.0) + bevel(s.z, 14.0, 60.0);
+  // The upper slab bows gently.
+  h += 18.0 * smoothstep(0.0, 160.0, s.x) * sin(clamp(v / 0.75, 0.0, 1.0) * 3.14159);
+  return h;
 }
 
-// Light play on baked chrome: a soft band sweeps across the highlights and
-// the blue breathes. Only already-bright and already-blue pixels respond, so
-// the dark metal stays dark.
-vec3 animateLight(vec3 c, vec2 p) {
-  float t = uTime;
-  float lum = dot(c, vec3(0.3, 0.5, 0.2));
-  float travel = mod(t * 90.0, uViewport.x + uViewport.y + 800.0) - 400.0;
-  float band = exp(-pow((p.x * 0.8 + p.y * 0.6 - travel) / 140.0, 2.0));
-  c += c * smoothstep(0.15, 0.7, lum) * band * 0.7;
-  float blueness = max(c.b - max(c.r, c.g), 0.0);
-  c += BLUE * blueness * 0.35 * (0.5 + 0.5 * sin(t * 0.8 + p.y * 0.004));
+float surfaceHeight(vec2 p) {
+  Panels d = panels(p);
+  float h = sculpt(p);
+  // The frame around the content panels rolls up from their edges.
+  h += bevel(d.outer, 8.0, 12.0) * step(0.0, d.outer);
+  // The composer's ring: a rounded glass tube around the input.
+  h += 9.0 * sqrt(max(1.0 - pow((d.composer - 8.0) / 8.0, 2.0), 0.0));
+  // The metal rolls over at the window edge.
+  float inset = -sdRoundRect(p, vec4(vec2(0.0), uViewport), vec4(WINDOW_RADIUS));
+  h -= 6.0 * (1.0 - smoothstep(0.0, 8.0, inset));
+  // After a layout change the metal around the edges sloshes once and settles.
+  float outside = max(d.outer, 0.0);
+  h += sin(outside * 0.11 - uSettle.x * 11.0) * exp(-outside / 70.0) * 7.0 * uSettle.y;
+  return h;
+}
+
+vec3 surfaceNormal(vec2 p, float eps) {
+  float dx = surfaceHeight(p + vec2(eps, 0.0)) - surfaceHeight(p - vec2(eps, 0.0));
+  float dy = surfaceHeight(p + vec2(0.0, eps)) - surfaceHeight(p - vec2(0.0, eps));
+  return normalize(vec3(-dx, -dy, 2.0 * eps));
+}
+
+// Screen-space lighting for the glass-metal. steep is 0 on a level face and
+// 1 on a vertical wall; dir is the way the surface faces on screen. Every
+// bevel draws a thin white rim where it passes a set steepness, brightest
+// toward the key; gently tilted faces that lean toward the key carry a broad
+// sheen; the steepest walls turn blue.
+vec3 shade(vec3 n) {
+  float steep = 1.0 - n.z;
+  vec2 dir = normalize(n.xy + vec2(1e-5));
+  float key = 0.5 + 0.5 * dot(dir, normalize(vec2(0.92, -0.4)));
+  float low = max(dot(dir, normalize(vec2(-0.5, 0.86))), 0.0);
+  vec3 c = uBase * 0.9;
+  c += vec3(0.55, 0.6, 0.68) * 0.42 * smoothstep(0.0, 0.32, steep) * pow(key, 2.2);
+  float rim = exp(-pow((steep - 0.42) / 0.06, 2.0));
+  c += WHITE * rim * (0.3 + 1.0 * pow(key, 4.0));
+  float wall = smoothstep(0.55, 0.9, steep);
+  c += BLUE * wall * (0.25 + 0.9 * low + 0.6 * pow(key, 4.0));
   return c;
 }
 
@@ -163,21 +213,28 @@ vec3 pulse(vec2 p) {
   float dist = length(p - uPulse.xy);
   float ring = exp(-pow((dist - radius) / 26.0, 2.0)) * sin(3.14159 * t);
   float core = exp(-dist / 44.0) * smoothstep(0.55, 0.9, t) * (1.0 - t) * 2.4;
-  return BLUE * 0.35 * (ring + core) * uPulse.w;
+  return BLUE * 0.4 * (ring + core) * uPulse.w;
 }
 
 // Two comets travelling the composer ring in opposite directions, brighter
-// while the composer has focus.
-vec3 comets(vec2 p, float d) {
+// while the composer has focus, and blue pooled at its ends.
+vec3 composerLight(vec2 p, float d) {
+  if (uComposer.z <= 0.0) return vec3(0.0);
   vec2 halfSize = uComposer.zw * 0.5;
   vec2 local = (p - uComposer.xy - halfSize) / max(halfSize, vec2(1.0));
   float angle = atan(local.y, local.x) / TAU;
   float t = uTime;
   float a = pow(0.5 + 0.5 * cos(TAU * (angle - t * 0.045)), 28.0);
   float b = pow(0.5 + 0.5 * cos(TAU * (angle + t * 0.032 + 0.37)), 40.0);
-  float line = exp(-pow((d - 7.0) / 2.5, 2.0));
   float focus = uComposerShape.y;
-  return mix(ICE, vec3(1.0), 0.4) * line * (a + 0.6 * b) * (0.25 + 0.45 * focus);
+  // A white line along the ring's outer edge, brightest along the top, and
+  // blue pooled at its lower corners.
+  float topLit = 0.35 + 0.65 * smoothstep(0.3, -0.9, local.y);
+  float outerLine = gauss(d, 15.0, 1.3);
+  float corners = smoothstep(0.75, 1.0, abs(local.x)) * smoothstep(-0.2, 0.8, local.y);
+  vec3 light = WHITE * outerLine * (0.25 * topLit + (a + 0.6 * b) * (0.3 + 0.5 * focus));
+  light += BLUE * corners * gauss(d, 10.0, 8.0) * (0.5 + 0.3 * focus);
+  return light;
 }
 
 void main() {
@@ -186,44 +243,66 @@ void main() {
   Panels d = panels(p);
 
   // Deep inside a content panel only the flat canvas shows, so most of the
-  // screen skips the plate entirely.
-  if (d.shell < -60.0 && d.composer > RING_REACH + 4.0) {
+  // screen skips the metal entirely.
+  if (d.shell < -24.0 && d.composer > 40.0) {
     outColor = vec4(uBase + dither, 1.0);
     return;
   }
 
-  vec2 q = vec2(
-    pin(p.x, uPanelBox.x, uPanelBox.z, uViewport.x, PLATE_PANEL.x, PLATE_PANEL.z, PLATE_SIZE.x),
-    pin(p.y, uPanelBox.y, uPanelBox.w, uViewport.y, PLATE_PANEL.y, PLATE_PANEL.w, PLATE_SIZE.y)
-  );
-  // The panel floor holds still; everything around it is liquid.
-  float floorDepth = smoothstep(-2.0, -14.0, d.shell);
-  vec3 color = plate(wobble(q, 1.0 - floorDepth));
+  float panelLeft = uViewport.x;
+  for (int i = 0; i < MAX_SURFACES; i++) {
+    if (i >= uSurfaceCount) break;
+    if (int(uSurfaceKind[i] + 0.5) == 0) panelLeft = min(panelLeft, uSurfaceRect[i].x);
+  }
+  gSculptX = panelLeft - 14.0;
 
-  // The plate's own composer belongs to the mockup's layout, so its floor
-  // takes the canvas colour there; the live composer's ring is drawn below.
-  vec2 plateComposer = max(
-    PLATE_COMPOSER.xy - RING_REACH - 24.0 - q,
-    q - PLATE_COMPOSER.zw - vec2(RING_REACH + 24.0, 6.0)
-  );
-  float onPlateComposer = smoothstep(4.0, -10.0, max(plateComposer.x, plateComposer.y));
-  color = mix(color, uBase, onPlateComposer * floorDepth);
+  vec3 metal = shade(surfaceNormal(p, 1.0));
+  float u = p.x / max(gSculptX, 1.0);
+  float v = p.y / uViewport.y;
 
-  // The live composer's ring, nine-sliced from the plate's.
-  if (uComposer.z > 0.0 && d.composer < RING_REACH) {
-    vec4 live = vec4(uComposer.xy, uComposer.xy + uComposer.zw);
-    vec2 r = vec2(
-      slice(p.x, live.x, live.z, PLATE_COMPOSER.x, PLATE_COMPOSER.z),
-      slice(p.y, live.y, live.w, PLATE_COMPOSER.y, PLATE_COMPOSER.w)
-    );
-    float ringMask =
-      smoothstep(RING_REACH, RING_REACH - 10.0, d.composer) * smoothstep(-4.0, -1.0, d.composer);
-    vec3 ring = plate(wobble(r, 0.3)) * (1.0 + 0.2 * uComposerShape.y);
-    color = mix(color, ring, ringMask);
-    color += comets(p, d.composer) * ringMask;
+  // Electric glints pooled on the slab edges, each with a white-hot core:
+  // at the top of the channel, along the sweep, where the sweep meets the
+  // channel and down the window's left edge.
+  vec3 glow = vec3(0.0);
+  if (gSculptX > 40.0) {
+    vec3 s = slabDistances(p);
+    float rimUpper = exp(-abs(s.x) / 6.0);
+    float rimPillow = exp(-abs(s.z) / 6.0);
+    float pools = gauss(v, 0.09, 0.05) * smoothstep(0.75, 1.0, u) * rimUpper
+      + gauss(u, 0.42, 0.12) * gauss(v, 0.69, 0.05) * rimUpper
+      + gauss(v, 0.52, 0.03) * smoothstep(0.85, 1.0, u) * rimUpper
+      + gauss(v, 0.72, 0.1) * smoothstep(0.9, 1.05, u) * rimPillow;
+    glow += BLUE * 2.6 * pools + WHITE * 1.2 * pools * pools * pools;
+    glow += BLUE * 0.9 * gauss(v, 0.45, 0.2) * exp(-p.x / 8.0);
+    // Bloom: the rims glow softly into the glass around them, white where
+    // they face the key and blue elsewhere.
+    float near = exp(-abs(s.x) / 14.0) + exp(-abs(s.z) / 14.0) + 0.6 * exp(-abs(s.y) / 12.0);
+    float facing = smoothstep(0.6, 1.0, u);
+    glow += (BLUE * 0.16 + WHITE * 0.05 * facing) * near;
+    // Light trapped in the channel between the sidebar's edge and the panel.
+    float channel = exp(-abs(p.x - 0.5 * (channelEdge(v) + panelLeft)) / 4.0);
+    glow += BLUE * channel * (0.06 + 1.1 * gauss(v, 0.08, 0.05) + 0.7 * gauss(v, 0.55, 0.05) + 0.5 * gauss(v, 0.8, 0.1));
   }
 
-  color = mix(animateLight(color, p) + pulse(p), color, floorDepth);
+  // The panel floor: the flat canvas with a lit lip at its edge.
+  float lip = gauss(d.shell, -1.0, 1.0);
+  vec3 floorColor = uBase + WHITE * lip * 0.12;
+  float inPanel = clamp(0.5 - d.shell * uPixelRatio, 0.0, 1.0);
+  vec3 color = mix(metal + glow, floorColor, inPanel);
+
+  // The composer sits on the floor in its own frame.
+  if (uComposer.z > 0.0 && d.composer < 40.0) {
+    float inComposer = clamp(0.5 - d.composer * uPixelRatio, 0.0, 1.0);
+    float frame = smoothstep(18.0, 15.0, d.composer) * (1.0 - inComposer);
+    // A clear glass ring: its walls keep their white, not the blue the
+    // sidebar's walls pick up.
+    vec3 glass = vec3(dot(metal, vec3(0.35, 0.45, 0.2))) * vec3(0.88, 0.94, 1.0);
+    color = mix(color, glass, frame * inPanel);
+    color += composerLight(p, d.composer) * inPanel;
+    color = mix(color, uBase, inComposer);
+  }
+
+  color += pulse(p) * (1.0 - inPanel);
   outColor = vec4(color + dither, 1.0);
 }
 `;

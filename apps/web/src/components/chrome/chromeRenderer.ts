@@ -1,5 +1,3 @@
-import plateUrl from "~/assets/chrome-plate.webp";
-
 import {
   CHROME_FRAGMENT_SHADER,
   CHROME_MAX_SURFACES,
@@ -44,25 +42,6 @@ export interface ChromeRenderer {
   readonly dispose: () => void;
 }
 
-// The plate is decoded once and shared, so a restored context or a remount
-// uploads it again without another fetch.
-let plateImage: Promise<HTMLImageElement> | null = null;
-
-function loadPlate(): Promise<HTMLImageElement> {
-  if (!plateImage) {
-    const image = new Image();
-    image.src = plateUrl;
-    plateImage = image.decode().then(
-      () => image,
-      (error: unknown) => {
-        plateImage = null;
-        throw error;
-      },
-    );
-  }
-  return plateImage;
-}
-
 function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
   const shader = gl.createShader(type);
   if (!shader) return null;
@@ -76,14 +55,7 @@ function compile(gl: WebGL2RenderingContext, type: number, source: string): WebG
   return shader;
 }
 
-/**
- * Draws nothing until the plate has loaded, then calls onReady so the caller
- * can schedule a frame.
- */
-export function createChromeRenderer(
-  canvas: HTMLCanvasElement,
-  onReady: () => void,
-): ChromeRenderer | null {
+export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer | null {
   const gl = canvas.getContext("webgl2", {
     alpha: false,
     antialias: false,
@@ -125,33 +97,13 @@ export function createChromeRenderer(
     settle: uniform("uSettle"),
     pulse: uniform("uPulse"),
     base: uniform("uBase"),
-    plate: uniform("uPlate"),
-    panelBox: uniform("uPanelBox"),
   };
-
-  let disposed = false;
-  let plateTexture: WebGLTexture | null = null;
-  void loadPlate().then(
-    (image) => {
-      if (disposed || gl.isContextLost()) return;
-      plateTexture = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, plateTexture);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, image);
-      onReady();
-    },
-    (error: unknown) => console.error(error),
-  );
   const rects = new Float32Array(CHROME_MAX_SURFACES * 4);
   const radii = new Float32Array(CHROME_MAX_SURFACES * 4);
   const kinds = new Float32Array(CHROME_MAX_SURFACES);
 
   return {
     render(frame) {
-      if (!plateTexture) return;
       const deviceWidth = Math.max(1, Math.round(frame.width * frame.pixelRatio));
       const deviceHeight = Math.max(1, Math.round(frame.height * frame.pixelRatio));
       if (canvas.width !== deviceWidth || canvas.height !== deviceHeight) {
@@ -195,29 +147,9 @@ export function createChromeRenderer(
         frame.pulse.strength,
       );
       gl.uniform3f(locations.base, ...frame.base);
-      let panelBox: [number, number, number, number] | null = null;
-      for (const surface of frame.surfaces) {
-        if (surface.kind !== "panel") continue;
-        const right = surface.x + surface.width;
-        const bottom = surface.y + surface.height;
-        panelBox = panelBox
-          ? [
-              Math.min(panelBox[0], surface.x),
-              Math.min(panelBox[1], surface.y),
-              Math.max(panelBox[2], right),
-              Math.max(panelBox[3], bottom),
-            ]
-          : [surface.x, surface.y, right, bottom];
-      }
-      gl.uniform4f(locations.panelBox, ...(panelBox ?? [0, 0, frame.width, frame.height]));
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, plateTexture);
-      gl.uniform1i(locations.plate, 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     },
     dispose() {
-      disposed = true;
-      gl.deleteTexture(plateTexture);
       gl.deleteVertexArray(vertexArray);
       gl.deleteProgram(program);
     },

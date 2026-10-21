@@ -92,9 +92,7 @@ function composerHasFocus(): boolean {
 }
 
 export function mountChromeController(canvas: HTMLCanvasElement): ChromeController | null {
-  // Hoisted: the renderer calls back once its plate has loaded.
-  const onPlateReady = () => invalidateLayout();
-  let renderer: ChromeRenderer | null = createChromeRenderer(canvas, onPlateReady);
+  let renderer: ChromeRenderer | null = createChromeRenderer(canvas);
   if (!renderer) return null;
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -228,7 +226,7 @@ export function mountChromeController(canvas: HTMLCanvasElement): ChromeControll
     renderer = null;
   };
   const onContextRestored = () => {
-    renderer = createChromeRenderer(canvas, onPlateReady);
+    renderer = createChromeRenderer(canvas);
     invalidateLayout();
   };
 
