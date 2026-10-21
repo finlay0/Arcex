@@ -30,6 +30,8 @@ import { SidebarUpdateArchitectureWarning, SidebarUpdatePill } from "./SidebarUp
 import { PullRequestGlyph } from "~/components/pullRequest/pullRequestIcons";
 import { ArcexLockup } from "~/components/ArcexLockup";
 import { observeResize } from "~/lib/observeResize";
+import { useChromeShellActive } from "~/components/chrome/useChromeShellActive";
+import { SidebarConnectionStatus } from "./SidebarConnectionStatus";
 
 export const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron,
@@ -124,11 +126,23 @@ function SidebarUtilityItem({
   icon,
   label,
   onClick,
+  showLabel = false,
 }: {
   icon: ReactNode;
   label: string;
   onClick: () => void;
+  showLabel?: boolean;
 }) {
+  if (showLabel) {
+    return (
+      <SidebarMenuItem className="min-w-0 flex-1">
+        <SidebarMenuButton onClick={onClick}>
+          {icon}
+          <span>{label}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  }
   return (
     <SidebarMenuItem className="shrink-0">
       <Tooltip>
@@ -146,6 +160,7 @@ function SidebarUtilityItem({
 }
 
 export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
+  const chromeShellActive = useChromeShellActive();
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -197,6 +212,7 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             icon={<SettingsIcon />}
             label="Settings"
             onClick={handleSettingsClick}
+            showLabel={chromeShellActive}
           />
           {pullRequestsSupported ? (
             <SidebarUtilityItem
@@ -218,12 +234,14 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
 });
 
 export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
+  const chromeShellActive = useChromeShellActive();
   return (
     <SidebarFooter>
       <SidebarThreadUndoNotice />
       <SidebarProviderUpdatePill />
       <SidebarUpdateArchitectureWarning />
       <SidebarUtilityMenu />
+      {chromeShellActive ? <SidebarConnectionStatus /> : null}
     </SidebarFooter>
   );
 });

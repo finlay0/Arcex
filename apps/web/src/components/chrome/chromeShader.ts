@@ -92,8 +92,12 @@ Panels panels(vec2 p) {
   Panels result = Panels(1e5, 1e5, 1e5, 1e5);
   for (int i = 0; i < MAX_SURFACES; i++) {
     if (i >= uSurfaceCount) break;
-    float d = sdRoundRect(p, uSurfaceRect[i], uSurfaceRadii[i]);
+    vec4 rect = uSurfaceRect[i];
     int kind = int(uSurfaceKind[i] + 0.5);
+    // The sidebar column runs on past the window bottom: its footer needs the
+    // dark wash too, so metal only shows through along its left edge there.
+    if (kind == 1) rect.w += 120.0;
+    float d = sdRoundRect(p, rect, uSurfaceRadii[i]);
     if (kind == 2) {
       result.composer = min(result.composer, d);
     } else if (kind == 1) {
@@ -257,8 +261,12 @@ void main() {
   // Blending toward compressed metal, not scaling it: the key light runs far
   // past white, and even a few percent of it would stay bright.
   vec3 smoked = metal / (1.0 + metal) * 1.4;
-  float wash = smoothstep(-4.0, -44.0, d.sidebar + 16.0) * (1.0 - 0.8 * bezelGlow);
-  frame = mix(frame, smoked * 0.065 + BLUE * 0.01, wash);
+  float nearRibbon = exp(-max(d.outer, 0.0) / 14.0);
+  float wash = smoothstep(-4.0, -44.0, d.sidebar + 16.0) * (1.0 - 0.85 * nearRibbon);
+  // Cap highlights as soon as the wash begins, or the last few percent of an
+  // over-white highlight still reads as a bright stroke behind the text.
+  frame = mix(frame, min(frame, vec3(0.5)), smoothstep(0.0, 0.35, wash));
+  frame = mix(frame, smoked * 0.03 + BLUE * 0.008, wash);
 
   // Content panels show the metal only as a frosted sheen along their edges:
   // normals from a wide stencil and a softened studio stand in for a blur.

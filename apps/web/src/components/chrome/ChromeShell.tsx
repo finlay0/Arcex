@@ -1,18 +1,12 @@
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
-import { useClientSettings } from "../../hooks/useSettings";
-import { useRenderedAppearance } from "../../hooks/useTheme";
-import { useSidebar } from "../ui/sidebar";
 import { mountChromeController, type ChromeController } from "./chromeController";
+import { useChromeShellActive } from "./useChromeShellActive";
 
 /** The liquid-metal frame the desktop-width shell sits in. Dark appearance only. */
 export function ChromeShell() {
-  const enabled = useClientSettings((settings) => settings.chromeShell);
-  const appearance = useRenderedAppearance();
-  const { isMobile } = useSidebar();
-  if (!enabled || appearance !== "dark" || isMobile) return null;
-  return <ChromeBackdrop />;
+  return useChromeShellActive() ? <ChromeBackdrop /> : null;
 }
 
 function ChromeBackdrop() {

@@ -292,6 +292,7 @@ import {
   type DraftSessionState,
 } from "../composerDraftStore";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
+import { useChromeShellActive } from "./chrome/useChromeShellActive";
 
 // The fields thread rows show. Provider status pushes refresh `checkedAt`,
 // status and auth on every provider; leaving those out keeps each
@@ -2710,6 +2711,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 });
 
 export default function Sidebar() {
+  const chromeShellActive = useChromeShellActive();
   const {
     projects,
     serverConfigs,
@@ -4815,8 +4817,11 @@ export default function Sidebar() {
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
+                        // The chrome design lists threads as single lines; a running
+                        // agent keeps its card so its live status stays visible.
                         const isCard =
-                          section === "active" || section === "pinned" || section === "working";
+                          section === "working" ||
+                          (!chromeShellActive && (section === "active" || section === "pinned"));
                         const rowVariant = isCard ? "card" : "slim";
                         return (
                           <SortableThreadRow

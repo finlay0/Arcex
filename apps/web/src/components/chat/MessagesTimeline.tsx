@@ -118,7 +118,9 @@ import {
 } from "../../lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "../../lib/syntaxHighlighting";
 import ChatMarkdown, { ChatMarkdownAssetImage } from "../ChatMarkdown";
+import { APP_BASE_NAME } from "../../branding";
 import { ArcexMark } from "../ArcexMark";
+import { ChatAuthorHeader, type ChatAuthor } from "./ChatAuthorHeader";
 import { ThreadContextChip } from "../ThreadContextChip";
 import {
   ArrowRightIcon,
@@ -1457,18 +1459,42 @@ const ConversationTimeline = memo(function ConversationTimeline({
   // the list would re-render the outgoing thread's rows with the incoming
   // thread's context just before they unmount. extraData hands a changed
   // sharedState to the rows that stay.
-  const renderItem = ({ item }: { item: MessagesTimelineRow }) => (
-    <TimelineRowCtx value={sharedState}>
-      <div className="messages-timeline-row-frame">
-        <div
-          className="@container/chat-lane chat-content-lane overflow-x-clip"
-          data-timeline-root="true"
-        >
-          <TimelineRowContent row={item} />
+  const renderItem = ({ item, index }: { item: MessagesTimelineRow; index: number }) => {
+    const previous = index > 0 ? rows[index - 1] : undefined;
+    const isUserMessage = (row: MessagesTimelineRow | undefined) =>
+      row?.kind === "message" && row.message.role === "user";
+    // A prompt opens with "You"; whatever row follows it opens the response.
+    const author: ChatAuthor | null = isUserMessage(item)
+      ? "user"
+      : isUserMessage(previous)
+        ? "agent"
+        : null;
+    const authorCreatedAt =
+      "createdAt" in item && typeof item.createdAt === "string"
+        ? item.createdAt
+        : previous && "createdAt" in previous && typeof previous.createdAt === "string"
+          ? previous.createdAt
+          : null;
+    return (
+      <TimelineRowCtx value={sharedState}>
+        <div className="messages-timeline-row-frame">
+          <div
+            className="@container/chat-lane chat-content-lane overflow-x-clip"
+            data-timeline-root="true"
+          >
+            {author ? (
+              <ChatAuthorHeader
+                author={author}
+                createdAt={authorCreatedAt}
+                timestampFormat={sharedState.timestampFormat}
+              />
+            ) : null}
+            <TimelineRowContent row={item} />
+          </div>
         </div>
-      </div>
-    </TimelineRowCtx>
-  );
+      </TimelineRowCtx>
+    );
+  };
   const listExtraData = { identity: listIdentityKey, rowCount: rows.length, sharedState };
 
   const forwardMinimapWheel = (event: WheelEvent) => {
@@ -2291,7 +2317,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
   };
 
   return (
-    <div className="group flex flex-col items-end gap-1">
+    <div className="group flex flex-col items-end gap-1" data-user-message-column="">
       {userMessage.attribution === "automation" ? (
         <p
           className="me-1 text-2xs text-muted-foreground/70"
@@ -2317,7 +2343,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           className="me-1 text-2xs text-muted-foreground/70"
           data-user-message-attribution="t3code"
         >
-          Sent by T3 Code
+          Sent by {APP_BASE_NAME}
         </p>
       ) : userMessage.attribution === "agent" ? (
         <p className="me-1 text-2xs text-muted-foreground/70" data-user-message-attribution="agent">
@@ -2338,7 +2364,10 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       row.message.inputIntent === "promoted_queued_to_steer" ? (
         <UserMessageIntentMarker intent={row.message.inputIntent} />
       ) : null}
-      <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
+      <div
+        className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground"
+        data-user-message-surface=""
+      >
         <MessageAuthorHeading>You</MessageAuthorHeading>
         {(regularImages.length > 0 || userVideos.length > 0) && (
           <div className="mb-2 grid max-w-[210px] grid-cols-2 gap-2">
@@ -2668,7 +2697,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>T3 Code</MessageAuthorHeading>
+        <MessageAuthorHeading>{APP_BASE_NAME}</MessageAuthorHeading>
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
