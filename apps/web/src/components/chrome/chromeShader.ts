@@ -131,10 +131,10 @@ float surfaceHeight(vec2 p) {
   Panels d = panels(p);
   // A thick rolled bezel: this is the bright ribbon down the main panel's
   // left side and around its big corners.
-  h += bezel(d.outer, 24.0, 17.0, 2.5);
+  h += bezel(d.outer, 32.0, 22.0, 2.5);
   // The channel between neighbouring panels is a shallow groove.
   h += bezel(d.shell, 3.0, 4.0, 2.0) * smoothstep(0.0, -4.5, d.outer);
-  h += bezel(d.composer, 15.0, 8.0, 2.0);
+  h += bezel(d.composer, 20.0, 10.0, 2.0);
   // After a layout change the metal around the edges sloshes once and settles.
   float outside = max(d.outer, 0.0);
   h += sin(outside * 0.11 - uSettle.x * 11.0) * exp(-outside / 70.0) * 7.0 * uSettle.y;
@@ -201,10 +201,14 @@ vec3 composerLight(vec2 p, float d) {
   // Brightest along the top edge, like the studio key catching the rim.
   float topLit = 0.55 + 0.45 * smoothstep(0.4, -0.9, local.y);
 
-  float rim = exp(-pow((d - 1.2) / 2.6, 2.0));
-  float halo = exp(-max(d, 0.0) / (18.0 + 10.0 * focus)) * step(-0.5, d);
+  // A heavy rolled ring, then a thin bright inner lip.
+  float rim = exp(-pow((d - 3.0) / 3.6, 2.0));
+  float lip = exp(-pow((d - 0.6) / 1.0, 2.0));
+  float halo = exp(-max(d, 0.0) / (20.0 + 12.0 * focus)) * step(-0.5, d);
 
-  vec3 light = ICE * rim * (0.75 * topLit + comets * (1.2 + 1.4 * focus));
+  vec3 ringWhite = mix(ICE, vec3(1.0), 0.55);
+  vec3 light = ringWhite * rim * (1.05 * topLit + comets * (1.2 + 1.4 * focus));
+  light += ringWhite * lip * 0.6;
   light += BLUE * halo * (0.3 + 0.35 * focus) * breathe;
   light += BLUE * halo * comets * (0.5 + 0.7 * focus);
   return light;
@@ -235,9 +239,17 @@ void main() {
   // Emissive blue bleeding out from under the panel edges, strongest where a
   // ribbon crest runs into the edge.
   float crest = smoothstep(0.35, 1.05, ribbon);
-  float bezelGlow = exp(-max(d.outer, 0.0) / 26.0);
+  float bezelGlow = exp(-max(d.outer, 0.0) / 34.0);
   vec3 edgeGlow = BLUE * (0.22 + 0.8 * crest) * bezelGlow;
-  vec3 frame = metal + edgeGlow + pulse(p);
+  // The rolled ribbon: a white tube riding just outside every panel edge,
+  // with a thinner lip line on the edge itself. Its brightness swells where
+  // the ribbon field crests so it never reads as a flat stroke.
+  float tube = exp(-pow((d.outer - 7.0) / 3.4, 2.0));
+  float lip = exp(-pow((d.outer - 1.0) / 1.1, 2.0));
+  float sheen = clamp(dot(metal / (1.0 + metal), vec3(0.6)), 0.0, 1.0);
+  vec3 ribbonLight =
+    mix(ICE, vec3(1.0), 0.65) * (tube * (0.55 + 0.8 * crest + 0.9 * sheen) + lip * 0.5);
+  vec3 frame = metal + edgeGlow + ribbonLight + pulse(p);
 
   // The sidebar column sits on the bare metal behind a soft dark wash. It is
   // darkest deep in the column and lifts toward its edges, so the metal shows

@@ -2461,7 +2461,7 @@ code {
 html.dark[data-chrome-shell] {
   --chrome-gap: 12px;
   /* The main panel sits further off the sidebar: that strip is the ribbon. */
-  --chrome-gap-start: 22px;
+  --chrome-gap-start: 32px;
   --chrome-radius: 24px;
   --chrome-panel-radius-start: 72px;
   --chrome-panel-radius-end: 56px;
@@ -2647,4 +2647,17 @@ html.dark[data-chrome-shell] [data-slot="composer-host"] button[type="submit"]:e
     inset 0 1px 0 rgb(255 255 255 / 45%),
     0 0 0 1px rgb(147 197 253 / 35%),
     0 0 18px -2px rgb(59 130 246 / 70%);
+}
+
+/* The composer is wider than the message column and rounder than the stock
+   input, so it reads as the object the chrome ring is built around. */
+html.dark[data-chrome-shell] .chat-composer-lane {
+  --chat-content-max-width: 52rem;
+}
+
+html.dark[data-chrome-shell] :is([data-slot="composer-host"], [data-chat-composer-main-surface]),
+html.dark[data-chrome-shell]
+  :is([data-slot="composer-host"], [data-chat-composer-main-surface])::after,
+html.dark[data-chrome-shell] [data-slot="composer-shell"]::before {
+  border-radius: 30px;
 }
