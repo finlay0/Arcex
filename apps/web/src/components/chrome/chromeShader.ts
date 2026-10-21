@@ -142,7 +142,7 @@ vec3 slabDistances(vec2 p) {
   // Smooth minimums round each slab's corners instead of mitring them. Every
   // slab also rolls over at the window's left edge, and the upper one at its
   // top, mostly out of view.
-  float windowSide = p.x - 3.0;
+  float windowSide = p.x + 14.0;
   float upper = smin(smin(dA, dEdge, 40.0), smin(p.y + 4.0, windowSide, 50.0), 30.0);
   float pillow = smin(smin(smin(dB, dEdge, 40.0), dC, 60.0), windowSide, 24.0);
   float corner = smin(smin(-dC, dEdge, 40.0), windowSide, 24.0);
@@ -181,7 +181,7 @@ float surfaceHeight(vec2 p) {
   Panels d = panels(p);
   // A thick rolled rim around the content panels; on their left it is the
   // ribbon running down the channel beside the sidebar.
-  h += bezel(d.outer, 12.0, 6.0, 2.0);
+  h += bezel(d.outer, 6.0, 4.0, 2.0);
   // The channel between neighbouring content panels is a shallow groove.
   h += bezel(d.shell, 3.0, 4.0, 2.0) * smoothstep(0.0, -4.5, d.outer);
   h += bezel(d.composer, 10.0, 5.0, 2.0);
@@ -262,7 +262,7 @@ vec3 composerLight(vec2 p, float d) {
   vec3 ringWhite = mix(ICE, vec3(1.0), 0.55);
   vec3 light = ringWhite * outerLip * (0.1 + 0.32 * topLit * topLit + comets * 0.25);
   light += ringWhite * innerLip * (0.15 + 0.15 * topLit);
-  light += BLUE * halo * (0.01 + 0.3 * ends * ends) * breathe;
+  light += BLUE * halo * (0.01 + 0.14 * ends * ends) * breathe;
   light += BLUE * halo * comets * 0.08;
   return light;
 }
@@ -305,7 +305,7 @@ void main() {
   float lip = exp(-pow((rimDistance - 1.0) / 1.0, 2.0));
   float sheen = clamp(dot(metal / (1.0 + metal), vec3(0.6)), 0.0, 1.0);
   vec3 lipLight = mix(ICE, vec3(1.0), 0.6) * lip;
-  vec3 frame = metal + edgeGlow + lipLight * (0.2 + 0.6 * sheen) + pulse(p);
+  vec3 frame = metal + edgeGlow + lipLight * (0.1 + 0.3 * sheen) + pulse(p);
   // Light welling up in the groove between the sidebar's edge and the panel
   // rim, pooling where the sweep runs into it and near the window's ends.
   if (gSculptX > 40.0) {
@@ -313,13 +313,13 @@ void main() {
     float along = 0.2 + exp(-pow((v - 0.58) / 0.07, 2.0)) + 0.8 * exp(-pow((v - 0.12) / 0.06, 2.0))
       + 0.7 * exp(-pow((v - 0.9) / 0.06, 2.0));
     float groove = 0.5 * (sidebarEdge(v) + panelLeft);
-    frame += BLUE * 1.1 * (along - 0.15) * exp(-abs(p.x - groove) / 6.0);
+    frame += BLUE * 0.5 * (along - 0.15) * exp(-abs(p.x - groove) / 5.0);
   }
 
   // The outer rim: a thin line of light where the metal rolls over the
   // window edge.
   float rimLine = exp(-pow((windowInset(p) - 1.5) / 1.0, 2.0));
-  frame += mix(ICE, vec3(1.0), 0.6) * rimLine * (0.25 + 0.75 * sheen);
+  frame += mix(ICE, vec3(1.0), 0.6) * rimLine * (0.08 + 0.3 * sheen);
 
   // The sidebar is smoked glass laid over the slabs. It covers each face,
   // clear of the lit rims, and fades out past the layout box. Behind the
@@ -380,7 +380,7 @@ void main() {
       + 0.6 * gauss(v, 0.9, 0.04) * smoothstep(0.85, 1.0, u);
     float glint = rim * pools;
     color += BLUE * 2.2 * glint + vec3(0.9, 0.95, 1.0) * 0.9 * glint * glint * glint;
-    color += BLUE * 0.6 * gauss(v, 0.5, 0.16) * exp(-p.x / 5.0);
+    color += BLUE * 0.8 * gauss(v, 0.7, 0.05) * exp(-p.x / 4.0);
   }
 
   // A lit hairline just inside each panel edge keeps the glass crisp.
