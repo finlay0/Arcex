@@ -31,30 +31,38 @@ export interface ChromeController {
 function measureSurfaces(): ChromeSurfaceRect[] {
   const measured: ChromeSurfaceRect[] = [];
   for (const [element, kind] of readChromeSurfaces()) {
-    // The sidebar container pads its rounded inner panel off the window edge.
+    // The sidebar registers its container; the content column is the inner element.
     const target =
       kind === "sidebar"
         ? (element.querySelector<HTMLElement>(":scope > [data-slot='sidebar-inner']") ?? element)
         : element;
     const rect = target.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1 || rect.right <= 0) continue;
-    const radius = Number.parseFloat(getComputedStyle(target).borderTopLeftRadius) || 0;
+    const style = getComputedStyle(target);
+    const limit = Math.min(rect.width, rect.height) / 2;
+    const corner = (value: string) => Math.min(Number.parseFloat(value) || 0, limit);
     measured.push({
       kind,
       x: rect.left,
       y: rect.top,
       width: rect.width,
       height: rect.height,
-      radius: Math.min(radius, rect.width / 2, rect.height / 2),
+      radii: [
+        corner(style.borderTopLeftRadius),
+        corner(style.borderTopRightRadius),
+        corner(style.borderBottomRightRadius),
+        corner(style.borderBottomLeftRadius),
+      ],
     });
   }
   // Routes mount their panel after the shell, so during boot and route swaps
   // stand one in where it will land instead of flashing bare metal.
   if (!measured.some((surface) => surface.kind === "panel")) {
-    const gap =
-      Number.parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue("--chrome-gap"),
-      ) || 12;
+    const root = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: number) =>
+      Number.parseFloat(root.getPropertyValue(name)) || fallback;
+    const gap = token("--chrome-gap", 12);
+    const radius = token("--chrome-radius", 18);
     const sidebar = measured.find((surface) => surface.kind === "sidebar");
     const left = (sidebar ? sidebar.x + sidebar.width : 0) + gap;
     measured.push({
@@ -63,7 +71,12 @@ function measureSurfaces(): ChromeSurfaceRect[] {
       y: gap,
       width: Math.max(0, window.innerWidth - left - gap),
       height: Math.max(0, window.innerHeight - 2 * gap),
-      radius: sidebar?.radius ?? 18,
+      radii: [
+        token("--chrome-panel-radius-start", radius),
+        radius,
+        radius,
+        token("--chrome-panel-radius-end", radius),
+      ],
     });
   }
   return measured;

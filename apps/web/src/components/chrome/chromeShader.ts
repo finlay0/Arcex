@@ -14,9 +14,13 @@ void main() {
 `;
 
 // Everything is computed in CSS pixels with a top-left origin so surface
-// rects from getBoundingClientRect can be passed through untouched. The
-// surface is a height field: large folded ribbons that drift slowly, plus a
-// raised bezel along every panel edge. Its normals reflect a procedural studio
+// rects from getBoundingClientRect can be passed through untouched.
+//
+// The window is one sheet of liquid metal: large folded ribbons that drift
+// slowly, with the content panels pressed into it. Each panel is ringed by a
+// raised bezel, and the composer by a heavier chrome ring. The sidebar is not
+// a panel: its content sits straight on the metal, behind a soft dark wash
+// that keeps the text column legible. Normals reflect a procedural studio
 // (softboxes, a horizon strip and two blue gels), which reads as polished metal.
 export const CHROME_FRAGMENT_SHADER = /* glsl */ `#version 300 es
 precision highp float;
@@ -26,7 +30,8 @@ precision highp float;
 uniform vec2 uViewport;
 uniform float uPixelRatio;
 uniform vec4 uSurfaceRect[MAX_SURFACES];
-uniform vec2 uSurfaceShape[MAX_SURFACES];
+uniform vec4 uSurfaceRadii[MAX_SURFACES]; // top-left, top-right, bottom-right, bottom-left
+uniform float uSurfaceKind[MAX_SURFACES];
 uniform int uSurfaceCount;
 uniform float uTime;
 uniform vec4 uComposer;      // primary composer rect, zero size when absent
@@ -42,10 +47,12 @@ const vec3 BLUE_DEEP = vec3(0.02, 0.12, 0.85);
 const vec3 ICE = vec3(0.62, 0.8, 1.0);
 const float TAU = 6.2831853;
 
-float sdRoundRect(vec2 p, vec4 rect, float radius) {
+float sdRoundRect(vec2 p, vec4 rect, vec4 radii) {
   vec2 halfSize = rect.zw * 0.5;
-  vec2 q = abs(p - (rect.xy + halfSize)) - halfSize + radius;
-  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+  vec2 q = p - (rect.xy + halfSize);
+  float r = q.x < 0.0 ? (q.y < 0.0 ? radii.x : radii.w) : (q.y < 0.0 ? radii.y : radii.z);
+  vec2 d = abs(q) - halfSize + r;
+  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
 }
 
 float sdBox(vec2 p, vec2 b) {
@@ -70,14 +77,14 @@ float smin(float a, float b, float k) {
   return min(a, b) - h * h * k * 0.25;
 }
 
-// Wide enough to close the gap between neighbouring panels, so the outer
-// border runs around the whole shell as one ring.
+// Wide enough to close the gap between neighbouring panels, so the bezel runs
+// around them as one ring.
 const float OUTER_BLEND = 48.0;
 
 struct Panels {
-  float shell;   // nearest panel or sidebar edge, negative inside
-  float outer;   // the panels fused into one block, negative inside
-  float sidebar; // nearest sidebar edge
+  float shell;   // nearest content panel edge, negative inside
+  float outer;   // content panels fused into one block, negative inside
+  float sidebar; // the sidebar's content column, negative inside
   float composer;
 };
 
@@ -85,14 +92,15 @@ Panels panels(vec2 p) {
   Panels result = Panels(1e5, 1e5, 1e5, 1e5);
   for (int i = 0; i < MAX_SURFACES; i++) {
     if (i >= uSurfaceCount) break;
-    float d = sdRoundRect(p, uSurfaceRect[i], uSurfaceShape[i].x);
-    int kind = int(uSurfaceShape[i].y + 0.5);
+    float d = sdRoundRect(p, uSurfaceRect[i], uSurfaceRadii[i]);
+    int kind = int(uSurfaceKind[i] + 0.5);
     if (kind == 2) {
       result.composer = min(result.composer, d);
+    } else if (kind == 1) {
+      result.sidebar = min(result.sidebar, d);
     } else {
       result.shell = min(result.shell, d);
       result.outer = smin(result.outer, d, OUTER_BLEND);
-      if (kind == 1) result.sidebar = min(result.sidebar, d);
     }
   }
   return result;
@@ -121,10 +129,12 @@ float surfaceHeight(vec2 p) {
   float minSide = min(uViewport.x, uViewport.y);
   float h = ribbons(p / minSide) * minSide * 0.3;
   Panels d = panels(p);
-  h += bezel(d.outer, 16.0, 13.0, 2.5);
-  // The channel between panels is a shallow groove, not a second bezel.
+  // A thick rolled bezel: this is the bright ribbon down the main panel's
+  // left side and around its big corners.
+  h += bezel(d.outer, 24.0, 17.0, 2.5);
+  // The channel between neighbouring panels is a shallow groove.
   h += bezel(d.shell, 3.0, 4.0, 2.0) * smoothstep(0.0, -4.5, d.outer);
-  h += bezel(d.composer, 9.0, 9.0, 2.0);
+  h += bezel(d.composer, 15.0, 8.0, 2.0);
   // After a layout change the metal around the edges sloshes once and settles.
   float outside = max(d.outer, 0.0);
   h += sin(outside * 0.11 - uSettle.x * 11.0) * exp(-outside / 70.0) * 7.0 * uSettle.y;
@@ -153,9 +163,9 @@ vec3 studio(vec2 e, float soft) {
   c += vec3(0.85, 0.9, 1.0) * 1.3 * horizon;
 
   // Blue gels sit at grazing angles, so only steep folds and bezels catch them.
-  c += BLUE * 2.6 * exp(-pow(length(e - vec2(0.74, 0.6)) / (0.2 + soft), 2.0));
-  c += BLUE_DEEP * 1.6 * exp(-pow(length(e - vec2(-0.82, 0.28)) / (0.18 + soft), 2.0));
-  c += BLUE * 1.2 * smoothstep(0.86, 1.0, r) * smoothstep(-0.6, 0.4, e.y);
+  c += BLUE * 2.2 * exp(-pow(length(e - vec2(0.76, 0.62)) / (0.15 + soft), 2.0));
+  c += BLUE_DEEP * 1.2 * exp(-pow(length(e - vec2(-0.84, 0.3)) / (0.14 + soft), 2.0));
+  c += BLUE * 0.8 * smoothstep(0.9, 1.0, r) * smoothstep(-0.6, 0.4, e.y);
   c += vec3(0.5, 0.62, 0.9) * 0.4 * exp(-pow(length(e - vec2(0.08, 0.86)) / (0.12 + soft), 2.0));
   return c;
 }
@@ -175,8 +185,8 @@ vec3 pulse(vec2 p) {
   return BLUE * (ring + core) * uPulse.w;
 }
 
-// Light running around the composer: two comets travel the rim in opposite
-// directions over a slow breathing glow. Focus brightens all of it.
+// The composer's chrome ring: a continuous lit rim, two comets travelling it in
+// opposite directions, and a slow breathing glow. Focus brightens all of it.
 vec3 composerLight(vec2 p, float d) {
   if (uComposer.z <= 0.0) return vec3(0.0);
   vec2 halfSize = uComposer.zw * 0.5;
@@ -188,12 +198,14 @@ vec3 composerLight(vec2 p, float d) {
   float comets = cometA * 1.6 + cometB * 0.9;
   float focus = uComposerShape.y;
   float breathe = 0.82 + 0.18 * sin(t * 0.7);
+  // Brightest along the top edge, like the studio key catching the rim.
+  float topLit = 0.55 + 0.45 * smoothstep(0.4, -0.9, local.y);
 
-  float rim = exp(-pow((d - 1.0) / 2.2, 2.0));
-  float halo = exp(-max(d, 0.0) / (16.0 + 10.0 * focus)) * step(-0.5, d);
+  float rim = exp(-pow((d - 1.2) / 2.6, 2.0));
+  float halo = exp(-max(d, 0.0) / (18.0 + 10.0 * focus)) * step(-0.5, d);
 
-  vec3 light = ICE * rim * comets * (1.4 + 1.6 * focus);
-  light += BLUE * halo * (0.16 + 0.3 * focus) * breathe;
+  vec3 light = ICE * rim * (0.75 * topLit + comets * (1.2 + 1.4 * focus));
+  light += BLUE * halo * (0.3 + 0.35 * focus) * breathe;
   light += BLUE * halo * comets * (0.5 + 0.7 * focus);
   return light;
 }
@@ -210,7 +222,7 @@ void main() {
 
   // Deep inside a content panel only the flat canvas shows, so most of the
   // screen skips the metal entirely. That is what keeps the ambient drift cheap.
-  if (d.shell < -40.0 && d.sidebar > 0.0 && d.composer > 140.0) {
+  if (d.shell < -40.0 && d.composer > 140.0) {
     outColor = vec4(uBase + dither, 1.0);
     return;
   }
@@ -223,14 +235,18 @@ void main() {
   // Emissive blue bleeding out from under the panel edges, strongest where a
   // ribbon crest runs into the edge.
   float crest = smoothstep(0.35, 1.05, ribbon);
-  vec3 edgeGlow = BLUE * (0.18 + 0.9 * crest) * exp(-max(d.outer, 0.0) / 22.0);
+  float bezelGlow = exp(-max(d.outer, 0.0) / 26.0);
+  vec3 edgeGlow = BLUE * (0.22 + 0.8 * crest) * bezelGlow;
   vec3 frame = metal + edgeGlow + pulse(p);
 
-  // The sidebar is smoked glass: the sharp metal stays legible behind it, just
-  // dimmed far enough for text, with a narrow sheen where the glass meets the bezel.
+  // The sidebar column sits on the bare metal behind a soft dark wash. It is
+  // darkest deep in the column and lifts toward its edges, so the metal shows
+  // at the window edge, behind the logo and along the bezel.
+  // Blending toward compressed metal, not scaling it: the key light runs far
+  // past white, and even a few percent of it would stay bright.
   vec3 smoked = metal / (1.0 + metal) * 1.4;
-  float sidebarEdge = exp(min(d.sidebar, 0.0) / 30.0);
-  vec3 sidebar = smoked * (0.045 + 0.1 * sidebarEdge) + pulse(p) * 0.5;
+  float wash = smoothstep(-4.0, -44.0, d.sidebar + 16.0) * (1.0 - 0.8 * bezelGlow);
+  frame = mix(frame, smoked * 0.065 + BLUE * 0.01, wash);
 
   // Content panels show the metal only as a frosted sheen along their edges:
   // normals from a wide stencil and a softened studio stand in for a blur.
@@ -243,7 +259,7 @@ void main() {
     panel = frost / (1.0 + frost) * 1.6 * 0.07 * edgeFade;
   }
   float composerFade = smoothstep(140.0, 70.0, d.composer);
-  float composerHalo = exp(-max(d.composer, 0.0) / 26.0) * step(0.0, d.composer) * composerFade;
+  float composerHalo = exp(-max(d.composer, 0.0) / 22.0) * step(0.0, d.composer) * composerFade;
   vec3 composerRim = metal * 0.85 + BLUE * (0.25 + 0.75 * crest) * 0.6;
   panel = mix(panel, composerRim, composerHalo * 0.9);
   panel += composerLight(p, d.composer) * composerFade;
@@ -251,23 +267,20 @@ void main() {
   // Between panels: dimmed metal and a soft blue line, which hand back to the
   // full border where the channel meets the window edge.
   float channelDepth = smoothstep(0.0, 4.5, -d.outer);
-  vec3 channel = smoked * 0.3 + BLUE * (0.03 + 0.1 * crest);
-  channel = mix(frame, channel, channelDepth);
+  vec3 channel = mix(frame, smoked * 0.3 + BLUE * (0.03 + 0.1 * crest), channelDepth);
 
-  float inSidebar = clamp(0.5 - d.sidebar / aa, 0.0, 1.0);
-  vec3 interior = mix(panel, sidebar, inSidebar);
   float inPanel = clamp(0.5 - d.shell / aa, 0.0, 1.0);
-  vec3 shell = mix(channel, interior, inPanel);
+  vec3 shell = mix(channel, panel, inPanel);
   float outside = clamp(0.5 + d.outer / aa, 0.0, 1.0);
   vec3 color = mix(shell, frame, outside);
 
   // A lit hairline just inside each panel edge keeps the glass crisp.
   float hairline = exp(-abs(d.shell + 0.6) * uPixelRatio * 1.4);
-  color += hairline * (0.03 + 0.22 * clamp(dot(metal, vec3(0.33)), 0.0, 1.0));
+  color += hairline * (0.05 + 0.3 * clamp(dot(metal, vec3(0.33)), 0.0, 1.0));
 
   color = toneMap(color);
   // The base is sRGB so the panel interior matches the CSS canvas exactly.
-  color += uBase * inPanel * (1.0 - composerHalo * (1.0 - inSidebar));
+  color += uBase * inPanel * (1.0 - composerHalo);
   outColor = vec4(color + dither, 1.0);
 }
 `;

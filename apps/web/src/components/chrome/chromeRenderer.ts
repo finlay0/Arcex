@@ -12,7 +12,8 @@ export interface ChromeSurfaceRect {
   readonly y: number;
   readonly width: number;
   readonly height: number;
-  readonly radius: number;
+  /** Corner radii: top-left, top-right, bottom-right, bottom-left. */
+  readonly radii: readonly [number, number, number, number];
 }
 
 export interface ChromeFrame {
@@ -87,7 +88,8 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
     viewport: uniform("uViewport"),
     pixelRatio: uniform("uPixelRatio"),
     surfaceRect: uniform("uSurfaceRect"),
-    surfaceShape: uniform("uSurfaceShape"),
+    surfaceRadii: uniform("uSurfaceRadii"),
+    surfaceKind: uniform("uSurfaceKind"),
     surfaceCount: uniform("uSurfaceCount"),
     time: uniform("uTime"),
     composer: uniform("uComposer"),
@@ -97,7 +99,8 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
     base: uniform("uBase"),
   };
   const rects = new Float32Array(CHROME_MAX_SURFACES * 4);
-  const shapes = new Float32Array(CHROME_MAX_SURFACES * 2);
+  const radii = new Float32Array(CHROME_MAX_SURFACES * 4);
+  const kinds = new Float32Array(CHROME_MAX_SURFACES);
 
   return {
     render(frame) {
@@ -112,7 +115,8 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
       for (let index = 0; index < count; index++) {
         const surface = frame.surfaces[index]!;
         rects.set([surface.x, surface.y, surface.width, surface.height], index * 4);
-        shapes.set([surface.radius, CHROME_SURFACE_KIND_INDEX[surface.kind]], index * 2);
+        radii.set(surface.radii, index * 4);
+        kinds[index] = CHROME_SURFACE_KIND_INDEX[surface.kind];
       }
 
       gl.viewport(0, 0, deviceWidth, deviceHeight);
@@ -121,7 +125,8 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
       gl.uniform2f(locations.viewport, frame.width, frame.height);
       gl.uniform1f(locations.pixelRatio, frame.pixelRatio);
       gl.uniform4fv(locations.surfaceRect, rects);
-      gl.uniform2fv(locations.surfaceShape, shapes);
+      gl.uniform4fv(locations.surfaceRadii, radii);
+      gl.uniform1fv(locations.surfaceKind, kinds);
       gl.uniform1i(locations.surfaceCount, count);
       const composer = frame.surfaces.find((surface) => surface.kind === "composer");
       gl.uniform1f(locations.time, frame.time);
@@ -132,7 +137,7 @@ export function createChromeRenderer(canvas: HTMLCanvasElement): ChromeRenderer 
         composer?.width ?? 0,
         composer?.height ?? 0,
       );
-      gl.uniform2f(locations.composerShape, composer?.radius ?? 0, frame.composerFocus);
+      gl.uniform2f(locations.composerShape, composer?.radii[0] ?? 0, frame.composerFocus);
       gl.uniform2f(locations.settle, frame.settle.phase, frame.settle.energy);
       gl.uniform4f(
         locations.pulse,

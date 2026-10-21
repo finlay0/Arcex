@@ -2460,7 +2460,11 @@ code {
    then blends into the backdrop instead of showing as a slab. */
 html.dark[data-chrome-shell] {
   --chrome-gap: 12px;
-  --chrome-radius: 18px;
+  /* The main panel sits further off the sidebar: that strip is the ribbon. */
+  --chrome-gap-start: 22px;
+  --chrome-radius: 24px;
+  --chrome-panel-radius-start: 72px;
+  --chrome-panel-radius-end: 56px;
   --background: #050608;
   --sidebar: transparent;
   --sidebar-stage-fade: transparent;
@@ -2470,7 +2474,18 @@ html.dark[data-chrome-shell] {
    Their absolute siblings already sit inside a panel, so the shared
    --workspace-controls-* offsets stay untouched. */
 html.dark[data-chrome-shell]:not(.wco) [data-sidebar-control] {
-  translate: var(--chrome-gap) var(--chrome-gap);
+  translate: calc(var(--chrome-gap-start) + 10px) var(--chrome-gap);
+}
+
+/* With the sidebar open the toggle sits at the right end of its header,
+   leaving the logo the full left edge. */
+html.dark[data-chrome-shell]:not(.wco) [data-sidebar-state="expanded"] [data-sidebar-control] {
+  left: calc(var(--sidebar-width) - var(--workspace-titlebar-control-size) - 14px);
+  translate: none;
+}
+
+html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar-brand] {
+  margin-left: 18px;
 }
 
 html.dark[data-chrome-shell]:not(.wco) .fixed[data-workspace-titlebar-controls] {
@@ -2487,14 +2502,14 @@ html.dark[data-chrome-shell] body {
   background-color: transparent !important;
 }
 
+/* The sidebar is not a panel: its content sits directly on the metal. */
 html.dark[data-chrome-shell] [data-app-sidebar][data-slot="sidebar-container"] {
-  padding: var(--chrome-gap) 0 var(--chrome-gap) var(--chrome-gap);
+  padding: 0;
   border-width: 0;
 }
 
 html.dark[data-chrome-shell] [data-app-sidebar] > [data-slot="sidebar-inner"] {
   overflow: hidden;
-  border-radius: var(--chrome-radius);
   background: transparent;
 }
 
@@ -2502,9 +2517,9 @@ html.dark[data-chrome-shell] [data-app-sidebar] > [data-slot="sidebar-inner"] {
    through the outer border, so it stays within the panels and glows along
    the channel between them instead. */
 html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar="rail"]::after {
-  top: calc(var(--chrome-gap) + var(--chrome-radius));
-  bottom: calc(var(--chrome-gap) + var(--chrome-radius));
-  left: calc(50% + var(--chrome-gap) / 2 - 1px);
+  top: calc(var(--chrome-gap) + var(--chrome-panel-radius-start));
+  bottom: calc(var(--chrome-gap) + var(--chrome-panel-radius-end));
+  left: calc(50% + var(--chrome-gap-start) / 2 - 1px);
   border-radius: 9999px;
 }
 
@@ -2516,9 +2531,10 @@ html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar="rail"]:hover::aft
 html.dark[data-chrome-shell] [data-slot="sidebar-inset"] {
   --background: transparent;
   height: calc(100dvh - 2 * var(--chrome-gap));
-  margin: var(--chrome-gap);
+  margin: var(--chrome-gap) var(--chrome-gap) var(--chrome-gap) var(--chrome-gap-start);
   overflow: hidden;
-  border-radius: var(--chrome-radius);
+  border-radius: var(--chrome-panel-radius-start) var(--chrome-radius) var(--chrome-radius)
+    var(--chrome-panel-radius-end);
   background: transparent;
 }
 
@@ -2564,22 +2580,52 @@ html.dark[data-chrome-shell] [data-app-sidebar] {
   --sidebar-row-active: rgb(255 255 255 / 5%);
 }
 
+html.dark[data-chrome-shell] [data-app-sidebar] [data-testid="sidebar-row-card"] {
+  border-radius: 10px;
+}
+
 html.dark[data-chrome-shell]
   [data-app-sidebar]
   [data-testid="sidebar-row-card"][aria-current="page"] {
-  background-image:
-    linear-gradient(90deg, rgb(59 130 246 / 16%), transparent 60%), var(--chrome-sheen);
+  background: linear-gradient(180deg, rgb(59 130 246 / 30%), rgb(37 99 235 / 20%));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 10%),
-    inset 0 -1px 0 rgb(0 0 0 / 40%),
-    inset 2px 0 0 rgb(96 165 250 / 85%);
+    inset 0 1px 0 rgb(147 197 253 / 22%),
+    0 0 0 1px rgb(96 165 250 / 24%),
+    0 6px 18px -8px rgb(37 99 235 / 60%);
 }
 
-/* Composer controls become machined pills that pick up the rim's blue on use. */
+/* The search field is a machined well, like the composer controls. */
+html.dark[data-chrome-shell] [data-app-sidebar] [data-sidebar-search] {
+  height: 2.25rem;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 4%), rgb(255 255 255 / 1.5%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+/* Header: a quiet rule under it, the project crumb in the accent blue. */
+html.dark[data-chrome-shell] [data-chat-header] {
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 6%);
+}
+
+html.dark[data-chrome-shell] [data-chat-header] nav > ol > li:first-child,
+html.dark[data-chrome-shell] [data-chat-header] nav > ol > li:first-child button {
+  color: rgb(138 180 248);
+}
+
+html.dark[data-chrome-shell] [data-chat-header] nav > ol > li:last-child {
+  font-weight: 600;
+  color: rgb(241 245 249);
+}
+
+/* Composer controls become machined buttons that pick up the rim's blue on use. */
 html.dark[data-chrome-shell]
   [data-slot="composer-host"]
   :is([data-chat-provider-model-picker], [data-composer-shortcut]) {
-  border-color: rgb(255 255 255 / 9%);
+  height: 2.5rem;
+  padding-inline: 0.75rem;
+  border-radius: 10px;
+  border-color: rgb(255 255 255 / 11%);
   background: linear-gradient(180deg, rgb(255 255 255 / 5%), rgb(255 255 255 / 1.5%));
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%);
 }
