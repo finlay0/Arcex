@@ -28,6 +28,8 @@ Wrangler's version/deployment listing and tail commands require the same `--env 
 
 Workers Cron runs at 10:17 UTC daily and enqueues due sources. It does not itself run a browser or language model. The Codex automation **Arcex daily collection** runs at 09:00 America/Halifax using `gpt-6.1-terra`, medium reasoning. The local automation needs this computer and Codex available. Missed local runs leave jobs in the cloud queue.
 
+A [ChatGPT Work cloud test](https://chatgpt.com/c/6ae97dca-4130-83ea-b681-8079d37c2bb3) on November 3 verified Cloud browser capture of v0 and Lovable. GPT-6.1 Terra Medium was selected in the web UI. Its Outputs contain a JSON report and two screenshots. Curl reached the public API and verified unauthenticated admin denial; Python HTTP requests received 403/1010. This tested public cloud capture, not authenticated ingestion. Keep the local collector as the current ingestion path until Work has a protected Arcex connection; never put admin/collector tokens into a chat prompt.
+
 For a manual cloud collection pass in PowerShell:
 
 ```powershell
