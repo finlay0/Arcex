@@ -170,10 +170,10 @@ export async function processStripeEvent(
   }
   if (customerId) {
     const local = await env.DB.prepare(
-      "SELECT user_id FROM subscriptions WHERE customer_id=?",
+      "SELECT user_id,subscription_id FROM subscriptions WHERE customer_id=?",
     )
       .bind(customerId)
-      .first<{ user_id: string }>();
+      .first<{ user_id: string; subscription_id: string | null }>();
     if (local && riskEvents.has(event.type)) {
       statements.push(
         env.DB.prepare(
@@ -217,6 +217,12 @@ export async function processStripeEvent(
             sub.id,
             sub.status,
           ),
+        );
+      else if (local.subscription_id === sub.id)
+        statements.push(
+          env.DB.prepare(
+            "UPDATE subscriptions SET status='inactive',price_id=NULL,period_end=NULL,updated_at=?,last_event_created=? WHERE user_id=? AND subscription_id=? AND last_event_created<=?",
+          ).bind(now(), event.created, local.user_id, sub.id, event.created),
         );
     }
   }

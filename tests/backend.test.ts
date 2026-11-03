@@ -960,9 +960,39 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           .prepare("SELECT status FROM subscriptions WHERE user_id='dev:owner'")
           .first<{ status: string }>();
         assert.equal(row!.status, "canceled");
+        const offPlan = new Stripe("rk_test_fixture", {
+          httpClient: Stripe.createFetchHttpClient(async () =>
+            Response.json({
+              ...canceled,
+              status: "active",
+              items: {
+                object: "list",
+                data: [
+                  {
+                    id: "si_other",
+                    price: { id: "price_other" },
+                    current_period_end: 4070908800,
+                  },
+                ],
+              },
+            }),
+          ),
+        });
+        await processStripeEvent(
+          env,
+          { ...event, id: "evt_off_plan", created: 125 } as Stripe.Event,
+          offPlan,
+        );
+        const removed = await db
+          .prepare(
+            "SELECT status,period_end FROM subscriptions WHERE user_id='dev:owner'",
+          )
+          .first<{ status: string; period_end: string | null }>();
+        assert.equal(removed!.status, "inactive");
+        assert.equal(removed!.period_end, null);
         await db
           .prepare(
-            "UPDATE subscriptions SET status='active' WHERE user_id='dev:owner'",
+            "UPDATE subscriptions SET status='active',period_end='2099-01-01T00:00:00.000Z' WHERE user_id='dev:owner'",
           )
           .run();
         const risk = {
