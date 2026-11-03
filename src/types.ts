@@ -1,0 +1,29 @@
+export type Bindings = {
+  [
+    K in keyof Omit<Env, "ADMIN_TOKEN" | "COLLECTOR_TOKEN" | "DEV_AUTH_TOKEN">
+  ]: Env[K] extends string ? string : Env[K];
+} & {
+  ADMIN_TOKEN?: string;
+  COLLECTOR_TOKEN?: string;
+  DEV_AUTH_TOKEN?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  X_CLIENT_ID?: string;
+  X_CLIENT_SECRET?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_ID?: string;
+  MEDIA?: R2Bucket;
+};
+export type Actor = {
+  userId: string;
+  via: "session" | "api_key";
+  pro: boolean;
+};
+export type AppEnv = {
+  Bindings: Bindings;
+  Variables: { actor: Actor; requestId: string };
+};
+export const now = () => new Date().toISOString();
+export const later = (seconds: number) =>
+  new Date(Date.now() + seconds * 1000).toISOString();

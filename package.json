@@ -1,0 +1,49 @@
+{
+  "name": "arcex",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Arcex commercial intelligence, blueprints, model builds and community backend",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev --port 8791 --test-scheduled",
+    "types": "wrangler types --strict-vars=false",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
+    "build": "wrangler deploy --env production --dry-run --outdir dist && pnpm build:mcp",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "setup": "tsx scripts/setup-local.ts",
+    "format": "prettier --write src scripts tests packages package.json tsconfig.json wrangler.jsonc",
+    "db:local": "wrangler d1 migrations apply arcex --local",
+    "db:remote": "wrangler d1 migrations apply arcex --remote --env production",
+    "seed": "tsx scripts/seed.ts",
+    "inspect": "tsx scripts/inspector.ts",
+    "extract": "tsx scripts/extract.ts",
+    "import:teardown": "tsx scripts/import-teardown.ts",
+    "collect": "tsx scripts/collector.ts",
+    "mcp": "tsx scripts/mcp.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "fast-xml-parser": "5.11.2",
+    "hono": "4.13.16",
+    "stripe": "23.1.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261103.1",
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "miniflare": "5.20261102.0-beta",
+    "playwright": "1.64.1",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "wrangler": "4.156.2"
+  }
+}

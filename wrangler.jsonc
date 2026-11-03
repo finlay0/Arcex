@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "arcex-api",
+  "account_id": "f4fd2d7253ee80d49ffb768f4a25b132",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 },
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "APP_ORIGIN": "http://localhost:8791",
+    "API_ORIGIN": "http://localhost:8791",
+    "ENABLE_DEV_AUTH": "false",
+    "COLLECTION_ENABLED": "false",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "arcex",
+      "database_id": "6a7ad0ca-784e-47d5-b8ed-9c6b6400cc22",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "triggers": { "crons": ["17 12 * * *"] },
+  "env": {
+    "production": {
+      "name": "arcex-api",
+      "workers_dev": true,
+      "vars": {
+        "ENVIRONMENT": "production",
+        "APP_ORIGIN": "https://arcex.dev",
+        "API_ORIGIN": "https://arcex-api.peak-era-avern.workers.dev",
+        "ENABLE_DEV_AUTH": "false",
+        "COLLECTION_ENABLED": "true",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "arcex",
+          "database_id": "6a7ad0ca-784e-47d5-b8ed-9c6b6400cc22",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "triggers": { "crons": ["17 12 * * *"] },
+    },
+  },
+}

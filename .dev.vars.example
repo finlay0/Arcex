@@ -1,0 +1,13 @@
+# Copy to .dev.vars. Generate independent random values. Never commit that file.
+ADMIN_TOKEN=
+COLLECTOR_TOKEN=
+DEV_AUTH_TOKEN=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+X_CLIENT_ID=
+X_CLIENT_SECRET=
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID=
+# Development auth additionally requires ENABLE_DEV_AUTH=true and localhost.
+# Production requires APP_ORIGIN=https://... and ENVIRONMENT=production.
