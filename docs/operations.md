@@ -49,6 +49,22 @@ The `rss` adapter supports ordinary RSS and Atom entries, including a YouTube ch
 
 ## Publication
 
+### Distribution watches
+
+`POST /api/v1/admin/distribution/watches` registers an idempotent product/platform/country watch for Meta, Google, YouTube or X and a corresponding browser source. `GET /api/v1/admin/distribution` lists exact search URLs, scan outcomes, per-ad history and engagement-counter changes. Initial production coverage had 48 Meta/YouTube/X watches; Google adds a fourth platform. Configured watches do not establish completed scans.
+
+Work tools `register_distribution_watch`, `record_distribution_scan`, `record_meta_ad`, `record_creator_mention` and `distribution_status` use the same validated backend routes. A Meta ad needs its exact Library ID, advertiser, filter country, displayed state, source hash/time and observed destination matching the product domain. Creator sponsorship/affiliate labels require an actual disclosure quote. Search-result keyword similarity alone is insufficient.
+
+Record blocked, failed and empty scans with evidence from the exact watch URL. None of those outcomes marks ads inactive. Per-ad counts use distinct UTC dates of observed active states; reported ad start dates and gaps do not establish continuous delivery. Public summaries require approved evidence and a published parent. `GET /api/v1/distribution/{slug}` never exposes private watchlists or drafts.
+
+The official Meta API is not activated and does not provide unrestricted worldwide commercial-ad coverage. Use the Work cloud browser for public Ad Library checks; do not silently substitute paid scrapers or bypass login/CAPTCHA challenges. [Official scope and access requirements](https://www.facebook.com/ads/library/api/).
+
+`record_google_ad` stores transparency creative IDs and reported dates, without inferring bid keywords or conversions. `record_short_form` stores an exact Shorts/TikTok/Reels/X source, observed hook and visible counters. `record_launch_snapshot` stores source-backed numeric counters; one observation yields no velocity, and gaps are not interpolated. Public summaries require approved evidence and a published product.
+
+The optional `collect_youtube_mentions` adapter requires server-only `YOUTUBE_API_KEY`. It performs one bounded `search.list` request (20 results max) and one `videos.list` request for full descriptions/statistics. Only direct product-domain links create draft creator-mention records, always with placement unknown. Shortened links need browser review. Results cache for 24 hours; failed/auth-denied responses remain errors and are not cached as empty results. The application caps search calls at 25/UTC day and video metadata calls at 1,000/UTC day, below the provider's current defaults. [Current quota structure](https://developers.google.com/youtube/data/getting-started) separates 100 daily search calls from 10,000 units for other endpoints; the pasted brief's old search-unit arithmetic is not used. No paid API or quota expansion was activated.
+
+`lookup_sponsorblock` is implemented but disabled unless `SPONSORBLOCK_LICENSE_APPROVED=true` is explicitly configured after permission for Arcex's commercial use. Its [database/API license](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License) is CC BY-NC-SA 4.0, not unrestricted commercial reuse. The adapter caches bounded per-video community segments, includes attribution, and never attributes a segment to a product without separate observation. No SponsorBlock data has been imported into production.
+
 Use `/openapi.json` for endpoint contracts and runtime-validated input schemas. Admin routes require the admin token. Collector credentials only allow leasing/completion and image upload, not publication or product edits.
 
 1. Register a draft product and source.
@@ -86,13 +102,15 @@ Before accepting real subscriptions, configure applicable sales-tax registration
 
 R2 must remain disabled: the user requires zero surprise charges, and R2 allowances/budget alerts are not a provider-enforced zero-spend cap. Use the existing Supabase **Free** project `xieyxgwdfczyorfkrmbe` (formerly Aftercode), now authorized for repurposing as Arcex. BOPPER is unrelated and must remain untouched. Do not upgrade the organization/project plan. [Supabase Free does not charge overages](https://supabase.com/docs/guides/platform/cost-control); service restrictions may apply at limits.
 
-Configure `SUPABASE_STORAGE_URL=https://xieyxgwdfczyorfkrmbe.supabase.co` and server-only `SUPABASE_STORAGE_KEY` in encrypted Worker secrets. Never expose the secret key to a client or chat. The admin-only `POST /api/v1/media/storage/setup` creates private bucket `arcex-evidence`, 1 MB file limit and PNG/JPEG/WebP allowlist, preserving other buckets and tables. It refuses an existing public bucket. `GET /api/v1/media/storage/status` reports readiness and application usage.
+The production URL is pinned in `wrangler.jsonc`; dedicated server-only `SUPABASE_STORAGE_KEY` is encrypted in the Worker. The existing project was renamed Arcex, and private bucket `arcex-evidence` is live. Never expose the secret key to a client or chat. The admin-only `POST /api/v1/media/storage/setup` creates the private bucket with a 1 MB file limit and PNG/JPEG/WebP allowlist, preserving other buckets and tables. It refuses an existing public bucket. `GET /api/v1/media/storage/status` reports readiness and application usage. A real generated-image upload, authenticated exact-hash read, public denial and deletion passed; actual Work research images are now being uploaded as unapproved assets.
+
+During setup a browser redaction error exposed the old default secret key. A dedicated `arcex_worker_storage` replacement was installed, verified, and the exposed default secret was irreversibly revoked. The public/publishable key is separate. Never reuse the revoked credential or print new credential values in tool outputs.
 
 Uploads atomically reserve D1 asset bytes before storage writes and stop at 50,000,000 total bytes; failed uploads release the reservation. There is no paid fallback or automatic plan upgrade. Unapproved files can only be fetched through authenticated admin `GET /api/v1/media/{id}/review`; public image access still requires approved asset/evidence and a published parent. The optional R2 adapter exists for isolated tests, not production activation. Supabase Storage is separate from the D1 relational database.
 
 For MCP, run `pnpm build:mcp`. Configure your MCP client to launch `node packages/mcp/dist/index.js` with `ARCEX_API_URL` and, for blueprint exports, `ARCEX_API_KEY` from an active Insider account. Public tools do not send the key. The package reads no dotenv files from the consumer's repository. A signed-in session can create/list/revoke keys; an API key cannot mint more keys or create Checkout/Portal sessions. Key revocation and entitlement expiry take effect on subsequent requests.
 
-The stdio package builds and passes an actual SDK handshake test. npm is signed out and `@arcex/mcp` is already occupied by another publisher, so the package is not published under that name. Run the local built entrypoint today; the HTTP collector connection does not depend on npm publication. The package contains no secrets or browser artifacts.
+The stdio package is named `arcex-mcp` because `@arcex/mcp` belongs to another publisher. Its [GitHub preview release](https://github.com/finlay0/Arcex/releases/tag/v0.1.0) provides `arcex-mcp-0.1.0.tgz` and checksums; [client configuration](../packages/mcp/README.md) installs it through `npx --package` without npm publication. A fresh local installation of the exact tarball passed a real stdio handshake, live public search and missing-Insider-key denial. npm registry publication is separate; the HTTP Work collector does not depend on it. The package includes only README, package metadata and the built entrypoint, with pinned SDK/Zod dependencies.
 
 ## Recovery and retired project
 

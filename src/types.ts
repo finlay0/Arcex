@@ -19,6 +19,8 @@ export type Bindings = {
   OAUTH_PROVIDER?: OAuthHelpers;
   SUPABASE_STORAGE_URL?: string;
   SUPABASE_STORAGE_KEY?: string;
+  YOUTUBE_API_KEY?: string;
+  SPONSORBLOCK_LICENSE_APPROVED?: string;
 };
 export type Actor = {
   userId: string;

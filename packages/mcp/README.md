@@ -11,4 +11,20 @@ ARCEX_API_KEY=your-insider-key
 
 Configure those values in your MCP client's protected environment settings. Never put a real key into a committed MCP configuration. API keys can be revoked from the Arcex API, and paid access is rechecked on every export.
 
-The package is prepared for npm publication. Registry availability and namespace ownership must be verified before advertising an `npx @arcex/mcp` install command.
+The preview package is distributed through the Arcex GitHub release; npm registry publication is separate. The proposed `@arcex/mcp` registry name belongs to another publisher, so this package uses `arcex-mcp`.
+
+MCP client configuration for the preview release:
+
+```json
+{
+  "mcpServers": {
+    "arcex": {
+      "command": "npx",
+      "args": ["--yes", "--package", "https://github.com/finlay0/Arcex/releases/download/v0.1.0/arcex-mcp-0.1.0.tgz", "arcex-mcp"],
+      "env": { "ARCEX_API_URL": "https://arcex-api.peak-era-avern.workers.dev" }
+    }
+  }
+}
+```
+
+Add `ARCEX_API_KEY` through protected client settings only for Insider blueprint export. Public reads need no key. This stdio package is separate from the owner-only ChatGPT Work collector connection.

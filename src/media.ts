@@ -127,6 +127,25 @@ media.get("/:id/review", requireAdmin, async (c) => {
   });
 });
 
+media.delete("/:id", requireAdmin, async (c) => {
+  const row = await c.env.DB.prepare("SELECT object_key FROM assets WHERE id=?")
+    .bind(c.req.param("id"))
+    .first<{ object_key: string }>();
+  if (!row) fail(404, "Asset not found");
+  if (
+    await c.env.DB.prepare("SELECT id FROM funnel_steps WHERE asset_id=?")
+      .bind(c.req.param("id"))
+      .first()
+  )
+    fail(409, "Remove the capture from funnel steps before deleting it");
+  await fileStore(c.env).delete(row.object_key);
+  await c.env.DB.prepare("DELETE FROM assets WHERE id=?")
+    .bind(c.req.param("id"))
+    .run();
+  await audit(c.env.DB, "admin", "asset.delete", c.req.param("id"));
+  return c.json({ ok: true });
+});
+
 media.post("/storage/setup", requireAdmin, async (c) =>
   c.json(await setupStorage(c.env)),
 );

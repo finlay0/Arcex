@@ -12,6 +12,8 @@ import { collector, jobAdmin, enqueueDue } from "./jobs";
 import { media } from "./media";
 import { openapi } from "./openapi";
 import { researchAdmin } from "./research";
+import { distributionAdmin, distributionStatus } from "./distribution";
+import { externalSignalsAdmin } from "./external-signals";
 
 export const app = new Hono<AppEnv>();
 app.use("*", async (c, next) => {
@@ -64,6 +66,17 @@ app.route("/api/v1/admin", adminCommunity);
 app.route("/api/v1/admin", adminBilling);
 app.route("/api/v1/admin", jobAdmin);
 app.route("/api/v1/admin", researchAdmin);
+app.route("/api/v1/admin", distributionAdmin);
+app.route("/api/v1/admin", externalSignalsAdmin);
+app.get("/api/v1/distribution/:slug", async (c) => {
+  const product = await c.env.DB.prepare(
+    "SELECT id FROM products WHERE slug=? AND status='published'",
+  )
+    .bind(c.req.param("slug"))
+    .first<{ id: string }>();
+  if (!product) return c.json({ error: "Product not found" }, 404);
+  return c.json(await distributionStatus(c.env.DB, product.id, true));
+});
 app.route("/api/v1/collector/jobs", collector);
 app.route("/api/v1/media", media);
 app.route("/api/v1/billing", billing);

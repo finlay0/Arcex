@@ -7,6 +7,7 @@ Live API: https://arcex-api.peak-era-avern.workers.dev
 - [Health](https://arcex-api.peak-era-avern.workers.dev/health)
 - [OpenAPI contract](https://arcex-api.peak-era-avern.workers.dev/openapi.json)
 - [Operations and account setup](docs/operations.md)
+- [Brief coverage: implemented, verified and remaining](docs/brief-coverage.md)
 - [MCP package](packages/mcp/README.md)
 
 ## Run locally
@@ -32,6 +33,10 @@ Private screenshots use the existing Supabase Free project (formerly Aftercode).
 
 The owner-only OAuth collector endpoint is `/mcp`, with scope `arcex:collect`. It can register independent-product candidates, read collection status, attach private captures and save evidence/funnels/blueprints as drafts. It has no publish, billing or permission tools. This is separate from the public/Insider stdio MCP package.
 
+Meta Ad Library, Google Ads Transparency, YouTube and X distribution watches use cloud browser jobs. The collector records ad IDs, displayed states/dates, destination links, creator disclosures, short-form hooks and scan failures. Per-ad history counts distinct observed active UTC days, not continuous delivery. Engagement snapshots derive counter-change rates only from multiple observations. Keyword matches require a product-domain destination match before becoming ad/creator records. Empty or blocked searches never establish that a product has no ads. Actual sightings remain drafts until review.
+
+An optional official YouTube Data API adapter fetches full descriptions/statistics after discovery, filters direct domain links, caches for 24 hours and caps searches at 25/day. It requires a protected server key; Work's cloud browser is the active path. SponsorBlock lookup code is disabled until commercial-use permission is established for its noncommercial database/API license.
+
 Public endpoints expose published records and approved evidence only. Free signed-in users can export blueprints, save products, submit builds and vote. An active Insider subscription enables MCP API keys, collections, a derived public badge and stream-queue priority. Stripe webhooks reconcile subscription state, reject invalid signatures, deduplicate deliveries, and place refunds/disputes/fraud warnings into an admin review hold.
 
 ## Inspector
@@ -39,11 +44,12 @@ Public endpoints expose published records and approved evidence only. Free signe
 ```sh
 pnpm inspect https://target-app.tld
 pnpm inspect https://target-app.tld --browser
+pnpm inspect https://target-app.tld --browser --auto
 pnpm extract captures/CAPTURE_DIRECTORY --prepare-only
 pnpm import:teardown captures/CAPTURE_DIRECTORY PRODUCT_ID
 ```
 
-The browser mode opens a visible ephemeral Playwright session. Navigate and sign in manually, enter a label for each capture, and enter `q` to finish. It does not store browser profiles or OAuth state. Run `pnpm exec playwright install chromium` if the browser is absent.
+The browser mode opens a visible ephemeral Playwright session. Navigate and sign in manually, enter a label for each capture, and enter `q` to finish. `--auto` additionally debounces navigation/button captures on the target domain, up to 100 steps. Client stack observations store matched provider hosts and fixed signature descriptions, without request bodies, headers, cookies or query parameters. They do not establish server implementation. No browser profiles or OAuth state are persisted. Run `pnpm exec playwright install chromium` if needed.
 
 The extractor defaults to **GPT-6.1 Terra, medium**. `--prepare-only` produces a prompt/schema for an app run without API billing. With a protected `OPENAI_API_KEY`, extraction can instead use the Responses API with no model tools enabled. It saves structured analysis locally; import creates drafts and never publishes. Screenshots are not uploaded by this command. Browser/computer-use testing is delegated to Terra as requested.
 
@@ -51,7 +57,7 @@ The extractor defaults to **GPT-6.1 Terra, medium**. `--prepare-only` produces a
 
 - GitHub OAuth app and encrypted Worker secrets are configured, including exact regular and collector callbacks. X OAuth still requires a dedicated provider registration; X email is not requested or assumed available.
 - Stripe has a dedicated sandbox, a $12 USD/month test fixture, hosted Portal and the required 12 webhook events. The admin readiness endpoint verifies provider configuration without returning secrets. Full hosted payment/webhook delivery remains to be verified; no live charges or live products were created. Launch currency is not decided by the sandbox fixture.
-- `@arcex/mcp` builds and passes a real SDK handshake test. npm publication requires registry login and access to the namespace.
+- `arcex-mcp` builds and passes a packed-install stdio handshake and live public-read test. The GitHub preview release provides an installable tarball; npm registry publication remains separate because the original scoped name is occupied.
 - No customer-facing site, ten published deep teardowns, real benchmark games, or provider performance claims have been fabricated. Those require frontend work and observed content.
 
 Evidence records distinguish observations from proposed implementation. Distinct ad-observation days do not establish continuous ad activity, ad spend, revenue or conversion. A retracted observation unpublishes its product and blueprint exports.

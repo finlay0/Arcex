@@ -50,7 +50,12 @@ export function fileStore(env: Bindings) {
     },
     get: async (key: string) => {
       const { data, error } = await bucket.download(key);
-      if (error || !data) return null;
+      if (error) {
+        if ("statusCode" in error && Number(error.statusCode) === 404)
+          return null;
+        fail(502, "Evidence download failed");
+      }
+      if (!data) return null;
       return data.stream();
     },
     delete: async (key: string) => {

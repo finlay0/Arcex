@@ -42,6 +42,7 @@
         "ENABLE_DEV_AUTH": "false",
         "COLLECTION_ENABLED": "false",
         "MCP_OWNER_GITHUB_ID": "207296386",
+        "SUPABASE_STORAGE_URL": "https://xieyxgwdfczyorfkrmbe.supabase.co",
       },
       "d1_databases": [
         {

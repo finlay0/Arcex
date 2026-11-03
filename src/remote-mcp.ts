@@ -7,6 +7,17 @@ import { app } from "./index";
 import { audit, fail, rateLimit } from "./lib";
 import { candidateInput, registerCandidate } from "./research";
 import {
+  watchInput,
+  scanInput,
+  adSightingInput,
+  creatorMentionInput,
+  distributionStatus,
+  launchSnapshotInput,
+  googleAdInput,
+  shortFormInput,
+} from "./distribution";
+import { youtubeCollectionInput, sponsorBlockInput } from "./external-signals";
+import {
   evidenceInput,
   funnelInput,
   paywallInput,
@@ -86,6 +97,111 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
       );
     return data;
   };
+  server.registerTool(
+    "record_google_ad",
+    {
+      description:
+        "Save an actually observed Google Ads Transparency creative as draft evidence: advertiser/creative IDs, source-reported last-shown date, country, format and matching product destination. Transparency listings do not reveal competitor keyword bids or conversions.",
+      inputSchema: googleAdInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/google", input)),
+  );
+  server.registerTool(
+    "record_short_form",
+    {
+      description:
+        "Save an actually viewed Shorts/TikTok/Reels/X clip with exact source URL, timestamp/hash, hook quote/style, product-matching destination and only visible counters. No sponsorship or causal virality inferred.",
+      inputSchema: shortFormInput,
+    },
+    async (input) =>
+      run(() =>
+        internal("POST", "/api/v1/admin/distribution/short-form", input),
+      ),
+  );
+  server.registerTool(
+    "collect_youtube_mentions",
+    {
+      description:
+        "Optional official YouTube Data API collection, capped at 25 searches/day and 20 videos/search with 24-hour caching. Requires a protected server API key; otherwise use Work's cloud browser. Finds direct product-domain links in full descriptions and stores unreviewed drafts; no automatic sponsorship attribution.",
+      inputSchema: youtubeCollectionInput,
+    },
+    async (input) =>
+      run(() =>
+        internal("POST", "/api/v1/admin/distribution/youtube/collect", input),
+      ),
+  );
+  server.registerTool(
+    "lookup_sponsorblock",
+    {
+      description:
+        "Look up community sponsor segment timestamps for one YouTube video. Disabled until commercial-use license permission is recorded. Segments do not identify the sponsor; independent video review is required.",
+      inputSchema: sponsorBlockInput,
+    },
+    async (input) =>
+      run(() =>
+        internal("POST", "/api/v1/admin/distribution/sponsorblock", input),
+      ),
+  );
+  server.registerTool(
+    "distribution_status",
+    {
+      description:
+        "Read Meta/YouTube/X watchlists, last scan outcomes and distinct observed active days per Meta ad. Gaps and empty searches never prove inactivity; no revenue or spend inference.",
+      inputSchema: z.object({ productId: id.optional() }).strict(),
+    },
+    async ({ productId }) => run(() => distributionStatus(env.DB, productId)),
+  );
+  server.registerTool(
+    "register_distribution_watch",
+    {
+      description:
+        "Register an idempotent Meta Ad Library, Google Ads Transparency, YouTube outbound-link, or X mention browser watch for a product domain. Global automatic scheduling remains paused. Country is ALL unless explicitly selected; query results require product-domain matching.",
+      inputSchema: watchInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/watches", input)),
+  );
+  server.registerTool(
+    "record_distribution_scan",
+    {
+      description:
+        "Record a real completed, empty, blocked or failed search with evidence from the exact watch URL and observation time. Never convert auth/CAPTCHA failures into no-results or mark unseen ads inactive.",
+      inputSchema: scanInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/scans", input)),
+  );
+  server.registerTool(
+    "record_meta_ad",
+    {
+      description:
+        "Record an actually observed Meta Ad Library card as private draft evidence, with exact Library ID, advertiser, country filter, displayed active/inactive state, creative and observed destination URL matching the product domain. Hash actual source/capture bytes. Reported start date is a source claim, not continuous delivery or performance proof.",
+      inputSchema: adSightingInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/ads", input)),
+  );
+  server.registerTool(
+    "record_creator_mention",
+    {
+      description:
+        "Record an observed YouTube/X mention or description outbound link matching the product domain. Sponsored/affiliate labels require an explicit observed disclosure quote; otherwise use organic or unknown. Never infer a commercial relationship merely from a link.",
+      inputSchema: creatorMentionInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/creators", input)),
+  );
+  server.registerTool(
+    "record_launch_snapshot",
+    {
+      description:
+        "Record an actually observed GitHub star, X engagement or Product Hunt counter with source hash/time and a product-matching destination. Multiple snapshots permit counter-change rates; one snapshot gives no velocity. Public counters are not revenue or verified users.",
+      inputSchema: launchSnapshotInput,
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/distribution/launch", input)),
+  );
   server.registerTool(
     "collection_status",
     {

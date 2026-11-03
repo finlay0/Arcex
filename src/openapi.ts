@@ -1,6 +1,16 @@
 import { z } from "zod";
 import { candidateInput } from "./research";
 import {
+  watchInput,
+  scanInput,
+  adSightingInput,
+  creatorMentionInput,
+  launchSnapshotInput,
+  googleAdInput,
+  shortFormInput,
+} from "./distribution";
+import { youtubeCollectionInput, sponsorBlockInput } from "./external-signals";
+import {
   productInput,
   evidenceInput,
   signalInput,
@@ -13,6 +23,15 @@ import {
 } from "./contracts";
 
 const schemas = {
+  DistributionWatchInput: watchInput,
+  DistributionScanInput: scanInput,
+  MetaAdInput: adSightingInput,
+  CreatorMentionInput: creatorMentionInput,
+  LaunchSnapshotInput: launchSnapshotInput,
+  GoogleAdInput: googleAdInput,
+  ShortFormInput: shortFormInput,
+  YoutubeCollectionInput: youtubeCollectionInput,
+  SponsorBlockInput: sponsorBlockInput,
   ResearchCandidateInput: candidateInput,
   ProductInput: productInput,
   EvidenceInput: evidenceInput,
@@ -95,6 +114,80 @@ export const openapi = {
     },
   },
   paths: {
+    "/api/v1/admin/distribution/google": {
+      post: operation(
+        "Record source-backed Google transparency creative",
+        "admin",
+        "GoogleAdInput",
+      ),
+    },
+    "/api/v1/admin/distribution/short-form": {
+      post: operation(
+        "Record short-form hook and visible counters",
+        "admin",
+        "ShortFormInput",
+      ),
+    },
+    "/api/v1/admin/distribution/youtube/collect": {
+      post: operation(
+        "Bounded official API description-link collection, requires server key",
+        "admin",
+        "YoutubeCollectionInput",
+      ),
+    },
+    "/api/v1/admin/distribution/sponsorblock": {
+      post: operation(
+        "Optional licensed community segment lookup; disabled by default",
+        "admin",
+        "SponsorBlockInput",
+      ),
+    },
+    "/api/v1/admin/distribution/launch": {
+      post: operation(
+        "Record a public launch counter snapshot; derive rates only from actual observations",
+        "admin",
+        "LaunchSnapshotInput",
+      ),
+    },
+    "/api/v1/distribution/{slug}": {
+      get: operation(
+        "Approved per-ad observation history on a published product",
+      ),
+    },
+    "/api/v1/admin/distribution": {
+      get: operation(
+        "Private watches, scan outcomes and per-ad history",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/distribution/watches": {
+      post: operation(
+        "Register Meta/YouTube/X browser watch",
+        "admin",
+        "DistributionWatchInput",
+      ),
+    },
+    "/api/v1/admin/distribution/scans": {
+      post: operation(
+        "Record exact-URL scan outcome",
+        "admin",
+        "DistributionScanInput",
+      ),
+    },
+    "/api/v1/admin/distribution/ads": {
+      post: operation(
+        "Record source-backed Meta ad sighting as draft",
+        "admin",
+        "MetaAdInput",
+      ),
+    },
+    "/api/v1/admin/distribution/creators": {
+      post: operation(
+        "Record a source-backed creator outbound link or mention",
+        "admin",
+        "CreatorMentionInput",
+      ),
+    },
     "/mcp": {
       post: {
         ...operation("Owner-only collector MCP; OAuth arcex:collect scope"),
@@ -343,6 +436,10 @@ export const openapi = {
     },
     "/api/v1/media/{id}": {
       get: operation("Approved image on published product"),
+      delete: operation(
+        "Delete unreferenced capture and release application quota",
+        "admin",
+      ),
     },
     "/api/v1/billing/checkout": {
       post: operation("Create hosted Insider checkout; session only", "user"),

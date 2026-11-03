@@ -1,5 +1,5 @@
 {
-  "name": "@arcex/mcp",
+  "name": "arcex-mcp",
   "version": "0.1.0",
   "type": "module",
   "description": "Arcex product intelligence and evidence-backed blueprint MCP server",
