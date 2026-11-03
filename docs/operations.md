@@ -26,7 +26,7 @@ Wrangler's version/deployment listing and tail commands require the same `--env 
 
 ## Scheduling and collectors
 
-Workers Cron runs at 12:17 UTC daily and enqueues due sources. It does not itself run a browser or language model. The Codex automation **Arcex daily collection** runs at 09:00 America/Halifax using `gpt-6.1-terra`, medium reasoning. The local automation needs this computer and Codex available. Missed local runs leave jobs in the cloud queue.
+Workers Cron runs at 10:17 UTC daily and enqueues due sources. It does not itself run a browser or language model. The Codex automation **Arcex daily collection** runs at 09:00 America/Halifax using `gpt-6.1-terra`, medium reasoning. The local automation needs this computer and Codex available. Missed local runs leave jobs in the cloud queue.
 
 For a manual cloud collection pass in PowerShell:
 
