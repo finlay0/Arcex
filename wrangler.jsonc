@@ -2,9 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "arcex-api",
   "account_id": "f4fd2d7253ee80d49ffb768f4a25b132",
-  "main": "src/index.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-11-03",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "observability": {
     "enabled": true,
@@ -17,6 +17,7 @@
     "API_ORIGIN": "http://localhost:8791",
     "ENABLE_DEV_AUTH": "false",
     "COLLECTION_ENABLED": "false",
+    "MCP_OWNER_GITHUB_ID": "207296386",
   },
   "d1_databases": [
     {
@@ -27,6 +28,9 @@
     },
   ],
   "triggers": { "crons": ["17 10 * * *"] },
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "d5e6f85e32884f1283215fcae723c425" },
+  ],
   "env": {
     "production": {
       "name": "arcex-api",
@@ -36,7 +40,8 @@
         "APP_ORIGIN": "https://arcex.dev",
         "API_ORIGIN": "https://arcex-api.peak-era-avern.workers.dev",
         "ENABLE_DEV_AUTH": "false",
-        "COLLECTION_ENABLED": "true",
+        "COLLECTION_ENABLED": "false",
+        "MCP_OWNER_GITHUB_ID": "207296386",
       },
       "d1_databases": [
         {
@@ -47,6 +52,9 @@
         },
       ],
       "triggers": { "crons": ["17 10 * * *"] },
+      "kv_namespaces": [
+        { "binding": "OAUTH_KV", "id": "d5e6f85e32884f1283215fcae723c425" },
+      ],
     },
   },
 }

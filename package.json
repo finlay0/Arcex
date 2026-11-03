@@ -23,13 +23,16 @@
     "inspect": "tsx scripts/inspector.ts",
     "extract": "tsx scripts/extract.ts",
     "import:teardown": "tsx scripts/import-teardown.ts",
+    "import:work": "tsx scripts/import-work-batch.ts",
     "collect": "tsx scripts/collector.ts",
     "mcp": "tsx scripts/mcp.ts",
     "smoke": "tsx scripts/smoke.ts",
     "deploy:production": "wrangler deploy --env production"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.4",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "@supabase/supabase-js": "2.118.0",
     "fast-xml-parser": "5.11.2",
     "hono": "4.13.16",
     "stripe": "23.1.0",

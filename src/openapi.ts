@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { candidateInput } from "./research";
 import {
   productInput,
   evidenceInput,
@@ -12,6 +13,7 @@ import {
 } from "./contracts";
 
 const schemas = {
+  ResearchCandidateInput: candidateInput,
   ProductInput: productInput,
   EvidenceInput: evidenceInput,
   SignalInput: signalInput,
@@ -78,9 +80,68 @@ export const openapi = {
       InsiderKey: { type: "http", scheme: "bearer" },
       AdminToken: { type: "http", scheme: "bearer" },
       CollectorToken: { type: "http", scheme: "bearer" },
+      CollectorOAuth: {
+        type: "oauth2",
+        flows: {
+          authorizationCode: {
+            authorizationUrl: "/authorize",
+            tokenUrl: "/oauth/token",
+            scopes: {
+              "arcex:collect": "Owner-only private research draft collection",
+            },
+          },
+        },
+      },
     },
   },
   paths: {
+    "/mcp": {
+      post: {
+        ...operation("Owner-only collector MCP; OAuth arcex:collect scope"),
+        security: [{ CollectorOAuth: ["arcex:collect"] }],
+      },
+    },
+    "/api/v1/admin/research/candidates": {
+      get: operation("Private research cohort and ownership evidence", "admin"),
+      post: operation(
+        "Register independent product as draft",
+        "admin",
+        "ResearchCandidateInput",
+      ),
+    },
+    "/api/v1/admin/research/candidates/{id}/status": {
+      put: operation("Review cohort eligibility", "admin"),
+    },
+    "/api/v1/admin/billing/readiness": {
+      get: operation(
+        "Read provider configuration without exposing credentials",
+        "admin",
+      ),
+    },
+    "/api/v1/media/storage/setup": {
+      post: operation(
+        "Create private evidence bucket; preserves existing data",
+        "admin",
+      ),
+    },
+    "/api/v1/media/storage/status": {
+      get: operation(
+        "Private bucket readiness and 50 MB application quota",
+        "admin",
+      ),
+    },
+    "/api/v1/media/{id}/review": {
+      get: operation(
+        "Private capture review, including unapproved assets",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/mcp/grants": {
+      get: operation("List owner collector authorization grants", "admin"),
+    },
+    "/api/v1/admin/mcp/grants/{id}": {
+      delete: operation("Revoke collector authorization", "admin"),
+    },
     "/health": { get: operation("Database readiness") },
     "/auth/{provider}/start": { get: operation("Start GitHub or X OAuth") },
     "/auth/{provider}/callback": { get: operation("OAuth callback") },
@@ -273,7 +334,7 @@ export const openapi = {
     },
     "/api/v1/media/upload": {
       post: operation(
-        "Upload capture to private R2; optional storage binding",
+        "Upload private capture within 50 MB application quota",
         "collector",
       ),
     },

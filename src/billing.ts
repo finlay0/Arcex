@@ -257,6 +257,34 @@ billing.post("/webhook", async (c) => {
 });
 export const adminBilling = new Hono<AppEnv>();
 adminBilling.use("*", requireAdmin);
+adminBilling.get("/billing/readiness", async (c) => {
+  if (!c.env.STRIPE_PRICE_ID || !c.env.STRIPE_WEBHOOK_SECRET)
+    fail(503, "Billing secrets are incomplete");
+  const stripe = stripeClient(c.env);
+  const [price, webhooks, portals] = await Promise.all([
+    stripe.prices.retrieve(c.env.STRIPE_PRICE_ID),
+    stripe.webhookEndpoints.list({ limit: 100 }),
+    stripe.billingPortal.configurations.list({ limit: 100 }),
+  ]);
+  const target = c.env.API_ORIGIN + "/api/v1/billing/webhook";
+  const endpoint = webhooks.data.find((w) => w.url === target);
+  return c.json({
+    mode: price.livemode ? "live" : "sandbox",
+    price: {
+      active: price.active,
+      currency: price.currency,
+      unitAmount: price.unit_amount,
+      interval: price.recurring?.interval ?? null,
+    },
+    webhook: {
+      exists: !!endpoint,
+      enabled: endpoint?.status === "enabled",
+      events: endpoint?.enabled_events ?? [],
+    },
+    portalConfigured: portals.data.some((p) => p.active),
+    credentialsConfigured: true,
+  });
+});
 adminBilling.get("/billing/holds", async (c) =>
   c.json({
     items: (

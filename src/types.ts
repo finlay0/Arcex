@@ -1,3 +1,5 @@
+import type { OAuthHelpers } from "@cloudflare/workers-oauth-provider";
+
 export type Bindings = {
   [
     K in keyof Omit<Env, "ADMIN_TOKEN" | "COLLECTOR_TOKEN" | "DEV_AUTH_TOKEN">
@@ -14,6 +16,9 @@ export type Bindings = {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_ID?: string;
   MEDIA?: R2Bucket;
+  OAUTH_PROVIDER?: OAuthHelpers;
+  SUPABASE_STORAGE_URL?: string;
+  SUPABASE_STORAGE_KEY?: string;
 };
 export type Actor = {
   userId: string;

@@ -15,10 +15,10 @@ Development sign-in requires all three: `ENVIRONMENT=development`, `ENABLE_DEV_A
 ```sh
 pnpm check
 pnpm db:remote
-pnpm deploy:production --secrets-file .secrets.production.json
+pnpm deploy:production
 ```
 
-Deploy targets the explicit production environment. `pnpm deploy` is a pnpm built-in and is not the deployment command for this project. When only application code changes, do not reapply already applied migrations manually. Add a new ordered SQL migration. D1 migration history is checked by Wrangler.
+Deploy targets the explicit production environment and preserves dashboard-managed provider secrets. Do not overwrite those secrets with a partial or blank secrets file. `pnpm deploy` is a pnpm built-in and is not the deployment command for this project. When only application code changes, do not reapply already applied migrations manually. Add a new ordered SQL migration. D1 migration history is checked by Wrangler.
 
 Use `pnpm smoke` with `ARCEX_ENV_FILE=.env.collector` to verify the cloud API. This is read-only: health, public list responses, admin-denial checks, private export denial, and authenticated job listing.
 
@@ -26,9 +26,13 @@ Wrangler's version/deployment listing and tail commands require the same `--env 
 
 ## Scheduling and collectors
 
-Workers Cron runs at 10:17 UTC daily and enqueues due sources. It does not itself run a browser or language model. The Codex automation **Arcex daily collection** runs at 09:00 America/Halifax using `gpt-6.1-terra`, medium reasoning. The local automation needs this computer and Codex available. Missed local runs leave jobs in the cloud queue.
+The production cron trigger is configured at 10:17 UTC, but `COLLECTION_ENABLED=false` makes it a no-op. Manual enqueueing remains available. The superseded local Codex automation **Arcex daily collection** is paused. Do not reactivate it for production research.
 
-A [ChatGPT Work cloud test](https://chatgpt.com/c/6ae97dca-4130-83ea-b681-8079d37c2bb3) on November 3 verified Cloud browser capture of v0 and Lovable. GPT-6.1 Terra Medium was selected in the web UI. Its Outputs contain a JSON report and two screenshots. Curl reached the public API and verified unauthenticated admin denial; Python HTTP requests received 403/1010. This tested public cloud capture, not authenticated ingestion. Keep the local collector as the current ingestion path until Work has a protected Arcex connection; never put admin/collector tokens into a chat prompt.
+The [actual ChatGPT Work cloud task](https://chatgpt.com/c/6ae98035-fd98-83ea-86ec-e4c9f4937b0a) uses GPT-6.1 Terra Medium and Work's own cloud computer/browser. Its native daily 09:00 America/Halifax schedule is paused while bounded upfront research batches run. A local Terra agent configures accounts in Brave; it does not substitute for cloud research. The initial two-candidate report was imported as unreviewed draft evidence. Later batch artifacts must be retrieved and reviewed; visible Work Outputs do not establish successful local downloads or ingestion.
+
+Work's private **Arcex Collector** connection uses OAuth at `/mcp` with scope `arcex:collect`; never paste admin/collector tokens into a task prompt. The Worker supports CIMD and dynamic client registration, browser-bound consent, PKCE, owner-only GitHub sign-in, one-hour access tokens, rotating refresh grants, and admin grant revocation. Exact GitHub callbacks are `/auth/github/callback` and `/auth/github/callback/mcp`. Wildcards are disabled.
+
+Collector tools can read private research, register small independent candidates with ownership evidence, save draft observations/funnels/paywalls/blueprints, upload unapproved captures and lease browser jobs. No tool publishes, changes permissions or manages billing. Major-platform fixtures (Cursor, Lovable, Bolt, v0, Replit) are archived and their sources disabled. Candidate team-size and ownership claims require review rather than treating discovery as qualification.
 
 For a manual cloud collection pass in PowerShell:
 
@@ -59,13 +63,13 @@ Inspector screenshots may still include personal information in rendered text. I
 
 ## OAuth activation
 
-Create dedicated GitHub and X applications. Store `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `X_CLIENT_ID`, and `X_CLIENT_SECRET` in the production Worker's secrets. Register exact `/auth/github/callback` and `/auth/x/callback` URLs matching the configured public API origin. The future frontend and API should share the same site, either through routing on `arcex.dev` or an `api.arcex.dev` subdomain; cookies intentionally do not permit unrelated sites. No DNS routing has been changed.
+The dedicated GitHub app and `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` Worker secrets are configured. Both exact callbacks above are registered. X still needs its dedicated app and `X_CLIENT_ID` / `X_CLIENT_SECRET`, with exact `/auth/x/callback` matching the API origin. The future frontend and API should share the same site, either through routing on `arcex.dev` or an `api.arcex.dev` subdomain; cookies intentionally do not permit unrelated sites. No DNS routing has been changed.
 
 The OAuth flow checks state against a short-lived HttpOnly cookie and a one-use DB record, uses PKCE, discards provider tokens, and stores opaque hashed sessions. Accounts are keyed by provider subject and are never linked automatically just because email strings match. GitHub stores only a verified primary email. X email is left null.
 
 ## Stripe activation
 
-Use a dedicated Stripe sandbox first, a restricted API key, one Insider product with an approved monthly price/currency, and a hosted customer portal. The brief proposes $12/month; no currency has been assumed or live price created.
+An isolated Arcex Stripe sandbox is configured with an active $12 USD/month **test fixture**, hosted portal (payment updates and end-of-period cancellation), and all 12 webhook events below. Nothing was copied from live and no live products or charges were created. The fixture does not decide launch currency. `/api/v1/admin/billing/readiness` reads provider configuration and reports nonsecret flags; full hosted Checkout and signed webhook delivery still require sandbox end-to-end verification.
 
 Configure `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID` and `STRIPE_WEBHOOK_SECRET` as Worker secrets. Subscribe the endpoint `/api/v1/billing/webhook` to:
 
@@ -78,16 +82,20 @@ Entitlements are derived server-side from the current subscription status, expec
 
 Before accepting real subscriptions, configure applicable sales-tax registrations and review Stripe Tax for the actual selling jurisdictions. Automatic tax is not enabled by this code.
 
-## R2 and MCP activation
+## Private storage and MCP
 
-R2 currently returns account error 10042: enable it in Cloudflare Dashboard first. Once enabled, create a private evidence bucket, add a `MEDIA` R2 binding to production config, regenerate types, and redeploy. Do not make the bucket public. All image reads go through the publication checks in the API.
+R2 must remain disabled: the user requires zero surprise charges, and R2 allowances/budget alerts are not a provider-enforced zero-spend cap. Use the existing Supabase **Free** project `xieyxgwdfczyorfkrmbe` (formerly Aftercode), now authorized for repurposing as Arcex. BOPPER is unrelated and must remain untouched. Do not upgrade the organization/project plan. [Supabase Free does not charge overages](https://supabase.com/docs/guides/platform/cost-control); service restrictions may apply at limits.
+
+Configure `SUPABASE_STORAGE_URL=https://xieyxgwdfczyorfkrmbe.supabase.co` and server-only `SUPABASE_STORAGE_KEY` in encrypted Worker secrets. Never expose the secret key to a client or chat. The admin-only `POST /api/v1/media/storage/setup` creates private bucket `arcex-evidence`, 1 MB file limit and PNG/JPEG/WebP allowlist, preserving other buckets and tables. It refuses an existing public bucket. `GET /api/v1/media/storage/status` reports readiness and application usage.
+
+Uploads atomically reserve D1 asset bytes before storage writes and stop at 50,000,000 total bytes; failed uploads release the reservation. There is no paid fallback or automatic plan upgrade. Unapproved files can only be fetched through authenticated admin `GET /api/v1/media/{id}/review`; public image access still requires approved asset/evidence and a published parent. The optional R2 adapter exists for isolated tests, not production activation. Supabase Storage is separate from the D1 relational database.
 
 For MCP, run `pnpm build:mcp`. Configure your MCP client to launch `node packages/mcp/dist/index.js` with `ARCEX_API_URL` and, for blueprint exports, `ARCEX_API_KEY` from an active Insider account. Public tools do not send the key. The package reads no dotenv files from the consumer's repository. A signed-in session can create/list/revoke keys; an API key cannot mint more keys or create Checkout/Portal sessions. Key revocation and entitlement expiry take effect on subsequent requests.
 
-`npm whoami` currently reports ENEEDAUTH. Verify npm login and `@arcex` namespace access, run `npm pack --dry-run` from the package, then publish only when that configuration is ready. The package contains no secrets or browser artifacts.
+The stdio package builds and passes an actual SDK handshake test. npm is signed out and `@arcex/mcp` is already occupied by another publisher, so the package is not published under that name. Run the local built entrypoint today; the HTTP collector connection does not depend on npm publication. The package contains no secrets or browser artifacts.
 
 ## Recovery and retired project
 
 The retired checkout and its local runtime files are stored outside this repository at `C:\Users\finla\Documents\Avern.ca\90_Archive\Retired_Projects\2026-11-03\Arcex-T3-Retired`. A verified Git bundle sits beside it as `Arcex-T3-Retired.bundle`. No new code imports or depends on it. The new Git history starts independently from the retired desktop product.
 
-For production D1 recovery, use Cloudflare's D1 Time Travel controls and validate the restored application path. A Worker rollback does not roll back D1 data. Retain protected credentials separately from Git. Account authentication and billing/R2 activation are separate from code deployment.
+For production D1 recovery, use Cloudflare's D1 Time Travel controls and validate the restored application path. A Worker rollback does not roll back D1 data. Retain protected credentials separately from Git. Account authentication, actual screenshot persistence, actual hosted payment delivery, and code deployment require separate verification.

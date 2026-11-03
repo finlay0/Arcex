@@ -4,11 +4,17 @@ import type { AppEnv } from "./types";
 import { now } from "./types";
 import { audit, fail, parse, sha256 } from "./lib";
 import { requireAdmin, requireCollector } from "./auth";
+import {
+  fileStore,
+  setupStorage,
+  storageClient,
+  EVIDENCE_BUCKET,
+  MEDIA_LIMIT_BYTES,
+} from "./file-store";
 
 export const media = new Hono<AppEnv>();
 media.post("/upload", requireCollector, async (c) => {
-  if (!c.env.MEDIA)
-    fail(503, "Evidence storage is not enabled; retain the capture locally");
+  const store = fileStore(c.env);
   const type = c.req.header("content-type");
   if (!type || !["image/png", "image/jpeg", "image/webp"].includes(type))
     fail(422, "Only PNG, JPEG and WebP captures are accepted");
@@ -35,25 +41,30 @@ media.post("/upload", requireCollector, async (c) => {
   if (!valid) fail(422, "Image content does not match the declared format");
   const assetId = crypto.randomUUID(),
     objectKey = "evidence/" + assetId;
-  await c.env.MEDIA.put(objectKey, bytes, {
-    httpMetadata: { contentType: type },
-  });
-  try {
-    await c.env.DB.prepare(
-      "INSERT INTO assets(id,evidence_id,object_key,content_type,size,sha256,created_at) VALUES (?,?,?,?,?,?,?)",
+  const reservation = await c.env.DB.prepare(
+    "INSERT INTO assets(id,evidence_id,object_key,content_type,size,sha256,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(sum(size),0) FROM assets)+?<=?",
+  )
+    .bind(
+      assetId,
+      evidenceId,
+      objectKey,
+      type,
+      bytes.byteLength,
+      await sha256(bytes),
+      now(),
+      bytes.byteLength,
+      MEDIA_LIMIT_BYTES,
     )
-      .bind(
-        assetId,
-        evidenceId,
-        objectKey,
-        type,
-        bytes.byteLength,
-        await sha256(bytes),
-        now(),
-      )
-      .run();
+    .run();
+  if (!reservation.meta.changes)
+    fail(
+      409,
+      "Evidence storage quota reached; no upgrade or paid fallback is enabled",
+    );
+  try {
+    await store.put(objectKey, bytes, type);
   } catch (error) {
-    await c.env.MEDIA.delete(objectKey);
+    await c.env.DB.prepare("DELETE FROM assets WHERE id=?").bind(assetId).run();
     throw error;
   }
   return c.json({ id: assetId, approved: false }, 201);
@@ -80,20 +91,58 @@ media.put("/:id/approval", requireAdmin, async (c) => {
   return c.json({ ok: true });
 });
 media.get("/:id", async (c) => {
-  if (!c.env.MEDIA) fail(503, "Evidence storage is not enabled");
   const row = await c.env.DB.prepare(
     "SELECT a.object_key,a.content_type FROM assets a JOIN evidence e ON e.id=a.evidence_id JOIN products p ON p.id=e.product_id WHERE a.id=? AND a.approved=1 AND e.status='approved' AND p.status='published'",
   )
     .bind(c.req.param("id"))
     .first<{ object_key: string; content_type: string }>();
   if (!row) fail(404, "Asset not found");
-  const object = await c.env.MEDIA.get(row.object_key);
-  if (!object) fail(404, "Asset not found");
-  return new Response(object.body, {
+  const store = fileStore(c.env);
+  const body = await store.get(row.object_key);
+  if (!body) fail(404, "Asset not found");
+  return new Response(body, {
     headers: {
       "content-type": row.content_type,
       "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
     },
+  });
+});
+
+media.get("/:id/review", requireAdmin, async (c) => {
+  const row = await c.env.DB.prepare(
+    "SELECT object_key,content_type FROM assets WHERE id=?",
+  )
+    .bind(c.req.param("id"))
+    .first<{ object_key: string; content_type: string }>();
+  if (!row) fail(404, "Asset not found");
+  const body = await fileStore(c.env).get(row.object_key);
+  if (!body) fail(404, "Asset not found");
+  return new Response(body, {
+    headers: {
+      "content-type": row.content_type,
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    },
+  });
+});
+
+media.post("/storage/setup", requireAdmin, async (c) =>
+  c.json(await setupStorage(c.env)),
+);
+media.get("/storage/status", requireAdmin, async (c) => {
+  const { data, error } = await storageClient(c.env).storage.getBucket(
+    EVIDENCE_BUCKET,
+  );
+  if (error) fail(502, "Evidence storage is not ready");
+  const used = await c.env.DB.prepare(
+    "SELECT COALESCE(sum(size),0) bytes,count(*) objects FROM assets",
+  ).first();
+  return c.json({
+    provider: "supabase",
+    bucket: data.name,
+    private: !data.public,
+    usage: used,
+    applicationLimitBytes: MEDIA_LIMIT_BYTES,
   });
 });

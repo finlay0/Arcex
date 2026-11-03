@@ -20,15 +20,17 @@ pnpm db:local
 pnpm dev
 ```
 
-The API runs on port 8791. In another terminal, run `pnpm smoke`, `pnpm seed`, then `pnpm collect 5`. Seed creates five **draft research candidates**, not completed teardowns. Collector errors return a nonzero exit status and remain visible in the database.
+The API runs on port 8791. In another terminal, run `pnpm smoke`. Import an explicitly reviewed research manifest with `pnpm seed MANIFEST.json`; there are no hardcoded platform seeds. `pnpm collect 5` processes due registered HTTP/RSS jobs. Collector errors return a nonzero exit status and remain visible in the database.
 
-`pnpm check` runs typechecking, 19 backend/MCP tests and both Worker/MCP builds. Tests use isolated, in-memory D1/R2; they do not contact live billing or OAuth providers.
+`pnpm check` runs typechecking, backend/storage/OAuth/MCP tests and both Worker/MCP builds. Tests use isolated in-memory storage and provider fixtures; they do not contact live billing or OAuth providers.
 
 ## Data and execution
 
-Cloudflare Workers hosts the API; D1 stores relational records and the durable collection queue. Workers Cron enqueues due sources daily. A collector leases jobs, records evidence drafts, and retries bounded failures. The initial daily Codex automation uses GPT-6.1 Terra at medium reasoning on Finlay's computer. A container or other hosted runner can later run the same collector protocol without changing data ownership or publication rules.
+Cloudflare Workers hosts the API; D1 stores relational records and the durable collection queue. Research runs in [ChatGPT Work](https://chatgpt.com/c/6ae98035-fd98-83ea-86ec-e4c9f4937b0a), using GPT-6.1 Terra Medium and its cloud browser/computer. Local Terra browser agents configure connections only. The upfront batch comes first; the native Work daily 09:00 America/Halifax schedule is paused. The superseded local Codex automation is also paused and production `COLLECTION_ENABLED=false` prevents automatic cron enqueueing.
 
-R2 is an optional binding for reviewed screenshots. It is not enabled in the current Cloudflare account. Inspector captures remain local until that service is enabled and the captures are reviewed.
+Private screenshots use the existing Supabase Free project (formerly Aftercode). Uploads require server credentials, a private `arcex-evidence` bucket, a 1 MB per-file bound and an atomic 50 MB application quota. At the quota uploads stop; there is no paid fallback. R2 is not activated: free allowances and budget alerts do not provide a hard zero-spend cap. Supabase Free may restrict service at its limits rather than charge overages. BOPPER is untouched.
+
+The owner-only OAuth collector endpoint is `/mcp`, with scope `arcex:collect`. It can register independent-product candidates, read collection status, attach private captures and save evidence/funnels/blueprints as drafts. It has no publish, billing or permission tools. This is separate from the public/Insider stdio MCP package.
 
 Public endpoints expose published records and approved evidence only. Free signed-in users can export blueprints, save products, submit builds and vote. An active Insider subscription enables MCP API keys, collections, a derived public badge and stream-queue priority. Stripe webhooks reconcile subscription state, reject invalid signatures, deduplicate deliveries, and place refunds/disputes/fraud warnings into an admin review hold.
 
@@ -47,9 +49,11 @@ The extractor defaults to **GPT-6.1 Terra, medium**. `--prepare-only` produces a
 
 ## Current activation limits
 
-- GitHub and X OAuth code is implemented; dedicated provider app registrations and secrets are still required. X email is not requested or assumed available.
-- Stripe Checkout, Portal, subscription reconciliation and risk handling are implemented and locally tested. A Stripe sandbox/price/webhook configuration is still required; the connected Stripe app currently needs reauthentication. No live charges or live products were created.
+- GitHub OAuth app and encrypted Worker secrets are configured, including exact regular and collector callbacks. X OAuth still requires a dedicated provider registration; X email is not requested or assumed available.
+- Stripe has a dedicated sandbox, a $12 USD/month test fixture, hosted Portal and the required 12 webhook events. The admin readiness endpoint verifies provider configuration without returning secrets. Full hosted payment/webhook delivery remains to be verified; no live charges or live products were created. Launch currency is not decided by the sandbox fixture.
 - `@arcex/mcp` builds and passes a real SDK handshake test. npm publication requires registry login and access to the namespace.
 - No customer-facing site, ten published deep teardowns, real benchmark games, or provider performance claims have been fabricated. Those require frontend work and observed content.
 
 Evidence records distinguish observations from proposed implementation. Distinct ad-observation days do not establish continuous ad activity, ad spend, revenue or conversion. A retracted observation unpublishes its product and blueprint exports.
+
+Cloud research reports remain provisional until source and capture review. The former large-platform fixtures are archived and their sources disabled; they are not the core small-independent-product cohort. `pnpm import:work REPORT.json CHATGPT_TASK_URL` imports a downloaded Work report as private draft evidence and explicitly records that screenshot bytes still need uploading.

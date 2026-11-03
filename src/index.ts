@@ -11,6 +11,7 @@ import { billing, adminBilling } from "./billing";
 import { collector, jobAdmin, enqueueDue } from "./jobs";
 import { media } from "./media";
 import { openapi } from "./openapi";
+import { researchAdmin } from "./research";
 
 export const app = new Hono<AppEnv>();
 app.use("*", async (c, next) => {
@@ -62,6 +63,7 @@ app.route("/api/v1/admin", adminCatalog);
 app.route("/api/v1/admin", adminCommunity);
 app.route("/api/v1/admin", adminBilling);
 app.route("/api/v1/admin", jobAdmin);
+app.route("/api/v1/admin", researchAdmin);
 app.route("/api/v1/collector/jobs", collector);
 app.route("/api/v1/media", media);
 app.route("/api/v1/billing", billing);

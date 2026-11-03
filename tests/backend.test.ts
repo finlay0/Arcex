@@ -18,6 +18,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       modules: true,
       script: 'export default {fetch(){return new Response("ok")}}',
       d1Databases: ["DB"],
+      kvNamespaces: ["OAUTH_KV"],
       r2Buckets: ["MEDIA"],
       compatibilityDate: "2026-11-03",
     }),
@@ -34,12 +35,14 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         .filter(Boolean))
         await db.prepare(statement).run();
     }
-    const bindings = await mf.getBindings<Pick<Bindings, "DB" | "MEDIA">>();
+    const bindings =
+      await mf.getBindings<Pick<Bindings, "DB" | "MEDIA" | "OAUTH_KV">>();
     const env: Bindings = {
       ...bindings,
       ENVIRONMENT: "development",
       APP_ORIGIN: "http://localhost:8791",
       API_ORIGIN: "http://localhost:8791",
+      MCP_OWNER_GITHUB_ID: "207296386",
       ENABLE_DEV_AUTH: "true",
       COLLECTION_ENABLED: "true",
       ADMIN_TOKEN: "admin-test-only",
@@ -873,6 +876,21 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           404,
         );
         assert.equal(
+          (await req("GET", "/api/v1/media/" + asset.id + "/review")).status,
+          401,
+        );
+        assert.equal(
+          (
+            await req(
+              "GET",
+              "/api/v1/media/" + asset.id + "/review",
+              undefined,
+              admin,
+            )
+          ).status,
+          200,
+        );
+        assert.equal(
           (
             await req(
               "PUT",
@@ -882,6 +900,60 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
             )
           ).status,
           409,
+        );
+        await db
+          .prepare("UPDATE assets SET size=50000000 WHERE id=?")
+          .bind(asset.id)
+          .run();
+        const denied = await app.request(
+          "http://localhost:8791/api/v1/media/upload",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + collector,
+              "content-type": "image/png",
+              "x-evidence-id": evidenceId,
+            },
+            body: png,
+          },
+          env,
+        );
+        assert.equal(denied.status, 409);
+        assert.match(await denied.text(), /quota reached/);
+        await db
+          .prepare("UPDATE assets SET size=? WHERE id=?")
+          .bind(png.byteLength, asset.id)
+          .run();
+        const broken = {
+          ...env,
+          MEDIA: {
+            put: async () => {
+              throw new Error("fixture storage failure");
+            },
+          } as unknown as R2Bucket,
+        };
+        const before = await db
+          .prepare("SELECT count(*) n FROM assets")
+          .first<{ n: number }>();
+        const failed = await app.request(
+          "http://localhost:8791/api/v1/media/upload",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + collector,
+              "content-type": "image/png",
+              "x-evidence-id": evidenceId,
+            },
+            body: png,
+          },
+          broken,
+        );
+        assert.equal(failed.status, 500);
+        assert.equal(
+          (await db
+            .prepare("SELECT count(*) n FROM assets")
+            .first<{ n: number }>())!.n,
+          before!.n,
         );
       },
     );
