@@ -2,6 +2,7 @@ import backend, { app } from "./index";
 import { makeOAuthProvider, oauthRoutes } from "./mcp-oauth";
 import type { Bindings } from "./types";
 import { rateLimit } from "./lib";
+import { PUBLIC_MCP_PATH, publicMcpFetch } from "./public-mcp";
 
 const defaultHandler: ExportedHandler<Bindings> = {
   fetch(request, env, ctx) {
@@ -18,6 +19,7 @@ const defaultHandler: ExportedHandler<Bindings> = {
 export default {
   async fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;
+    if (path === PUBLIC_MCP_PATH) return publicMcpFetch(request, env, ctx);
     if (path === "/oauth/register" || path === "/authorize") {
       try {
         await rateLimit(

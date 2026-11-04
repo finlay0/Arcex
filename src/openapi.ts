@@ -89,7 +89,7 @@ export const openapi = {
     title: "Arcex API",
     version: "0.1.0",
     description:
-      "Backend contract. Public reads return published records only. Imports are drafts. Insider keys require an active subscription. Session mutations require Origin matching APP_ORIGIN.",
+      "Backend contract. Public reads return published records only. Imports are drafts. API keys are free and can only export blueprints unless the owner has an active Insider subscription. Session mutations require Origin matching APP_ORIGIN.",
   },
   components: {
     schemas: Object.fromEntries(
@@ -267,6 +267,11 @@ export const openapi = {
       delete: operation("Revoke collector authorization", "admin"),
     },
     "/health": { get: operation("Database readiness") },
+    "/public/mcp": {
+      post: operation(
+        "Public hosted MCP (Streamable HTTP). No sign-in for search; blueprints use an API key",
+      ),
+    },
     "/auth/{provider}/start": { get: operation("Start GitHub or X OAuth") },
     "/auth/{provider}/callback": { get: operation("OAuth callback") },
     "/auth/logout": { post: operation("Revoke current session", "user") },
@@ -333,7 +338,7 @@ export const openapi = {
     },
     "/api/v1/me/api-keys": {
       get: operation("List keys without secret values; session only", "user"),
-      post: operation("Create Insider MCP key; secret returned once", "user"),
+      post: operation("Create MCP key; secret returned once", "user"),
     },
     "/api/v1/me/api-keys/{id}": {
       delete: operation("Revoke own key; session only", "user"),

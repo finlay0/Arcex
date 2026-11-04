@@ -266,7 +266,6 @@ community.post(
   "/me/api-keys",
   requireUser,
   requireSession,
-  requirePro,
   async (c) => {
     const { name } = await parse(
       c,

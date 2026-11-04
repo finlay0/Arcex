@@ -514,7 +514,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       },
     );
     await t.test(
-      "saves work for free users; collections and keys require Insider",
+      "saves work for free users; free keys only export; collections require Insider",
       async () => {
         await json("PUT", `/api/v1/me/saves/${productId}`, {}, cookie);
         await json("PUT", `/api/v1/me/saves/${productId}`, {}, cookie);
@@ -540,11 +540,35 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           ).status,
           403,
         );
-        assert.equal(
-          (await req("POST", "/api/v1/me/api-keys", { name: "IDE" }, cookie))
-            .status,
-          403,
+        const key = await json<{ id: string; token: string }>(
+          "POST",
+          "/api/v1/me/api-keys",
+          { name: "IDE" },
+          cookie,
+          201,
         );
+        await json(
+          "GET",
+          `/api/v1/blueprints/${blueprintId}/export`,
+          undefined,
+          key.token,
+        );
+        for (const [method, path] of [
+          ["PUT", `/api/v1/me/saves/${productId}`],
+          ["GET", "/api/v1/me/saves"],
+          ["POST", "/api/v1/me/collections"],
+        ] as const)
+          assert.equal(
+            (
+              await req(
+                method,
+                path,
+                method === "GET" ? undefined : { name: "Scope" },
+                key.token,
+              )
+            ).status,
+            403,
+          );
         await db
           .prepare(
             "INSERT INTO subscriptions(user_id,customer_id,subscription_id,status,price_id,period_end,updated_at) VALUES (?,?,?,?,?,?,?)",
@@ -585,19 +609,6 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           ).status,
           404,
         );
-        const key = await json<{ id: string; token: string }>(
-          "POST",
-          "/api/v1/me/api-keys",
-          { name: "IDE" },
-          cookie,
-          201,
-        );
-        await json(
-          "GET",
-          `/api/v1/blueprints/${blueprintId}/export`,
-          undefined,
-          key.token,
-        );
         const stored = await db
           .prepare("SELECT token_hash FROM api_keys WHERE id=?")
           .bind(key.id)
@@ -620,6 +631,21 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
             "UPDATE subscriptions SET status='canceled' WHERE user_id='dev:owner'",
           )
           .run();
+        await json(
+          "GET",
+          `/api/v1/blueprints/${blueprintId}/export`,
+          undefined,
+          key.token,
+        );
+        assert.equal(
+          (await req("GET", "/api/v1/me/saves", undefined, key.token)).status,
+          403,
+        );
+        const exportBucket = `export:dev:owner:${Math.floor(Date.now() / 86_400_000)}`;
+        await db
+          .prepare("UPDATE rate_limits SET hits=10 WHERE key=?")
+          .bind(exportBucket)
+          .run();
         assert.equal(
           (
             await req(
@@ -629,8 +655,12 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
               key.token,
             )
           ).status,
-          403,
+          429,
         );
+        await db
+          .prepare("DELETE FROM rate_limits WHERE key=?")
+          .bind(exportBucket)
+          .run();
         await db
           .prepare(
             "UPDATE subscriptions SET status='active' WHERE user_id='dev:owner'",

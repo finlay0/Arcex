@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "./types";
 import { now } from "./types";
-import { audit, decode, fail, page, parse } from "./lib";
-import { requireAdmin, requireUser } from "./auth";
+import { audit, decode, fail, page, parse, rateLimit } from "./lib";
+import { requireAdmin, requireBlueprintReader, requireUser } from "./auth";
 import {
   productInput,
   evidenceInput,
@@ -169,7 +169,10 @@ catalog.get("/vault/:slug", async (c) => {
     },
   });
 });
-catalog.get("/blueprints/:id/export", requireUser, async (c) => {
+catalog.get("/blueprints/:id/export", requireBlueprintReader, async (c) => {
+  // Free accounts get 10 exports a day. Insider has no daily cap.
+  if (!c.get("actor").pro)
+    await rateLimit(c.env.DB, "export:" + c.get("actor").userId, 10, 86400);
   const row = await c.env.DB.prepare(
     "SELECT b.* FROM agent_blueprints b JOIN products p ON p.id=b.product_id WHERE b.id=? AND b.status='published' AND p.status='published'",
   )
