@@ -1,4 +1,5 @@
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
+import { HTTPException } from "hono/http-exception";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import type { AppEnv, Bindings } from "./types";
@@ -49,50 +50,76 @@ export const requireCollector: MiddlewareHandler<AppEnv> = async (c, next) => {
     fail(401, "Collector authentication required");
   await next();
 };
+async function resolveActor(
+  c: Context<AppEnv>,
+  token: string,
+  authorization: string | undefined,
+  freeKeys: boolean,
+) {
+  const hash = await sha256(token);
+  if (authorization) {
+    const key = await c.env.DB.prepare(
+      "SELECT user_id FROM api_keys WHERE token_hash=? AND revoked_at IS NULL",
+    )
+      .bind(hash)
+      .first<{ user_id: string }>();
+    if (!key) fail(401, "Invalid API key");
+    const pro = await isPro(c.env.DB, key.user_id);
+    if (!pro && !freeKeys)
+      fail(403, "This API key can only read app details and export blueprints");
+    c.set("actor", { userId: key.user_id, via: "api_key", pro });
+  } else {
+    const session = await c.env.DB.prepare(
+      "SELECT user_id FROM sessions WHERE token_hash=? AND expires_at>?",
+    )
+      .bind(hash, now())
+      .first<{ user_id: string }>();
+    if (!session) fail(401, "Session expired");
+    // SameSite cookies are supplemented with an Origin check on mutations.
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
+      c.req.header("origin") !== c.env.APP_ORIGIN
+    )
+      fail(403, "Invalid request origin");
+    c.set("actor", {
+      userId: session.user_id,
+      via: "session",
+      pro: await isPro(c.env.DB, session.user_id),
+    });
+  }
+  await rateLimit(c.env.DB, "user:" + c.get("actor").userId, 120);
+}
+const bearerToken = (authorization?: string) =>
+  authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
 const authenticate =
   (freeKeys: boolean): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
     const authorization = c.req.header("authorization");
-    const token = authorization?.startsWith("Bearer ")
-      ? authorization.slice(7)
-      : getCookie(c, "arcex_session");
+    const token = bearerToken(authorization) ?? getCookie(c, "arcex_session");
     if (!token) fail(401, "Sign in to continue");
-    const hash = await sha256(token);
-    if (authorization) {
-      const key = await c.env.DB.prepare(
-        "SELECT user_id FROM api_keys WHERE token_hash=? AND revoked_at IS NULL",
-      )
-        .bind(hash)
-        .first<{ user_id: string }>();
-      if (!key) fail(401, "Invalid API key");
-      const pro = await isPro(c.env.DB, key.user_id);
-      if (!pro && !freeKeys)
-        fail(403, "This API key can only export blueprints");
-      c.set("actor", { userId: key.user_id, via: "api_key", pro });
-    } else {
-      const session = await c.env.DB.prepare(
-        "SELECT user_id FROM sessions WHERE token_hash=? AND expires_at>?",
-      )
-        .bind(hash, now())
-        .first<{ user_id: string }>();
-      if (!session) fail(401, "Session expired");
-      // SameSite cookies are supplemented with an Origin check on mutations.
-      if (
-        !["GET", "HEAD", "OPTIONS"].includes(c.req.method) &&
-        c.req.header("origin") !== c.env.APP_ORIGIN
-      )
-        fail(403, "Invalid request origin");
-      c.set("actor", {
-        userId: session.user_id,
-        via: "session",
-        pro: await isPro(c.env.DB, session.user_id),
-      });
-    }
-    await rateLimit(c.env.DB, "user:" + c.get("actor").userId, 120);
+    await resolveActor(c, token, authorization, freeKeys);
     await next();
   };
+/** Identifies the viewer when possible. An expired session just reads as signed out. */
+export const optionalUser: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const authorization = c.req.header("authorization");
+  const bearer = bearerToken(authorization);
+  const cookie = getCookie(c, "arcex_session");
+  if (authorization) {
+    if (!bearer) fail(401, "Invalid API key");
+    await resolveActor(c, bearer, authorization, true);
+  } else if (cookie) {
+    try {
+      await resolveActor(c, cookie, undefined, true);
+    } catch (error) {
+      if (!(error instanceof HTTPException) || error.status !== 401)
+        throw error;
+    }
+  }
+  await next();
+};
 export const requireUser = authenticate(false);
-// Blueprint export is the only route a free API key may reach, within its daily cap.
+// Blueprint export is the only protected route a free API key may reach, within its daily cap.
 export const requireBlueprintReader = authenticate(true);
 export const requireSession: MiddlewareHandler<AppEnv> = async (c, next) => {
   if (c.get("actor").via !== "session")

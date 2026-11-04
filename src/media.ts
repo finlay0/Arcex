@@ -4,6 +4,7 @@ import type { AppEnv } from "./types";
 import { now } from "./types";
 import { audit, fail, parse, sha256 } from "./lib";
 import { requireAdmin, requireCollector } from "./auth";
+import { mediaLinkValid } from "./insights";
 import {
   fileStore,
   setupStorage,
@@ -85,12 +86,28 @@ media.put("/:id/approval", requireAdmin, async (c) => {
   await c.env.DB.prepare("UPDATE assets SET approved=? WHERE id=?")
     .bind(approved ? 1 : 0, c.req.param("id"))
     .run();
+  if (!approved)
+    await c.env.DB.prepare(
+      "UPDATE products SET coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL WHERE id IN (SELECT product_id FROM funnel_steps WHERE asset_id=?)",
+    )
+      .bind(c.req.param("id"))
+      .run();
   await audit(c.env.DB, "admin", "asset.approval", c.req.param("id"), {
     approved,
   });
   return c.json({ ok: true });
 });
 media.get("/:id", async (c) => {
+  // Full screenshots are only reachable through a short-lived link from the app's details.
+  if (
+    !(await mediaLinkValid(
+      c.env,
+      c.req.param("id"),
+      c.req.query("expires"),
+      c.req.query("signature"),
+    ))
+  )
+    fail(403, "This image link is invalid or has expired");
   const row = await c.env.DB.prepare(
     "SELECT a.object_key,a.content_type FROM assets a JOIN evidence e ON e.id=a.evidence_id JOIN products p ON p.id=e.product_id WHERE a.id=? AND a.approved=1 AND e.status='approved' AND p.status='published'",
   )

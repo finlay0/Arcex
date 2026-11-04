@@ -11,5 +11,6 @@ X_CLIENT_SECRET=
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PRICE_ID=
+MEDIA_SIGNING_SECRET=
 # Development auth additionally requires ENABLE_DEV_AUTH=true and localhost.
 # Production requires APP_ORIGIN=https://... and ENVIRONMENT=production.

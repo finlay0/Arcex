@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runInit } from "../packages/mcp/src/init";
 import { createMcpServer } from "../packages/mcp/src/server";
 import { parseModelResponse } from "../src/extraction";
 
@@ -55,6 +65,50 @@ test("MCP SDK handshake, tools and entitlement errors", async () => {
     await new Promise<void>((r, e) =>
       http.close((err) => (err ? e(err) : r())),
     );
+  }
+});
+test("arcex init merges client config without secrets or overwriting", () => {
+  const cwd = mkdtempSync(join(tmpdir(), "arcex-init-"));
+  const options = { cwd, platform: "linux", log: () => {} };
+  try {
+    writeFileSync(
+      join(cwd, ".mcp.json"),
+      JSON.stringify({ mcpServers: { other: { command: "other" } } }),
+    );
+    mkdirSync(join(cwd, ".cursor"));
+    runInit([], options);
+    const claude = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8"));
+    assert.deepEqual(claude.mcpServers.other, { command: "other" });
+    assert.deepEqual(claude.mcpServers.arcex.args, ["-y", "arcex"]);
+    assert.equal(
+      claude.mcpServers.arcex.env.ARCEX_API_KEY,
+      "${ARCEX_API_KEY:-}",
+    );
+    const cursor = JSON.parse(
+      readFileSync(join(cwd, ".cursor", "mcp.json"), "utf8"),
+    );
+    assert.equal(
+      cursor.mcpServers.arcex.env.ARCEX_API_KEY,
+      "${env:ARCEX_API_KEY}",
+    );
+
+    const customised = { mcpServers: { arcex: { command: "custom" } } };
+    writeFileSync(join(cwd, ".mcp.json"), JSON.stringify(customised));
+    runInit(["--client", "claude"], options);
+    assert.deepEqual(
+      JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8")),
+      customised,
+    );
+
+    writeFileSync(join(cwd, ".mcp.json"), "{ not json");
+    assert.throws(
+      () => runInit(["--client", "claude"], options),
+      /left unchanged/,
+    );
+    assert.equal(readFileSync(join(cwd, ".mcp.json"), "utf8"), "{ not json");
+    assert.throws(() => runInit(["--client", "bad"], options), /Usage/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
   }
 });
 test("extractor rejects incomplete, malformed and refused model responses", () => {

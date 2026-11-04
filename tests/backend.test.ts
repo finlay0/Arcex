@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import Stripe from "stripe";
+import { signedMediaUrl } from "../src/insights";
 import { app } from "../src/index";
 import { processStripeEvent } from "../src/billing";
 import { sha256 } from "../src/lib";
@@ -50,6 +51,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       STRIPE_SECRET_KEY: "rk_test_fixture",
       STRIPE_WEBHOOK_SECRET: "whsec_fixture",
       STRIPE_PRICE_ID: "price_insider",
+      MEDIA_SIGNING_SECRET: "media-test-only",
     };
     const req = (
       method: string,
@@ -352,7 +354,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       },
     );
     await t.test(
-      "published teardowns expose approved facts and no raw payload",
+      "published signals hide incomplete app captures and raw payload",
       async () => {
         await json(
           "PUT",
@@ -364,11 +366,10 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           evidence: Record<string, unknown>[];
           adObservations: { observed_days: number };
           funnel: unknown[];
-        }>("GET", "/api/v1/vault/fixture-app");
-        assert.equal(vault.evidence.length, 1);
-        assert.equal(vault.evidence[0].payload, undefined);
+        }>("GET", "/api/v1/vault/fixture-app", undefined, cookie);
+        assert.equal(vault.evidence.length, 0);
         assert.equal(vault.adObservations.observed_days, 1);
-        assert.equal(vault.funnel.length, 1);
+        assert.equal(vault.funnel.length, 0);
         const radar = await json<{ items: unknown[] }>(
           "GET",
           "/api/v1/radar?q=Fixture&category=coding_dev",
@@ -902,6 +903,11 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         const asset = (await uploaded.json()) as { id: string };
         assert.equal(
           (await req("GET", "/api/v1/media/" + asset.id)).status,
+          403,
+        );
+        // A valid link still can't reach an image that hasn't been approved.
+        assert.equal(
+          (await req("GET", (await signedMediaUrl(env, asset.id))!)).status,
           404,
         );
         assert.equal(

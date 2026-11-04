@@ -10,6 +10,7 @@ if (!existsSync(path))
       {
         ADMIN_TOKEN: randomBytes(32).toString("hex"),
         COLLECTOR_TOKEN: randomBytes(32).toString("hex"),
+        MEDIA_SIGNING_SECRET: randomBytes(32).toString("hex"),
       },
       null,
       2,

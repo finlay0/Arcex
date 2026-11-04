@@ -1,0 +1,11 @@
+# Product insights backend
+
+Coverage defaults to `signals`. An owner marks `full` through `PUT /api/v1/admin/products/:id/coverage` with `level` and review `notes`. This requires approved capture evidence and an approved image from an app stage beyond its landing page. This is an editorial scope decision, not an automated claim of complete authenticated coverage. Replacing the funnel, changing paywall mechanics, retracting evidence or withdrawing an image resets that review. Partial captures and their annotations remain unavailable from public Signals Only responses.
+
+Full Screens allows ten distinct free apps per UTC day; reopening costs nothing. Insider and the designated open sample bypass that cap. Unsigned media is denied. An authenticated viewer who already opened an app can POST `{ "position": 0 }` to `/api/v1/vault/:slug/share` for a seven-day signed link to that one screen. Changing a position, step ID, product or media ID invalidates its signature. Replacing captures invalidates old screen links. The frontend should use this returned URL rather than constructing bare `?step=` links.
+
+Metrics are cached in resumable pages of 25 every ten minutes. At 10,000 published products a cache cycle takes under three days. This is separate from source collection, which remains paused. Activity history describes observed advertising and creator activity, not company growth. Missing collection remains null. Revenue ranges are manually reviewed, versioned source-backed ranges; no computed revenue model is implemented.
+
+Watch lists support three free products and paginated unlimited Insider products. Changes require approved evidence and explicit publication. Alert preferences are stored, but API responses explicitly report `deliveryEnabled: false` and `deliveryStatus: not_configured` until a delivery service is integrated. Saving a preference does not send email. Users can disable the preference after losing Insider access.
+
+The Google backend sign-in flow has passed a real consent/session test. Frontend sign-in also needs an API/auth origin on the same site as arcex.dev. The current workers.dev callback remains valid while api.arcex.dev and its provider redirects are being prepared.

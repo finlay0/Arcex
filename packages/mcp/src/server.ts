@@ -20,7 +20,7 @@ export function createMcpServer(options: {
   const result = (value: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   });
-  const call = async (path: string, paid = false) => {
+  const call = async (path: string, paid = false, identified = paid) => {
     if (paid && !token)
       return {
         isError: true,
@@ -31,12 +31,17 @@ export function createMcpServer(options: {
       };
     try {
       const response = await send(base.origin + path, {
-        headers: paid && token ? { authorization: "Bearer " + token } : {},
+        headers:
+          identified && token ? { authorization: "Bearer " + token } : {},
         redirect: "error",
         signal: AbortSignal.timeout(30000),
       });
       if (paid && response.status === 401)
         throw new Error("That Arcex API key isn't valid.");
+      if (!paid && identified && response.status === 429)
+        throw new Error(
+          "You've opened today's 10 free apps. Reopening one is free, and Insider is unlimited.",
+        );
       if (paid && response.status === 429)
         throw new Error(
           "You've used today's 10 free blueprint pulls. Insider is unlimited.",
@@ -76,7 +81,7 @@ export function createMcpServer(options: {
     "search_products",
     {
       description:
-        "Search published Arcex Radar products. Observations are not claims of revenue.",
+        "Search published Arcex Radar products. Observations are not claims of revenue or business growth.",
       inputSchema: {
         query: z.string().max(120).optional(),
         category: z
@@ -114,7 +119,7 @@ export function createMcpServer(options: {
     "get_teardown",
     {
       description:
-        "Get a published funnel, approved acquisition evidence and paywall mechanics.",
+        "Get a published app's funnel, approved acquisition evidence and paywall mechanics. Without an Arcex API key this returns a preview of apps with captured screens. Opening one with a free key uses one of 10 a day.",
       inputSchema: {
         slug: z
           .string()
@@ -122,7 +127,8 @@ export function createMcpServer(options: {
           .max(100),
       },
     },
-    async ({ slug }) => call("/api/v1/vault/" + encodeURIComponent(slug)),
+    async ({ slug }) =>
+      call("/api/v1/vault/" + encodeURIComponent(slug), false, true),
   );
   server.registerTool(
     "get_blueprint",

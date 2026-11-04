@@ -267,6 +267,66 @@ export const openapi = {
       delete: operation("Revoke collector authorization", "admin"),
     },
     "/health": { get: operation("Database readiness") },
+    "/api/v1/changes": {
+      get: operation("Published observed changes across products"),
+    },
+    "/api/v1/me/usage": {
+      get: operation("Today's app usage and limit; session only", "user"),
+    },
+    "/api/v1/me/watches": {
+      get: operation("Tracked products and limit; session only", "user"),
+    },
+    "/api/v1/me/watches/{productId}": {
+      put: operation(
+        "Track a product; free accounts get 3; session only",
+        "user",
+      ),
+      delete: operation("Stop tracking a product; session only", "user"),
+    },
+    "/api/v1/me/watches/changes": {
+      get: operation("Changes for tracked products; session only", "user"),
+    },
+    "/api/v1/me/products": {
+      get: operation("Your own products; session only", "user"),
+      post: operation("Add your own product; session only", "user"),
+    },
+    "/api/v1/me/products/{id}": {
+      delete: operation("Remove your own product; session only", "user"),
+    },
+    "/api/v1/me/alerts": {
+      get: operation("Alert preference; session only", "user"),
+      put: operation("Set alert preference; Insider and session only", "user"),
+    },
+    "/api/v1/me/requests/{productId}": {
+      put: operation("Request a full breakdown; session only", "user"),
+    },
+    "/api/v1/admin/metrics/refresh": {
+      post: operation("Refresh the next page of table metrics", "admin"),
+    },
+    "/api/v1/admin/products/{id}/open-sample": {
+      put: operation("Mark the app that opens without sign-in", "admin"),
+    },
+    "/api/v1/admin/products/{id}/revenue": {
+      put: operation(
+        "Save a sourced, manual revenue range as a draft",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/products/{id}/revenue/status": {
+      put: operation("Publish or unpublish a manual revenue range", "admin"),
+    },
+    "/api/v1/admin/products/{id}/revenue/history": {
+      get: operation("Revenue range history", "admin"),
+    },
+    "/api/v1/admin/products/{id}/changes": {
+      post: operation("Save an observed change as a draft", "admin"),
+    },
+    "/api/v1/admin/changes/{id}/status": {
+      put: operation("Publish or unpublish a change", "admin"),
+    },
+    "/api/v1/admin/breakdown-requests": {
+      get: operation("Most-requested full breakdowns, Insider first", "admin"),
+    },
     "/public/mcp": {
       post: operation(
         "Public hosted MCP (Streamable HTTP). No sign-in for search; blueprints use an API key",
@@ -275,7 +335,9 @@ export const openapi = {
     "/auth/providers": {
       get: operation("Available sign-in providers and configuration readiness"),
     },
-    "/auth/{provider}/start": { get: operation("Start GitHub or X OAuth") },
+    "/auth/{provider}/start": {
+      get: operation("Start Google, GitHub or X OAuth"),
+    },
     "/auth/{provider}/callback": { get: operation("OAuth callback") },
     "/auth/logout": { post: operation("Revoke current session", "user") },
     "/api/v1/radar": {
@@ -284,7 +346,15 @@ export const openapi = {
       ),
     },
     "/api/v1/vault/{slug}": {
-      get: operation("Product, approved evidence, funnel and paywall"),
+      get: operation(
+        "Public Signals Only details; reviewed Full Screens requires sign-in and ten distinct free apps/day. Bare step numbers never grant screen access; signed shared links expose only their one step.",
+      ),
+    },
+    "/api/v1/vault/{slug}/share": {
+      post: operation(
+        "Create a seven-day link to one approved screen; JSON position. Open the app first, or use Insider access.",
+        "user",
+      ),
     },
     "/api/v1/blueprints/{id}/export": {
       get: operation(
@@ -355,6 +425,12 @@ export const openapi = {
     },
     "/api/v1/admin/products/{id}/status": {
       put: operation("Publish, archive or return to draft", "admin"),
+    },
+    "/api/v1/admin/products/{id}/coverage": {
+      put: operation(
+        "Owner review: JSON level signals/full and notes (20-2000 chars). Full Screens requires an approved app capture beyond the landing page. Capture changes reset coverage.",
+        "admin",
+      ),
     },
     "/api/v1/admin/products/{id}/signals": {
       post: operation(

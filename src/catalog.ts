@@ -1,9 +1,24 @@
 import { Hono } from "hono";
 import { z } from "zod";
-import type { AppEnv } from "./types";
+import type { Actor, AppEnv } from "./types";
 import { now } from "./types";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
-import { requireAdmin, requireBlueprintReader, requireUser } from "./auth";
+import {
+  optionalUser,
+  requireAdmin,
+  requireBlueprintReader,
+  requireUser,
+} from "./auth";
+import {
+  appUsage,
+  DAILY_APP_LIMIT,
+  PUBLISHED_REVENUE_RANGE,
+  revenueRangeMeaning,
+  signedMediaUrl,
+  signedLinkParameters,
+  signedLinkValid,
+  unlockApp,
+} from "./insights";
 import {
   productInput,
   evidenceInput,
@@ -80,6 +95,14 @@ export async function insertEvidence(
   return row!;
 }
 export const catalog = new Hono<AppEnv>();
+const RADAR_SORT: Record<string, string> = {
+  activity: "m.activity_change_4w",
+  revenue: "r.high_usd",
+  ads: "m.active_ads",
+  sponsors: "m.sponsors",
+  first: "m.first_seen",
+  seen: "m.last_seen",
+};
 catalog.get("/radar", async (c) => {
   const { limit, offset } = page(c);
   const clauses = ["p.status='published'"];
@@ -112,61 +135,305 @@ catalog.get("/radar", async (c) => {
     const term = "%" + q.replace(/[\\%_]/g, "\\$&") + "%";
     values.push(term, term);
   }
-  const result = await c.env.DB.prepare(
-    `SELECT p.*, (SELECT count(*) FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.product_id=p.id AND e.status='approved') AS observations FROM products p WHERE ${clauses.join(" AND ")} ORDER BY observations DESC,p.updated_at DESC,p.id LIMIT ? OFFSET ?`,
-  )
-    .bind(...values, limit, offset)
-    .all();
-  return c.json({ items: result.results, limit, offset });
-});
-catalog.get("/vault/:slug", async (c) => {
-  const product = await c.env.DB.prepare(
-    "SELECT * FROM products WHERE slug=? AND status='published'",
-  )
-    .bind(c.req.param("slug"))
-    .first<{ id: string }>();
-  if (!product) fail(404, "Product not found");
-  const results = await c.env.DB.batch<Record<string, unknown>>([
+  const coverage = c.req.query("coverage");
+  if (coverage) {
+    const parsed = z.enum(["full", "signals"]).parse(coverage);
+    clauses.push("p.coverage_level=?");
+    values.push(parsed);
+  }
+  if (c.req.query("firstSeenDays") !== undefined) {
+    const days = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3650)
+      .parse(c.req.query("firstSeenDays"));
+    clauses.push("m.first_seen>=?");
+    values.push(new Date(Date.now() - days * 86_400_000).toISOString());
+  }
+  if (c.req.query("changedDays") !== undefined) {
+    const days = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .parse(c.req.query("changedDays"));
+    clauses.push(
+      "EXISTS (SELECT 1 FROM product_changes pc JOIN evidence ce ON ce.id=pc.evidence_id WHERE pc.product_id=p.id AND pc.status='published' AND ce.status='approved' AND pc.observed_at>=?)",
+    );
+    values.push(new Date(Date.now() - days * 86_400_000).toISOString());
+  }
+  const sort = c.req.query("sort");
+  const sortColumn = sort ? RADAR_SORT[sort] : undefined;
+  if (sort && !sortColumn) fail(400, "Invalid sort");
+  const direction = z
+    .enum(["asc", "desc"])
+    .default("desc")
+    .parse(c.req.query("dir"));
+  const order = sortColumn
+    ? `${sortColumn} IS NULL,${sortColumn} ${direction},p.id`
+    : "COALESCE(m.observations,0) DESC,p.updated_at DESC,p.id";
+  const from = `FROM products p
+    LEFT JOIN product_metrics m ON m.product_id=p.id
+    LEFT JOIN revenue_ranges r ON r.product_id=p.id AND ${PUBLISHED_REVENUE_RANGE}
+    WHERE ${clauses.join(" AND ")}`;
+  const [total, result] = await c.env.DB.batch<Record<string, unknown>>([
+    c.env.DB.prepare(`SELECT count(*) total ${from}`).bind(...values),
     c.env.DB.prepare(
-      "SELECT s.* FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.product_id=? AND e.status='approved' ORDER BY s.observed_at DESC LIMIT 100",
-    ).bind(product.id),
-    c.env.DB.prepare(
-      "SELECT f.* FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id WHERE f.product_id=? AND e.status='approved' ORDER BY position",
-    ).bind(product.id),
-    c.env.DB.prepare(
-      "SELECT p.* FROM paywall_mechanics p JOIN evidence e ON e.id=p.evidence_id WHERE p.product_id=? AND e.status='approved'",
-    ).bind(product.id),
-    c.env.DB.prepare(
-      "SELECT id,version,title,created_at FROM agent_blueprints WHERE product_id=? AND status='published' ORDER BY version DESC",
-    ).bind(product.id),
-    c.env.DB.prepare(
-      "SELECT id,source_url,observed_at,kind,summary FROM evidence WHERE product_id=? AND status='approved' ORDER BY observed_at DESC LIMIT 100",
-    ).bind(product.id),
-    c.env.DB.prepare(
-      "SELECT count(DISTINCT substr(s.observed_at,1,10)) observed_days,min(s.observed_at) first_observed,max(s.observed_at) last_observed FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.product_id=? AND s.kind='ad_observed' AND e.status='approved'",
-    ).bind(product.id),
+      `SELECT p.*,
+        COALESCE(m.observations,0) AS observations,
+        COALESCE(m.step_count,0) AS step_count,
+        m.active_ads,m.ads_delta_7d,m.longest_ad_days,m.creators,m.sponsors,m.creators_delta_7d,m.activity_change_4w,m.activity_weekly,m.first_seen,m.last_seen,
+        r.low_usd AS revenue_low_usd,r.high_usd AS revenue_high_usd,r.confidence AS revenue_confidence,r.method_version AS revenue_method_version,
+        (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint
+       ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
+    ).bind(...values, limit, offset),
   ]);
   return c.json({
-    product,
+    items: result.results.map((row) => ({
+      ...row,
+      coverage: row.coverage_level,
+      step_count: row.coverage_level === "full" ? Number(row.step_count) : 0,
+      activity_weekly: decode<(number | null)[]>(
+        (row.activity_weekly as string | null) ?? "[]",
+      ),
+      has_blueprint: !!row.has_blueprint,
+      open_sample: !!row.open_sample,
+    })),
+    total: Number(total.results[0].total),
+    limit,
+    offset,
+  });
+});
+catalog.get("/vault/:slug", optionalUser, async (c) => {
+  const db = c.env.DB;
+  const product = await db
+    .prepare("SELECT * FROM products WHERE slug=? AND status='published'")
+    .bind(c.req.param("slug"))
+    .first<{
+      id: string;
+      open_sample: number;
+      coverage_level: "full" | "signals";
+    }>();
+  if (!product) fail(404, "Product not found");
+  const steps = await db
+    .prepare(
+      "SELECT f.id,f.evidence_id,f.position,f.title,f.stage,f.annotation,a.id AS approved_asset FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id LEFT JOIN assets a ON a.id=f.asset_id AND a.approved=1 WHERE f.product_id=? AND e.status='approved' ORDER BY f.position",
+    )
+    .bind(product.id)
+    .all<
+      {
+        position: number;
+        title: string;
+        stage: string;
+        approved_asset: string | null;
+      } & Record<string, unknown>
+    >();
+  const coverage = product.coverage_level;
+  const actor = c.get("actor") as Actor | undefined;
+
+  // Public signals and the chosen sample are open. A captured app needs sign-in and,
+  // unless the viewer is Insider, uses one of today's free apps.
+  let usage: Awaited<ReturnType<typeof appUsage>> | undefined;
+  let access: "open" | "preview" | "full" = "open";
+  if (coverage === "full" && !product.open_sample) {
+    if (!actor) {
+      access = "preview";
+      await rateLimit(
+        db,
+        "vault-preview:" + (c.req.header("cf-connecting-ip") ?? "local"),
+        60,
+        3600,
+      );
+    } else {
+      access = "full";
+      if (!actor.pro) {
+        const allowed = await unlockApp(db, actor.userId, product.id);
+        usage = await appUsage(db, actor.userId);
+        if (!allowed)
+          return c.json(
+            {
+              error: `You've opened your ${DAILY_APP_LIMIT} free apps for today`,
+              code: "daily_limit",
+              ...usage,
+            },
+            429,
+          );
+      }
+    }
+  }
+  const results = await db.batch<Record<string, unknown>>([
+    db
+      .prepare(
+        "SELECT s.* FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.product_id=? AND e.status='approved' ORDER BY s.observed_at DESC LIMIT 100",
+      )
+      .bind(product.id),
+    db
+      .prepare(
+        "SELECT p.* FROM paywall_mechanics p JOIN evidence e ON e.id=p.evidence_id WHERE p.product_id=? AND e.status='approved'",
+      )
+      .bind(product.id),
+    db
+      .prepare(
+        "SELECT id,version,title,created_at FROM agent_blueprints WHERE product_id=? AND status='published' ORDER BY version DESC",
+      )
+      .bind(product.id),
+    db
+      .prepare(
+        "SELECT id,source_url,observed_at,kind,summary FROM evidence WHERE product_id=? AND status='approved' ORDER BY observed_at DESC LIMIT 100",
+      )
+      .bind(product.id),
+    db
+      .prepare(
+        "SELECT count(DISTINCT substr(s.observed_at,1,10)) observed_days,min(s.observed_at) first_observed,max(s.observed_at) last_observed FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.product_id=? AND s.kind='ad_observed' AND e.status='approved'",
+      )
+      .bind(product.id),
+    db
+      .prepare("SELECT * FROM product_metrics WHERE product_id=?")
+      .bind(product.id),
+    db
+      .prepare(
+        `SELECT r.low_usd,r.high_usd,r.confidence,r.method_version,r.inputs,r.evidence_ids,r.updated_at FROM revenue_ranges r WHERE r.product_id=? AND ${PUBLISHED_REVENUE_RANGE}`,
+      )
+      .bind(product.id),
+  ]);
+  const metricsRow = results[5].results[0];
+  const shared = {
+    product: { ...product, open_sample: !!product.open_sample },
+    coverage,
+    access,
+    usage: usage ?? null,
+    metrics: metricsRow
+      ? {
+          ...metricsRow,
+          step_count: coverage === "full" ? metricsRow.step_count : 0,
+          activity_weekly: decode<(number | null)[]>(
+            metricsRow.activity_weekly as string,
+          ),
+          meaning:
+            "Observed ad and creator activity. Null means not collected. Not product or business growth.",
+        }
+      : null,
+    revenueRange: results[6].results[0]
+      ? {
+          ...results[6].results[0],
+          inputs: decode(results[6].results[0].inputs as string),
+          evidence_ids: decode(results[6].results[0].evidence_ids as string),
+          kind: "manual_range",
+          computed: false,
+          meaning: revenueRangeMeaning,
+        }
+      : null,
+    adObservations: {
+      ...results[4].results[0],
+      meaning:
+        "Distinct observed days; does not establish continuous activity, spend or revenue.",
+    },
+  };
+  const withImage = async (step: (typeof steps.results)[number]) => {
+    const { approved_asset: asset, ...rest } = step;
+    return {
+      ...rest,
+      image_url: asset ? await signedMediaUrl(c.env, asset) : null,
+    };
+  };
+  if (access === "preview") {
+    // A shared link shows one screen. Everything else waits for sign-in.
+    const requested = c.req.query("step");
+    const position =
+      requested === undefined
+        ? null
+        : z.coerce.number().int().min(0).max(10000).parse(requested);
+    const linked = steps.results.find((s) => s.position === position);
+    const sharedStep =
+      linked &&
+      (await signedLinkValid(
+        c.env,
+        `step:${product.id}:${linked.id}`,
+        c.req.query("expires"),
+        c.req.query("signature"),
+      ));
+    return c.json({
+      ...shared,
+      outline: steps.results.map(({ position, title, stage }) => ({
+        position,
+        title,
+        stage,
+      })),
+      funnel: sharedStep ? [await withImage(linked!)] : [],
+      signals: [],
+      paywall: null,
+      blueprints: [],
+      evidence: [],
+    });
+  }
+  const captureEvidence = new Set([
+    ...steps.results.map((s) => s.evidence_id),
+    ...results[1].results.map((r) => r.evidence_id),
+  ]);
+  return c.json({
+    ...shared,
     signals: results[0].results.map((r) => ({
       ...r,
       detail: decode(r.detail as string),
     })),
-    funnel: results[1].results,
+    funnel:
+      coverage === "full"
+        ? await Promise.all(steps.results.map(withImage))
+        : [],
     paywall:
-      results[2].results.map((r) => ({
+      (coverage === "full" ? results[1].results : []).map((r) => ({
         ...r,
         states: decode(r.states as string),
         transitions: decode(r.transitions as string),
         credit_rules: decode(r.credit_rules as string),
       }))[0] ?? null,
-    blueprints: results[3].results,
-    evidence: results[4].results,
-    adObservations: {
-      ...results[5].results[0],
-      meaning:
-        "Distinct observed days; does not establish continuous activity, spend or revenue.",
-    },
+    blueprints: results[2].results,
+    evidence:
+      coverage === "full"
+        ? results[3].results
+        : results[3].results.filter(
+            (r) => r.kind !== "screenshot" && !captureEvidence.has(r.id),
+          ),
+  });
+});
+catalog.post("/vault/:slug/share", requireUser, async (c) => {
+  const { position } = await parse(
+    c,
+    z.object({ position: z.number().int().min(0).max(200) }).strict(),
+  );
+  const product = await c.env.DB.prepare(
+    "SELECT id,open_sample FROM products WHERE slug=? AND status='published' AND coverage_level='full'",
+  )
+    .bind(c.req.param("slug"))
+    .first<{ id: string; open_sample: number }>();
+  if (!product) fail(404, "Captured app not found");
+  const actor = c.get("actor");
+  if (
+    !actor.pro &&
+    !product.open_sample &&
+    !(await c.env.DB.prepare(
+      "SELECT 1 FROM vault_unlocks WHERE user_id=? AND day=? AND product_id=?",
+    )
+      .bind(actor.userId, now().slice(0, 10), product.id)
+      .first())
+  )
+    fail(403, "Open this app before sharing a screen");
+  const step = await c.env.DB.prepare(
+    "SELECT f.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id WHERE f.product_id=? AND f.position=? AND e.status='approved'",
+  )
+    .bind(product.id, position)
+    .first<{ id: string }>();
+  if (!step) fail(404, "Screen not found");
+  const parameters = await signedLinkParameters(
+    c.env,
+    `step:${product.id}:${step.id}`,
+    7 * 86400,
+  );
+  if (!parameters) fail(503, "Screen sharing is not configured");
+  return c.json({
+    url: `/api/v1/vault/${encodeURIComponent(c.req.param("slug"))}?step=${position}&${parameters}`,
+    expiresIn: 7 * 86400,
   });
 });
 catalog.get("/blueprints/:id/export", requireBlueprintReader, async (c) => {
@@ -342,6 +609,38 @@ adminCatalog.put("/products/:id/status", async (c) => {
   await audit(c.env.DB, "admin", "product.status", productId, { status: next });
   return c.json({ ok: true });
 });
+adminCatalog.put("/products/:id/coverage", async (c) => {
+  const input = await parse(
+    c,
+    z
+      .object({
+        level: z.enum(["signals", "full"]),
+        notes: z.string().min(20).max(2000),
+      })
+      .strict(),
+  );
+  const productId = c.req.param("id");
+  await productExists(c.env.DB, productId);
+  if (
+    input.level === "full" &&
+    !(await c.env.DB.prepare(
+      "SELECT f.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id JOIN assets a ON a.id=f.asset_id AND a.evidence_id=e.id WHERE f.product_id=? AND f.stage<>'landing' AND e.status='approved' AND a.approved=1 LIMIT 1",
+    )
+      .bind(productId)
+      .first())
+  )
+    fail(
+      409,
+      "Full Screens requires reviewed app captures beyond the landing page",
+    );
+  await c.env.DB.prepare(
+    "UPDATE products SET coverage_level=?,coverage_notes=?,coverage_reviewed_at=?,updated_at=? WHERE id=?",
+  )
+    .bind(input.level, input.notes, now(), now(), productId)
+    .run();
+  await audit(c.env.DB, "admin", "product.coverage", productId, input);
+  return c.json({ ok: true });
+});
 adminCatalog.post("/evidence", async (c) => {
   const input = await parse(c, evidenceInput);
   const row = await insertEvidence(c.env.DB, input);
@@ -392,7 +691,7 @@ adminCatalog.put("/evidence/:id/status", async (c) => {
   if (input.status !== "approved" && row.product_id) {
     statements.push(
       c.env.DB.prepare(
-        "UPDATE products SET status='draft',updated_at=? WHERE id=?",
+        "UPDATE products SET status='draft',coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL,updated_at=? WHERE id=?",
       ).bind(now(), row.product_id),
     );
     statements.push(
@@ -472,7 +771,7 @@ adminCatalog.put("/products/:id/funnel", async (c) => {
       ),
     ),
     c.env.DB.prepare(
-      "UPDATE products SET status='draft',updated_at=? WHERE id=?",
+      "UPDATE products SET status='draft',coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL,updated_at=? WHERE id=?",
     ).bind(now(), productId),
   ]);
   return c.json({ ok: true });
@@ -494,7 +793,7 @@ adminCatalog.put("/products/:id/paywall", async (c) => {
       input.notes,
     ),
     c.env.DB.prepare(
-      "UPDATE products SET status='draft',updated_at=? WHERE id=?",
+      "UPDATE products SET status='draft',coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL,updated_at=? WHERE id=?",
     ).bind(now(), productId),
   ]);
   return c.json({ ok: true });

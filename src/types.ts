@@ -23,6 +23,7 @@ export type Bindings = {
   SUPABASE_STORAGE_KEY?: string;
   YOUTUBE_API_KEY?: string;
   SPONSORBLOCK_LICENSE_APPROVED?: string;
+  MEDIA_SIGNING_SECRET?: string;
 };
 export type Actor = {
   userId: string;

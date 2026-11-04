@@ -8,7 +8,7 @@ else {
   const token = () => randomBytes(32).toString("hex");
   await writeFile(
     ".dev.vars",
-    `ADMIN_TOKEN=${token()}\nCOLLECTOR_TOKEN=${token()}\nDEV_AUTH_TOKEN=${token()}\nENABLE_DEV_AUTH=true\n`,
+    `ADMIN_TOKEN=${token()}\nCOLLECTOR_TOKEN=${token()}\nMEDIA_SIGNING_SECRET=${token()}\nDEV_AUTH_TOKEN=${token()}\nENABLE_DEV_AUTH=true\n`,
     { flag: "wx" },
   );
   console.log("Created ignored .dev.vars with independent local credentials.");

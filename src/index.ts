@@ -10,6 +10,12 @@ import { community, adminCommunity } from "./community";
 import { billing, adminBilling } from "./billing";
 import { collector, jobAdmin, enqueueDue } from "./jobs";
 import { media } from "./media";
+import {
+  adminInsights,
+  insights,
+  METRICS_CRON,
+  refreshMetrics,
+} from "./insights";
 import { openapi } from "./openapi";
 import { researchAdmin } from "./research";
 import { distributionAdmin, distributionStatus } from "./distribution";
@@ -61,6 +67,7 @@ app.get("/openapi.json", (c) => c.json(openapi));
 app.route("/auth", auth);
 app.route("/api/v1", catalog);
 app.route("/api/v1", community);
+app.route("/api/v1", insights);
 app.route("/api/v1/admin", adminCatalog);
 app.route("/api/v1/admin", adminCommunity);
 app.route("/api/v1/admin", adminBilling);
@@ -68,6 +75,7 @@ app.route("/api/v1/admin", jobAdmin);
 app.route("/api/v1/admin", researchAdmin);
 app.route("/api/v1/admin", distributionAdmin);
 app.route("/api/v1/admin", externalSignalsAdmin);
+app.route("/api/v1/admin", adminInsights);
 app.get("/api/v1/distribution/:slug", async (c) => {
   const product = await c.env.DB.prepare(
     "SELECT id FROM products WHERE slug=? AND status='published'",
@@ -111,10 +119,16 @@ app.onError((error, c) => {
 export default {
   fetch: app.fetch,
   async scheduled(
-    _event: ScheduledController,
+    event: ScheduledController,
     env: Bindings,
     _ctx: ExecutionContext,
   ) {
+    // Metrics have their own trigger and only read approved data, so they run with collection off.
+    if (event.cron === METRICS_CRON) {
+      const metrics = await refreshMetrics(env.DB);
+      console.log(JSON.stringify({ event: "metrics.refreshed", ...metrics }));
+      return;
+    }
     if (env.COLLECTION_ENABLED !== "true") return;
     const result = await enqueueDue(env);
     console.log(JSON.stringify({ event: "collection.enqueued", ...result }));
