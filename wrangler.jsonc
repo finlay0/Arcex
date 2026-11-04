@@ -27,7 +27,7 @@
       "migrations_dir": "migrations",
     },
   ],
-  "triggers": { "crons": ["17 10 * * *", "*/10 * * * *"] },
+  "triggers": { "crons": ["*/10 * * * *"] },
   "kv_namespaces": [
     { "binding": "OAUTH_KV", "id": "d5e6f85e32884f1283215fcae723c425" },
   ],
@@ -52,7 +52,7 @@
           "migrations_dir": "migrations",
         },
       ],
-      "triggers": { "crons": ["17 10 * * *", "*/10 * * * *"] },
+      "triggers": { "crons": ["*/10 * * * *"] },
       "kv_namespaces": [
         { "binding": "OAUTH_KV", "id": "d5e6f85e32884f1283215fcae723c425" },
       ],

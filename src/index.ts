@@ -123,11 +123,11 @@ export default {
     env: Bindings,
     _ctx: ExecutionContext,
   ) {
-    // Metrics have their own trigger and only read approved data, so they run with collection off.
+    // Share one timer within the account's Free cron limit. Metrics run with collection off.
+    // At most 34 metrics + 14 enqueue/cleanup statements, below D1 Free's 50-query limit.
     if (event.cron === METRICS_CRON) {
       const metrics = await refreshMetrics(env.DB);
       console.log(JSON.stringify({ event: "metrics.refreshed", ...metrics }));
-      return;
     }
     if (env.COLLECTION_ENABLED !== "true") return;
     const result = await enqueueDue(env);
