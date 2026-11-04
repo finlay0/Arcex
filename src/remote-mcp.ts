@@ -315,7 +315,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "register_candidate",
     {
       description:
-        "Register a small independent AI product with primary maker/ownership evidence. Creates a private draft pending editorial review. Major platforms are excluded. Does not publish.",
+        "Register a source-backed AI/web product lead or established reference as a private draft. Explicitly preserve unknown operator/scale instead of inventing maker evidence. Major platforms must be assessed as reference before owner acceptance. Does not publish.",
       inputSchema: candidateInput,
     },
     async (input) =>

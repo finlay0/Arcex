@@ -15,7 +15,11 @@ import {
   saveCheckpoint,
 } from "./research-context";
 
-export const excludedDomains = new Set([
+export const referenceDomains = new Set([
+  "chatgpt.com",
+  "claude.com",
+  "google.dev",
+  "labs.google",
   "cursor.com",
   "lovable.dev",
   "bolt.new",
@@ -124,10 +128,6 @@ export async function registerCandidate(
   const p = input.product,
     m = input.maker,
     domain = new URL(p.url).hostname.replace(/^www\./, "");
-  if (
-    [...excludedDomains].some((d) => domain === d || domain.endsWith("." + d))
-  )
-    fail(422, "This platform is excluded from the core research cohort");
   const existing = await db
     .prepare("SELECT id,status,domain FROM products WHERE domain=? OR slug=?")
     .bind(domain, p.slug)
@@ -216,20 +216,30 @@ researchAdmin.put("/research/candidates/:id/status", async (c) => {
   );
   if (input.status === "accepted") {
     const row = await c.env.DB.prepare(
-      "SELECT assessment_json FROM research_profiles WHERE product_id=?",
+      "SELECT r.assessment_json,p.domain FROM research_profiles r JOIN products p ON p.id=r.product_id WHERE r.product_id=?",
     )
       .bind(c.req.param("id"))
-      .first<{ assessment_json: string | null }>();
+      .first<{ assessment_json: string | null; domain: string }>();
     if (!row?.assessment_json)
       fail(
         409,
         "Save and review a source-backed assessment before accepting a candidate",
       );
     const assessment = assessmentInput.parse(JSON.parse(row.assessment_json));
-    if (assessment.relevance !== "in_scope")
+    if (!["in_scope", "reference"].includes(assessment.relevance))
       fail(
         409,
-        "Core cohort acceptance requires an in-scope, source-backed product assessment",
+        "Cohort acceptance requires an in-scope or reference, source-backed assessment",
+      );
+    if (
+      assessment.relevance !== "reference" &&
+      [...referenceDomains].some(
+        (d) => row.domain === d || row.domain.endsWith("." + d),
+      )
+    )
+      fail(
+        409,
+        "Known major platforms belong in reference coverage, not the independent-product core",
       );
     for (const evidenceId of new Set([
       ...assessment.evidenceIds,

@@ -10,7 +10,7 @@ flowchart LR
   C[Saved product sources on individual schedules] --> B
   B --> D[Unchanged: record last checked, stop]
   B --> E[New evidence: private draft]
-  E --> F[Luna: proposed bounded text triage]
+  E --> F[Luna: bounded text qualification]
   F --> G[Selected visual or ambiguous work]
   H[Separate discovery allowance] --> G
   G --> I[Terra Medium in ChatGPT Work cloud]
@@ -59,7 +59,7 @@ Twelve browser source visits per day cannot refresh all ads, creator mentions an
 
 Official documentation checked November 4, 2026 lists GPT-6 Luna (not an established GPT-6.1 Luna here). Standard Work credit rates per million tokens are Luna 2.5 input / 12.5 output, versus GPT-6.1 Terra 25 / 125. The nominal input/output ratio is ten to one; retries, reasoning and task length change actual cost per useful result. Included subscription allowances are not determined by these rates alone. Work and Codex share usage.
 
-Recommendation: code first; pilot Luna on supplied changed text for classification/extraction; Terra Medium for visual/browser work and uncertain cases. A small labeled sample should compare useful accepted results and actual usage before enabling Luna broadly. This change makes no Luna calls and does not change the existing Terra selection or purchase API credits.
+Implemented workflow: code first; actual Luna Medium Work tasks classify supplied primary text; Terra Medium handles visual/browser work and uncertain cases. The18-record pilot found real naming/source ambiguities and preserved unknown company size. Follow-up batches are25 records, with self-contained instructions/source context and persisted JSON outputs. The existing Work chat keeps its selected model; the operator can submit/read through the desktop connector without browser setup for every batch. These are supervised initial qualification runs, not a paid API model router. No observed per-task cost ratio is claimed, and the saved recurring browser task remains Terra and paused.
 
 - [OpenAI model roles](https://learn.chatgpt.com/docs/models)
 - [OpenAI Work pricing and shared usage](https://learn.chatgpt.com/docs/pricing)

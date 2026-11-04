@@ -31,7 +31,10 @@ export function publicAddress(ip: string) {
   return false;
 }
 export class SourceHttpError extends Error {
-  constructor(public status: number) {
+  constructor(
+    public status: number,
+    public location?: string | null,
+  ) {
     super(
       `Source returned HTTP ${status}; redirects and access challenges require review`,
     );
@@ -101,7 +104,12 @@ export async function publicFetch(
         }
         if (res.statusCode !== 200) {
           res.resume();
-          reject(new SourceHttpError(res.statusCode ?? 0));
+          reject(
+            new SourceHttpError(
+              res.statusCode ?? 0,
+              safeHeader("location", 2000),
+            ),
+          );
           return;
         }
         const encoding = res.headers["content-encoding"];

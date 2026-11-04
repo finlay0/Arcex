@@ -131,14 +131,77 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
         (created.content as { text: string }[])[0].text,
       ) as { id: string; status: string };
       assert.equal(parsed.status, "draft");
-      const blocked = await client.callTool({
+      const reference = await client.callTool({
         name: "register_candidate",
         arguments: {
           ...candidate,
           product: { ...candidate.product, slug: "v0", url: "https://v0.app" },
         },
       });
-      assert.equal(blocked.isError, true);
+      assert.notEqual(reference.isError, true);
+      const referenceId = JSON.parse(
+        (reference.content as { text: string }[])[0].text,
+      ).id;
+      const referenceProof = await client.callTool({
+        name: "add_observation",
+        arguments: {
+          productId: referenceId,
+          sourceUrl: "https://v0.app",
+          observedAt: "2026-01-01T00:00:00.000Z",
+          kind: "page",
+          contentHash: "f".repeat(64),
+          summary: "Primary platform reference",
+          payload: { title: "Fixture reference" },
+        },
+      });
+      const referenceEvidence = JSON.parse(
+        (referenceProof.content as { text: string }[])[0].text,
+      ).id;
+      await env.DB.prepare("UPDATE evidence SET status='approved' WHERE id=?")
+        .bind(referenceEvidence)
+        .run();
+      const referenceAssessment = {
+        productId: referenceId,
+        relevance: "in_scope",
+        rationale: "Useful platform with a source-backed reference workflow",
+        evidenceIds: [referenceEvidence],
+        sizeStatus: "unverified",
+        sizeBasis: "unknown",
+        sizeNotes: "Current size is not established by the observed page",
+        nextAction: "Review as an established reference",
+      };
+      await client.callTool({
+        name: "save_research_assessment",
+        arguments: referenceAssessment,
+      });
+      const acceptReference = () =>
+        app.request(
+          env.API_ORIGIN +
+            `/api/v1/admin/research/candidates/${referenceId}/status`,
+          {
+            method: "PUT",
+            headers: {
+              authorization: "Bearer " + env.ADMIN_TOKEN,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              status: "accepted",
+              reason: "Owner reviewed reference evidence",
+            }),
+          },
+          env,
+        );
+      const wrongRole = await acceptReference();
+      assert.equal(wrongRole.status, 409);
+      assert.match(
+        JSON.stringify(await wrongRole.json()),
+        /reference coverage/,
+      );
+      await client.callTool({
+        name: "save_research_assessment",
+        arguments: { ...referenceAssessment, relevance: "reference" },
+      });
+      assert.equal((await acceptReference()).status, 200);
       const evidence = await client.callTool({
         name: "add_observation",
         arguments: {
