@@ -8,6 +8,8 @@ Live API: https://arcex-api.peak-era-avern.workers.dev
 - [OpenAPI contract](https://arcex-api.peak-era-avern.workers.dev/openapi.json)
 - [Operations and account setup](docs/operations.md)
 - [Brief coverage: implemented, verified and remaining](docs/brief-coverage.md)
+- [Product direction and decisions](docs/product-direction.md)
+- [Repeatable Work bootstrap](docs/work-bootstrap.txt)
 - [MCP package](packages/mcp/README.md)
 
 ## Run locally

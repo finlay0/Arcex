@@ -307,6 +307,16 @@ adminCatalog.put("/products/:id/status", async (c) => {
     productId = c.req.param("id");
   await productExists(c.env.DB, productId);
   if (next === "published") {
+    const research = await c.env.DB.prepare(
+      "SELECT status FROM research_profiles WHERE product_id=?",
+    )
+      .bind(productId)
+      .first<{ status: string }>();
+    if (research && research.status !== "accepted")
+      fail(
+        409,
+        "Review and accept the research candidate before publishing it",
+      );
     if (
       !(await c.env.DB.prepare(
         "SELECT id FROM evidence WHERE product_id=? AND status='approved' LIMIT 1",

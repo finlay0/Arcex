@@ -13,6 +13,8 @@ import {
 import type { OAuthResourceContext } from "@cloudflare/workers-oauth-provider";
 import { candidateInput } from "../src/research";
 import type { Bindings } from "../src/types";
+import { enqueueDue } from "../src/jobs";
+import { app } from "../src/index";
 
 test("private collector MCP restricts owner, scope and draft writes", async () => {
   const mf = new Miniflare(
@@ -150,6 +152,114 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
         },
       });
       assert.notEqual(evidence.isError, true);
+      const evidenceId = JSON.parse(
+        (evidence.content as { text: string }[])[0].text,
+      ).id as string;
+      const contextResult = await client.callTool({
+        name: "research_context",
+        arguments: { mode: "qualification" },
+      });
+      const runContext = JSON.parse(
+        (contextResult.content as { text: string }[])[0].text,
+      );
+      assert.ok(
+        runContext.cohort.some((p: { id: string }) => p.id === parsed.id),
+      );
+      const read = await client.callTool({
+        name: "read_product_research",
+        arguments: { productId: parsed.id },
+      });
+      assert.ok(
+        JSON.parse(
+          (read.content as { text: string }[])[0].text,
+        ).untrustedEvidence.some((e: { id: string }) => e.id === evidenceId),
+      );
+      const checkpoint = await client.callTool({
+        name: "save_research_checkpoint",
+        arguments: {
+          runId: runContext.runId,
+          mode: "qualification",
+          status: "partial",
+          productIds: [parsed.id],
+          evidenceIds: [evidenceId],
+          queries: [],
+          summary:
+            "Product evidence saved; current scale still needs a primary source",
+          nextAction:
+            "Check the current founder/team page; do not infer size from the original launch",
+        },
+      });
+      assert.notEqual(checkpoint.isError, true);
+      const freshServer = collectorServer(env, props),
+        freshClient = new Client({ name: "fresh-context-test", version: "1" }),
+        [c, d] = InMemoryTransport.createLinkedPair();
+      try {
+        await freshServer.connect(d);
+        await freshClient.connect(c);
+        const resumed = await freshClient.callTool({
+          name: "research_context",
+          arguments: { resumeRunId: runContext.runId },
+        });
+        assert.equal(
+          JSON.parse((resumed.content as { text: string }[])[0].text).resume
+            .nextAction,
+          "Check the current founder/team page; do not infer size from the original launch",
+        );
+      } finally {
+        await freshClient.close();
+        await freshServer.close();
+      }
+      await client.callTool({
+        name: "register_browser_source",
+        arguments: {
+          productId: parsed.id,
+          url: candidate.product.url,
+          name: "Fixture recurring source",
+        },
+      });
+      assert.equal((await enqueueDue(env)).enqueued, 0);
+      const accept = () =>
+        app.request(
+          env.API_ORIGIN +
+            `/api/v1/admin/research/candidates/${parsed.id}/status`,
+          {
+            method: "PUT",
+            headers: {
+              authorization: "Bearer " + env.ADMIN_TOKEN,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              status: "accepted",
+              reason: "Fixture owner review",
+            }),
+          },
+          env,
+        );
+      assert.equal((await accept()).status, 409);
+      const assessment = await client.callTool({
+        name: "save_research_assessment",
+        arguments: {
+          productId: parsed.id,
+          relevance: "in_scope",
+          rationale:
+            "Relevant creator utility with an observed commercial workflow",
+          evidenceIds: [evidenceId],
+          sizeStatus: "unverified",
+          sizeBasis: "unknown",
+          sizeNotes:
+            "Current workforce is not publicly established; do not label it as verified small",
+          nextAction: "Owner must review the source before cohort acceptance",
+        },
+      });
+      assert.notEqual(assessment.isError, true);
+      assert.equal((await accept()).status, 409);
+      await bindings.DB.prepare(
+        "UPDATE evidence SET status='approved' WHERE id=?",
+      )
+        .bind(evidenceId)
+        .run();
+      assert.equal((await accept()).status, 200);
+      assert.equal((await enqueueDue(env)).enqueued, 1);
       const product = await bindings.DB.prepare(
         "SELECT status FROM products WHERE id=?",
       )
@@ -161,7 +271,7 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
       )
         .bind(parsed.id)
         .first<{ status: string }>();
-      assert.equal(e!.status, "draft");
+      assert.equal(e!.status, "approved");
       const publicRows = await bindings.DB.prepare(
         "SELECT count(*) n FROM products WHERE status='published'",
       ).first<{ n: number }>();

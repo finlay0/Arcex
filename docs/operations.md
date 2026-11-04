@@ -28,11 +28,19 @@ Wrangler's version/deployment listing and tail commands require the same `--env 
 
 The production cron trigger is configured at 10:17 UTC, but `COLLECTION_ENABLED=false` makes it a no-op. Manual enqueueing remains available. The superseded local Codex automation **Arcex daily collection** is paused. Do not reactivate it for production research.
 
-The [actual ChatGPT Work cloud task](https://chatgpt.com/c/6ae98035-fd98-83ea-86ec-e4c9f4937b0a) uses GPT-6.1 Terra Medium and Work's own cloud computer/browser. Its native daily 09:00 America/Halifax schedule is paused while bounded upfront research batches run. A local Terra agent configures accounts in Brave; it does not substitute for cloud research. The initial two-candidate report was imported as unreviewed draft evidence. Later batch artifacts must be retrieved and reviewed; visible Work Outputs do not establish successful local downloads or ingestion.
+The [actual ChatGPT Work cloud task](https://chatgpt.com/c/6ae98035-fd98-83ea-86ec-e4c9f4937b0a) uses GPT-6.1 Terra Medium and Work's own cloud computer/browser. Its native daily 09:00 America/Halifax schedule is paused while bounded upfront research batches run. A local Terra agent configures accounts in Brave; it does not substitute for cloud research. Real candidate/evidence writes and private screenshot uploads have been reconciled against the API. A successful upload is distinct from editorial review or a completed post-login teardown.
 
 Work's private **Arcex Collector** connection uses OAuth at `/mcp` with scope `arcex:collect`; never paste admin/collector tokens into a task prompt. The Worker supports CIMD and dynamic client registration, browser-bound consent, PKCE, owner-only GitHub sign-in, one-hour access tokens, rotating refresh grants, and admin grant revocation. Exact GitHub callbacks are `/auth/github/callback` and `/auth/github/callback/mcp`. Wildcards are disabled.
 
 Collector tools can read private research, register small independent candidates with ownership evidence, save draft observations/funnels/paywalls/blueprints, upload unapproved captures and lease browser jobs. No tool publishes, changes permissions or manages billing. Major-platform fixtures (Cursor, Lovable, Bolt, v0, Replit) are archived and their sources disabled. Candidate team-size and ownership claims require review rather than treating discovery as qualification.
+
+### Durable Work research context
+
+Use [work-bootstrap.txt](work-bootstrap.txt) as the saved task prompt. Each run calls `research_context` to retrieve the current versioned [playbook](../src/research-playbook.ts), cohort and database checkpoints. The long strategic conversation and previous chat memory are not authoritative run state. The playbook is bundled with the Worker, so cloud Work can retrieve it without access to the local repository or a separate paid service.
+
+`read_product_research` returns bounded prior evidence, capture references, qualification, watches, recent scans and funnel versions. `read_capture` retrieves an existing private image through the owner connection. `save_research_checkpoint` persists actual product/evidence IDs, queries, findings and the next action. A fresh chat resumes with `research_context(resumeRunId=...)`.
+
+`save_research_assessment` records source-linked audience relevance and company scale as a draft assessment. AI coding provenance is not an eligibility requirement. Unknown workforce remains unknown; it is not proof of a tiny company. Only an admin may accept a source-reviewed candidate. Routine queue enqueueing excludes pending/excluded research profiles; qualification runs can investigate them explicitly. Existing candidates remain leads until reviewed. This avoids silently turning the initial discovery list into a verified monitoring cohort.
 
 For a manual cloud collection pass in PowerShell:
 

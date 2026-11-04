@@ -12,10 +12,10 @@ export async function enqueueDue(env: Bindings) {
   // A D1 batch is transactional. Advancing the schedule and inserting a unique job commit together.
   const results = await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO jobs(id,source_id,dedupe_key,available_at,created_at,updated_at) SELECT lower(hex(randomblob(16))),id,id||':'||next_run_at,?,?,? FROM sources WHERE enabled=1 AND next_run_at<=? ON CONFLICT(dedupe_key) DO NOTHING",
+      "INSERT INTO jobs(id,source_id,dedupe_key,available_at,created_at,updated_at) SELECT lower(hex(randomblob(16))),id,id||':'||next_run_at,?,?,? FROM sources WHERE enabled=1 AND next_run_at<=? AND NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=sources.product_id AND r.status!='accepted') ON CONFLICT(dedupe_key) DO NOTHING",
     ).bind(time, time, time, time),
     env.DB.prepare(
-      "UPDATE sources SET next_run_at=strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+'||interval_hours||' hours') WHERE enabled=1 AND next_run_at<=?",
+      "UPDATE sources SET next_run_at=strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+'||interval_hours||' hours') WHERE enabled=1 AND next_run_at<=? AND NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=sources.product_id AND r.status!='accepted')",
     ).bind(time, time),
     env.DB.prepare(
       "UPDATE jobs SET status='failed',error='Lease expired after maximum attempts',lease_token=NULL,lease_expires_at=NULL,updated_at=? WHERE status='running' AND lease_expires_at<=? AND attempts>=max_attempts",

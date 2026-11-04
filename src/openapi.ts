@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { candidateInput } from "./research";
+import { candidateInput, assessmentInput } from "./research";
+import { researchContextInput, checkpointInput } from "./research-context";
 import {
   watchInput,
   scanInput,
@@ -23,6 +24,9 @@ import {
 } from "./contracts";
 
 const schemas = {
+  ResearchContextInput: researchContextInput,
+  ResearchCheckpointInput: checkpointInput,
+  ResearchAssessmentInput: assessmentInput,
   DistributionWatchInput: watchInput,
   DistributionScanInput: scanInput,
   MetaAdInput: adSightingInput,
@@ -114,6 +118,33 @@ export const openapi = {
     },
   },
   paths: {
+    "/api/v1/admin/research/context": {
+      post: operation(
+        "Versioned playbook, cohort and durable run checkpoints",
+        "admin",
+        "ResearchContextInput",
+      ),
+    },
+    "/api/v1/admin/research/checkpoint": {
+      post: operation(
+        "Save resumable research state without relying on chat memory",
+        "admin",
+        "ResearchCheckpointInput",
+      ),
+    },
+    "/api/v1/admin/research/assessment": {
+      post: operation(
+        "Save evidence-linked relevance and company-scale assessment as pending",
+        "admin",
+        "ResearchAssessmentInput",
+      ),
+    },
+    "/api/v1/admin/research/products/{id}": {
+      get: operation(
+        "Read prior product evidence, captures, watches and funnel versions",
+        "admin",
+      ),
+    },
     "/api/v1/admin/distribution/google": {
       post: operation(
         "Record source-backed Google transparency creative",
