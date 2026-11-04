@@ -467,15 +467,17 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "claim_capture_job",
     {
       description:
-        "Atomically lease one due browser-capture job. The returned lease lasts ten minutes. Complete or fail it using its scoped lease token; heartbeat for longer captures.",
-      inputSchema: {},
+        "Claim BEFORE any browser research. Atomically lease one due browser or discovery job within the shared UTC daily and concurrency allowances. If null, stop; do not browse around the allowance. Read the source product history before visiting. Ten-minute lease; heartbeat and complete/fail using its token.",
+      inputSchema: z
+        .object({ lane: z.enum(["browser", "discovery"]).default("browser") })
+        .strict(),
     },
-    async () =>
+    async ({ lane }) =>
       run(() =>
         internal(
           "POST",
           "/api/v1/collector/jobs/claim",
-          { kinds: ["browser"] },
+          { kinds: ["browser"], lane },
           true,
         ),
       ),
@@ -494,7 +496,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
           evidence: z
             .array(evidenceInput.omit({ productId: true }))
             .min(1)
-            .max(30),
+            .max(20),
         })
         .strict(),
     },
@@ -530,7 +532,10 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
       description:
         "Record a real capture failure without fabricating evidence. Authentication errors and CAPTCHAs must stay visible.",
       inputSchema: lease
-        .extend({ error: z.string().min(1).max(2000) })
+        .extend({
+          error: z.string().min(1).max(2000),
+          blocked: z.boolean().default(false),
+        })
         .strict(),
     },
     async ({ jobId, ...body }) =>

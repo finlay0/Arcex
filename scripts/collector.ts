@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { api, collectorToken } from "./client";
-import { publicFetch } from "./public-fetch";
+import { publicFetch, SourceHttpError } from "./public-fetch";
 import { publicUrl, evidenceInput } from "../src/contracts";
 
 type Job = {
@@ -13,6 +13,9 @@ type Job = {
     url: string;
     kind: "public_page" | "rss";
     product_id: string | null;
+    last_fingerprint: string | null;
+    http_etag: string | null;
+    http_last_modified: string | null;
   };
 };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -55,7 +58,7 @@ export function pageEvidence(
     sourceUrl: url,
     observedAt: new Date().toISOString(),
     kind: "page",
-    contentHash: digest(JSON.stringify(payload)),
+    contentHash: digest(JSON.stringify({ title, description, headings })),
     summary: `${title}${description ? " — " + description : ""}`,
     payload,
   });
@@ -73,7 +76,7 @@ export function rssEvidence(url: string, text: string) {
     .parse(parsed);
   const entries = root.rss?.channel.item ?? root.feed?.entry ?? [];
   return (Array.isArray(entries) ? entries : [entries])
-    .slice(0, 30)
+    .slice(0, 20)
     .flatMap((raw: unknown) => {
       const entry = z.record(z.string(), z.unknown()).safeParse(raw);
       if (!entry.success) return [];
@@ -131,7 +134,27 @@ export async function collect(limit = 5) {
     );
     if (!job) break;
     try {
-      const result = await publicFetch(job.source.url);
+      const validators = job.source.last_fingerprint
+        ? {
+            etag: job.source.http_etag,
+            lastModified: job.source.http_last_modified,
+          }
+        : undefined;
+      const result = await publicFetch(job.source.url, 1_000_000, validators);
+      if (result.status === 304 && job.source.last_fingerprint) {
+        await api(`/api/v1/collector/jobs/${job.id}/complete`, {
+          method: "POST",
+          token: collectorToken,
+          body: {
+            leaseToken: job.leaseToken,
+            outcome: "unchanged",
+            fingerprint: job.source.last_fingerprint,
+          },
+        });
+        completed++;
+        console.log(JSON.stringify({ jobId: job.id, status: "not_modified" }));
+        continue;
+      }
       const evidence =
         job.source.kind === "rss"
           ? rssEvidence(job.source.url, result.text)
@@ -143,17 +166,29 @@ export async function collect(limit = 5) {
         !result.contentType.includes("text/html")
       )
         throw new Error("Expected an HTML public page");
+      const fingerprint = digest(
+        JSON.stringify(
+          evidence.map((e) => [e.sourceUrl, e.contentHash]).sort(),
+        ),
+      );
+      const unchanged = fingerprint === job.source.last_fingerprint;
       await api(`/api/v1/collector/jobs/${job.id}/complete`, {
         method: "POST",
         token: collectorToken,
-        body: { leaseToken: job.leaseToken, evidence },
+        body: {
+          leaseToken: job.leaseToken,
+          evidence: unchanged ? [] : evidence,
+          outcome: unchanged ? "unchanged" : "observed",
+          fingerprint,
+          httpCache: result.httpCache,
+        },
       });
       completed++;
       console.log(
         JSON.stringify({
           jobId: job.id,
           status: "succeeded",
-          drafts: evidence.length,
+          drafts: unchanged ? 0 : evidence.length,
         }),
       );
     } catch (error) {
@@ -162,7 +197,13 @@ export async function collect(limit = 5) {
       await api(`/api/v1/collector/jobs/${job.id}/fail`, {
         method: "POST",
         token: collectorToken,
-        body: { leaseToken: job.leaseToken, error: reason.slice(0, 2000) },
+        body: {
+          leaseToken: job.leaseToken,
+          error: reason.slice(0, 2000),
+          blocked:
+            error instanceof SourceHttpError &&
+            [401, 403].includes(error.status),
+        },
       });
       failed++;
       console.error(

@@ -5,6 +5,7 @@ import {
 } from "./research-playbook";
 import { id, publicUrl } from "./contracts";
 import { fail } from "./lib";
+import { collectionStatus } from "./collection-policy";
 import { now } from "./types";
 
 export const researchMode = z.enum([
@@ -17,6 +18,7 @@ export const researchContextInput = z
   .object({
     mode: researchMode.default("qualification"),
     resumeRunId: z.uuid().optional(),
+    afterProductId: id.optional(),
   })
   .strict();
 export const checkpointInput = z
@@ -55,9 +57,9 @@ export async function researchContext(
   const mode = resume?.mode ?? input.mode;
   const rows = await db
     .prepare(
-      "SELECT p.id,p.name,p.url,p.status,r.status research_status,r.size_status,r.maker_name,r.ownership_source_url,r.discovery_json,r.assessment_json FROM products p JOIN research_profiles r ON r.product_id=p.id WHERE p.status!='archived' AND r.status!='excluded' AND (?!='monitoring' OR r.status='accepted') ORDER BY p.updated_at DESC LIMIT 30",
+      "SELECT p.id,p.name,p.url,p.status,r.status research_status,r.size_status,r.maker_name,r.ownership_source_url,r.discovery_json,r.assessment_json FROM products p JOIN research_profiles r ON r.product_id=p.id WHERE p.status!='archived' AND r.status!='excluded' AND (?!='monitoring' OR r.status='accepted') AND (? IS NULL OR p.id>?) ORDER BY p.id LIMIT 31",
     )
-    .bind(mode)
+    .bind(mode, input.afterProductId ?? null, input.afterProductId ?? null)
     .all();
   const recent = await db
     .prepare(
@@ -69,7 +71,11 @@ export async function researchContext(
     mode,
     policyVersion: RESEARCH_POLICY_VERSION,
     instructions: playbook,
-    cohort: rows.results,
+    cohort: rows.results.slice(0, 30),
+    nextProductCursor: rows.results.length > 30 ? rows.results[29].id : null,
+    cohortPurpose:
+      "Directory page, not work assignment. Monitoring/discovery must claim jobs before browser research.",
+    collection: await collectionStatus(db),
     resume: resume ? JSON.parse(resume.state_json) : null,
     recentCheckpoints: recent.results.map((r) => ({
       ...r,

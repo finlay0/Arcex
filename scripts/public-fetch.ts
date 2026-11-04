@@ -30,7 +30,18 @@ export function publicAddress(ip: string) {
   }
   return false;
 }
-export async function publicFetch(raw: string, maximum = 1_000_000) {
+export class SourceHttpError extends Error {
+  constructor(public status: number) {
+    super(
+      `Source returned HTTP ${status}; redirects and access challenges require review`,
+    );
+  }
+}
+export async function publicFetch(
+  raw: string,
+  maximum = 1_000_000,
+  validators?: { etag: string | null; lastModified: string | null },
+) {
   const url = new URL(publicUrl.parse(raw));
   const addresses = await lookup(url.hostname, { all: true });
   if (!addresses.length || addresses.some((a) => !publicAddress(a.address)))
@@ -41,6 +52,8 @@ export async function publicFetch(raw: string, maximum = 1_000_000) {
     text: string;
     headers: Record<string, string>;
     contentType: string;
+    status: 200 | 304;
+    httpCache: { etag: string | null; lastModified: string | null };
   }>((resolve, reject) => {
     const req = request(
       url,
@@ -48,6 +61,10 @@ export async function publicFetch(raw: string, maximum = 1_000_000) {
         method: "GET",
         headers: {
           "user-agent": "ArcexInspector/0.1 (+https://arcex.dev)",
+          ...(validators?.etag ? { "if-none-match": validators.etag } : {}),
+          ...(validators?.lastModified
+            ? { "if-modified-since": validators.lastModified }
+            : {}),
           accept:
             "text/html, application/rss+xml, application/atom+xml, application/xml, text/xml",
         },
@@ -56,13 +73,35 @@ export async function publicFetch(raw: string, maximum = 1_000_000) {
           cb(null, address.address, address.family),
       },
       (res) => {
+        const safeHeader = (name: string, max: number) => {
+          const value = res.headers[name];
+          return typeof value === "string" &&
+            value.length <= max &&
+            !/[\r\n]/.test(value)
+            ? value
+            : null;
+        };
+        const httpCache = {
+          etag: safeHeader("etag", 1000),
+          lastModified: safeHeader("last-modified", 200),
+        };
+        if (
+          res.statusCode === 304 &&
+          (validators?.etag || validators?.lastModified)
+        ) {
+          res.resume();
+          resolve({
+            status: 304,
+            text: "",
+            headers: {},
+            contentType: "",
+            httpCache,
+          });
+          return;
+        }
         if (res.statusCode !== 200) {
           res.resume();
-          reject(
-            new Error(
-              `Source returned HTTP ${res.statusCode}; redirects and access challenges require review`,
-            ),
-          );
+          reject(new SourceHttpError(res.statusCode ?? 0));
           return;
         }
         const encoding = res.headers["content-encoding"];
@@ -84,6 +123,8 @@ export async function publicFetch(raw: string, maximum = 1_000_000) {
         res.on("error", reject);
         res.on("end", () =>
           resolve({
+            status: 200,
+            httpCache,
             text: Buffer.concat(chunks).toString("utf8"),
             contentType: res.headers["content-type"] ?? "",
             headers: Object.fromEntries(

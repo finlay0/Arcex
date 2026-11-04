@@ -195,6 +195,7 @@ export const sourceInput = z
     name: z.string().min(1).max(200),
     url: publicUrl,
     kind: z.enum(["public_page", "rss", "browser"]),
+    lane: z.enum(["http", "browser", "discovery"]).optional(),
     intervalHours: z.number().int().min(1).max(720).default(24),
     enabled: z.boolean().default(false),
   })

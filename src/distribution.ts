@@ -384,7 +384,7 @@ export async function registerWatch(
   await db.batch([
     db
       .prepare(
-        "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at) VALUES (?,?,?,?,'browser',24,1,?,?)",
+        "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane) VALUES (?,?,?,?,'browser',24,1,?,?,'browser')",
       )
       .bind(
         sourceId,
