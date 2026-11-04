@@ -272,6 +272,9 @@ export const openapi = {
         "Public hosted MCP (Streamable HTTP). No sign-in for search; blueprints use an API key",
       ),
     },
+    "/auth/providers": {
+      get: operation("Available sign-in providers and configuration readiness"),
+    },
     "/auth/{provider}/start": { get: operation("Start GitHub or X OAuth") },
     "/auth/{provider}/callback": { get: operation("OAuth callback") },
     "/auth/logout": { post: operation("Revoke current session", "user") },

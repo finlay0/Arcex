@@ -2,6 +2,7 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import type { AppEnv, Bindings } from "./types";
+import { googleIdentity, googleNonce, safeReturnTo } from "./google-identity";
 import { now, later } from "./types";
 import {
   fail,
@@ -112,6 +113,11 @@ async function createSession(db: D1Database, userId: string) {
   return token;
 }
 const providers = {
+  google: {
+    authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+    token: "https://oauth2.googleapis.com/token",
+    scope: "openid email profile",
+  },
   github: {
     authorize: "https://github.com/login/oauth/authorize",
     token: "https://github.com/login/oauth/access_token",
@@ -125,9 +131,17 @@ const providers = {
 } as const;
 function providerConfig(env: Bindings, provider: keyof typeof providers) {
   const clientId =
-    provider === "github" ? env.GITHUB_CLIENT_ID : env.X_CLIENT_ID;
+    provider === "github"
+      ? env.GITHUB_CLIENT_ID
+      : provider === "google"
+        ? env.GOOGLE_CLIENT_ID
+        : env.X_CLIENT_ID;
   const secret =
-    provider === "github" ? env.GITHUB_CLIENT_SECRET : env.X_CLIENT_SECRET;
+    provider === "github"
+      ? env.GITHUB_CLIENT_SECRET
+      : provider === "google"
+        ? env.GOOGLE_CLIENT_SECRET
+        : env.X_CLIENT_SECRET;
   if (!clientId || !secret) fail(503, `${provider} OAuth is not configured`);
   return {
     ...providers[provider],
@@ -137,8 +151,25 @@ function providerConfig(env: Bindings, provider: keyof typeof providers) {
   };
 }
 export const auth = new Hono<AppEnv>();
+auth.get("/providers", (c) =>
+  c.json({
+    providers: [
+      {
+        id: "google",
+        configured: !!(c.env.GOOGLE_CLIENT_ID && c.env.GOOGLE_CLIENT_SECRET),
+      },
+      {
+        id: "github",
+        configured: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
+      },
+      { id: "x", configured: !!(c.env.X_CLIENT_ID && c.env.X_CLIENT_SECRET) },
+    ],
+  }),
+);
 auth.get("/:provider/start", async (c) => {
-  const provider = z.enum(["github", "x"]).parse(c.req.param("provider"));
+  const provider = z
+    .enum(["github", "x", "google"])
+    .parse(c.req.param("provider"));
   const config = providerConfig(c.env, provider);
   await rateLimit(
     c.env.DB,
@@ -147,8 +178,16 @@ auth.get("/:provider/start", async (c) => {
   );
   const state = randomToken(),
     verifier = randomToken();
-  await c.env.DB.prepare("INSERT INTO oauth_states VALUES (?,?,?,?)")
-    .bind(await sha256(state), provider, verifier, later(600))
+  await c.env.DB.prepare(
+    "INSERT INTO oauth_states(state_hash,provider,verifier,expires_at,return_to) VALUES (?,?,?,?,?)",
+  )
+    .bind(
+      await sha256(state),
+      provider,
+      verifier,
+      later(600),
+      safeReturnTo(c.req.query("returnTo"), c.env.APP_ORIGIN),
+    )
     .run();
   setCookie(c, "arcex_oauth", state, {
     httpOnly: true,
@@ -171,6 +210,8 @@ auth.get("/:provider/start", async (c) => {
     .replaceAll("/", "_")
     .replaceAll("=", "");
   const url = new URL(config.authorize);
+  if (provider === "google")
+    url.searchParams.set("nonce", await googleNonce(verifier));
   for (const [key, value] of Object.entries({
     client_id: config.clientId,
     redirect_uri: config.callback,
@@ -184,7 +225,9 @@ auth.get("/:provider/start", async (c) => {
   return c.redirect(url.toString());
 });
 auth.get("/:provider/callback", async (c) => {
-  const provider = z.enum(["github", "x"]).parse(c.req.param("provider"));
+  const provider = z
+    .enum(["github", "x", "google"])
+    .parse(c.req.param("provider"));
   const config = providerConfig(c.env, provider),
     state = c.req.query("state"),
     code = c.req.query("code");
@@ -199,10 +242,10 @@ auth.get("/:provider/callback", async (c) => {
   )
     fail(400, "Invalid OAuth state");
   const record = await c.env.DB.prepare(
-    "DELETE FROM oauth_states WHERE state_hash=? AND provider=? AND expires_at>? RETURNING verifier",
+    "DELETE FROM oauth_states WHERE state_hash=? AND provider=? AND expires_at>? RETURNING verifier,return_to",
   )
     .bind(await sha256(state), provider, now())
-    .first<{ verifier: string }>();
+    .first<{ verifier: string; return_to: string }>();
   deleteCookie(c, "arcex_oauth", { path: "/auth" });
   if (!record) fail(400, "OAuth state expired or already used");
   const body = new URLSearchParams({
@@ -216,7 +259,7 @@ auth.get("/:provider/callback", async (c) => {
     "content-type": "application/x-www-form-urlencoded",
     accept: "application/json",
   };
-  if (provider === "github") body.set("client_secret", config.secret);
+  if (provider !== "x") body.set("client_secret", config.secret);
   else
     headers.authorization =
       "Basic " +
@@ -231,77 +274,94 @@ auth.get("/:provider/callback", async (c) => {
   });
   if (!tokenResponse.ok) fail(502, "OAuth token exchange failed");
   const tokens = z
-    .object({ access_token: z.string() })
+    .object({
+      access_token: z.string(),
+      id_token: z.string().max(20000).optional(),
+    })
     .safeParse(await tokenResponse.json());
   if (!tokens.success) fail(502, "Provider did not return an access token");
-  const profileResponse = await fetch(
-    provider === "github"
-      ? "https://api.github.com/user"
-      : "https://api.x.com/2/users/me?user.fields=profile_image_url,name,username",
-    {
-      headers: {
-        authorization: `Bearer ${tokens.data.access_token}`,
-        "user-agent": "Arcex/0.1",
-        accept: "application/json",
-      },
-      signal: AbortSignal.timeout(15000),
-    },
-  );
-  if (!profileResponse.ok) fail(502, "OAuth profile fetch failed");
-  const raw: unknown = await profileResponse.json();
   let providerId: string,
     handle: string,
     name: string,
     email: string | null = null,
     avatar: string | null = null;
-  if (provider === "github") {
-    const p = z
-      .object({
-        id: z.number(),
-        login: z.string(),
-        name: z.string().nullable(),
-        avatar_url: z.string().nullable(),
-        email: z.string().nullable(),
-      })
-      .parse(raw);
-    providerId = String(p.id);
-    handle = p.login;
-    name = p.name ?? p.login;
-    avatar = p.avatar_url;
-    const emailsResponse = await fetch("https://api.github.com/user/emails", {
-      headers: {
-        authorization: `Bearer ${tokens.data.access_token}`,
-        "user-agent": "Arcex/0.1",
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (emailsResponse.ok) {
-      const emails = z
-        .array(
-          z.object({
-            email: z.string(),
-            verified: z.boolean(),
-            primary: z.boolean(),
-          }),
-        )
-        .parse(await emailsResponse.json());
-      email = emails.find((e) => e.verified && e.primary)?.email ?? null;
-    }
+  if (provider === "google") {
+    if (!tokens.data.id_token) fail(502, "Google did not return an ID token");
+    const profile = await googleIdentity(
+      tokens.data.id_token,
+      config.clientId,
+      record.verifier,
+    );
+    providerId = profile.sub;
+    handle = "google_" + profile.sub.slice(-12);
+    name = profile.name ?? "Arcex member";
+    email = profile.email;
+    avatar = profile.picture ?? null;
   } else {
-    const p = z
-      .object({
-        data: z.object({
-          id: z.string(),
-          username: z.string(),
-          name: z.string(),
-          profile_image_url: z.string().optional(),
-        }),
-      })
-      .parse(raw).data;
-    providerId = p.id;
-    handle = p.username;
-    name = p.name;
-    avatar = p.profile_image_url ?? null;
+    const profileResponse = await fetch(
+      provider === "github"
+        ? "https://api.github.com/user"
+        : "https://api.x.com/2/users/me?user.fields=profile_image_url,name,username",
+      {
+        headers: {
+          authorization: `Bearer ${tokens.data.access_token}`,
+          "user-agent": "Arcex/0.1",
+          accept: "application/json",
+        },
+        signal: AbortSignal.timeout(15000),
+      },
+    );
+    if (!profileResponse.ok) fail(502, "OAuth profile fetch failed");
+    const raw: unknown = await profileResponse.json();
+    if (provider === "github") {
+      const p = z
+        .object({
+          id: z.number(),
+          login: z.string(),
+          name: z.string().nullable(),
+          avatar_url: z.string().nullable(),
+          email: z.string().nullable(),
+        })
+        .parse(raw);
+      providerId = String(p.id);
+      handle = p.login;
+      name = p.name ?? p.login;
+      avatar = p.avatar_url;
+      const emailsResponse = await fetch("https://api.github.com/user/emails", {
+        headers: {
+          authorization: `Bearer ${tokens.data.access_token}`,
+          "user-agent": "Arcex/0.1",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (emailsResponse.ok) {
+        const emails = z
+          .array(
+            z.object({
+              email: z.string(),
+              verified: z.boolean(),
+              primary: z.boolean(),
+            }),
+          )
+          .parse(await emailsResponse.json());
+        email = emails.find((e) => e.verified && e.primary)?.email ?? null;
+      }
+    } else {
+      const p = z
+        .object({
+          data: z.object({
+            id: z.string(),
+            username: z.string(),
+            name: z.string(),
+            profile_image_url: z.string().optional(),
+          }),
+        })
+        .parse(raw).data;
+      providerId = p.id;
+      handle = p.username;
+      name = p.name;
+      avatar = p.profile_image_url ?? null;
+    }
   }
   const existing = await c.env.DB.prepare(
     "SELECT user_id FROM identities WHERE provider=? AND provider_id=?",
@@ -326,7 +386,12 @@ auth.get("/:provider/callback", async (c) => {
     path: "/",
     maxAge: 86400 * 14,
   });
-  return c.redirect(c.env.APP_ORIGIN);
+  return c.redirect(
+    new URL(
+      safeReturnTo(record.return_to, c.env.APP_ORIGIN),
+      c.env.APP_ORIGIN,
+    ).toString(),
+  );
 });
 auth.post("/dev/session", async (c) => {
   if (

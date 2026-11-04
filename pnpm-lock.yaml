@@ -23,6 +23,9 @@ importers:
       hono:
         specifier: 4.13.16
         version: 4.13.16
+      jose:
+        specifier: 6.2.15
+        version: 6.2.15
       stripe:
         specifier: 23.1.0
         version: 23.1.0(@types/node@26.6.6)
