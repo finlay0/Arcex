@@ -12,6 +12,7 @@ export type Bindings = {
   GITHUB_CLIENT_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  GOOGLE_AUTH_ORIGIN?: string;
   X_CLIENT_ID?: string;
   X_CLIENT_SECRET?: string;
   STRIPE_SECRET_KEY?: string;

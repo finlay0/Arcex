@@ -6,6 +6,8 @@ GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
+# Optional same-site Google sign-in origin; the private MCP origin can stay unchanged.
+GOOGLE_AUTH_ORIGIN=
 X_CLIENT_ID=
 X_CLIENT_SECRET=
 STRIPE_SECRET_KEY=

@@ -35,10 +35,12 @@
     "production": {
       "name": "arcex-api",
       "workers_dev": true,
+      "routes": [{ "pattern": "api.arcex.dev", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "production",
         "APP_ORIGIN": "https://arcex.dev",
         "API_ORIGIN": "https://arcex-api.peak-era-avern.workers.dev",
+        "GOOGLE_AUTH_ORIGIN": "https://api.arcex.dev",
         "ENABLE_DEV_AUTH": "false",
         "COLLECTION_ENABLED": "false",
         "MCP_OWNER_GITHUB_ID": "207296386",

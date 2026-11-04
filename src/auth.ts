@@ -174,7 +174,7 @@ function providerConfig(env: Bindings, provider: keyof typeof providers) {
     ...providers[provider],
     clientId,
     secret,
-    callback: `${env.API_ORIGIN}/auth/${provider}/callback`,
+    callback: `${provider === "google" ? (env.GOOGLE_AUTH_ORIGIN ?? env.API_ORIGIN) : env.API_ORIGIN}/auth/${provider}/callback`,
   };
 }
 export const auth = new Hono<AppEnv>();
@@ -198,6 +198,17 @@ auth.get("/:provider/start", async (c) => {
     .enum(["github", "x", "google"])
     .parse(c.req.param("provider"));
   const config = providerConfig(c.env, provider);
+  // Bind the OAuth state cookie on the callback's own origin before starting consent.
+  if (
+    provider === "google" &&
+    c.env.GOOGLE_AUTH_ORIGIN &&
+    new URL(c.req.url).origin !== c.env.GOOGLE_AUTH_ORIGIN
+  ) {
+    const destination = new URL(c.req.url);
+    return c.redirect(
+      c.env.GOOGLE_AUTH_ORIGIN + destination.pathname + destination.search,
+    );
+  }
   await rateLimit(
     c.env.DB,
     "oauth:" + (c.req.header("cf-connecting-ip") ?? "local"),

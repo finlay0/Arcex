@@ -51,6 +51,32 @@ test("Google sign-in verifies signature, audience, nonce and state; preserves id
       GOOGLE_CLIENT_SECRET: "fixture-secret",
     } as Bindings;
     const origin = env.API_ORIGIN;
+    const sameSiteEnv = { ...env, GOOGLE_AUTH_ORIGIN: "https://api.arcex.dev" };
+    const move = await app.request(
+      origin + "/auth/google/start?returnTo=%2Fapp",
+      {},
+      sameSiteEnv,
+    );
+    assert.equal(
+      move.headers.get("location"),
+      "https://api.arcex.dev/auth/google/start?returnTo=%2Fapp",
+    );
+    assert.equal(
+      move.headers.get("set-cookie"),
+      null,
+      "State must be created on the callback's origin",
+    );
+    const sameSiteStart = await app.request(
+      "https://api.arcex.dev/auth/google/start",
+      {},
+      sameSiteEnv,
+    );
+    assert.equal(
+      new URL(sameSiteStart.headers.get("location")!).searchParams.get(
+        "redirect_uri",
+      ),
+      "https://api.arcex.dev/auth/google/callback",
+    );
     const start = await app.request(
       origin + "/auth/google/start?returnTo=%2Fapp%2Ffixture%3Fstep%3Dpaywall",
       {},
