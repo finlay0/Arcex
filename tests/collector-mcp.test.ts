@@ -131,6 +131,56 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
         (created.content as { text: string }[])[0].text,
       ) as { id: string; status: string };
       assert.equal(parsed.status, "draft");
+      const lead = {
+        sourceUrl: "https://rejected-fixture.com/",
+        discoverySource: "https://directory-fixture.com/",
+        proposedName: "Rejected fixture",
+        outcome: "out_of_scope",
+        rationale: "A narrow unrelated demo, not an eligible product.",
+        nextCheck: "Revisit only if the product's scope changes.",
+        observedAt: "2026-01-01T00:00:00.000Z",
+        contentHash: "b".repeat(64),
+        primaryMetadata: {
+          title: "An unrelated demo",
+          description: "Unrelated source metadata",
+          headings: [],
+        },
+        model: "Fixture qualifier",
+        policyVersion: "fixture.1",
+      };
+      const writeLead = (records: unknown[], token?: string) =>
+        app.request(
+          env.API_ORIGIN + "/api/v1/admin/research/leads",
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              ...(token ? { authorization: "Bearer " + token } : {}),
+            },
+            body: JSON.stringify({ records }),
+          },
+          env,
+        );
+      assert.equal((await writeLead([lead])).status, 401);
+      assert.equal(
+        (await writeLead(Array(26).fill(lead), env.ADMIN_TOKEN)).status,
+        422,
+      );
+      assert.equal((await writeLead([lead], env.ADMIN_TOKEN)).status, 201);
+      const lookup = await client.callTool({
+        name: "lookup_discovery_leads",
+        arguments: { urls: [lead.sourceUrl, candidate.product.url] },
+      });
+      assert.notEqual(lookup.isError, true);
+      const history = JSON.parse(
+        (lookup.content as { text: string }[])[0].text,
+      );
+      assert.equal(history.leads[0].outcome, "out_of_scope");
+      assert.equal(history.existingProducts[0].id, parsed.id);
+      assert.ok(
+        !tools.tools.some((t) => t.name === "save_discovery_lead"),
+        "Collector discovery lookup must stay read-only",
+      );
       const reference = await client.callTool({
         name: "register_candidate",
         arguments: {

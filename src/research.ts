@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { productInput, publicUrl } from "./contracts";
+import { productInput, publicUrl, timestamp } from "./contracts";
 import { fail, audit } from "./lib";
 import { now } from "./types";
 import { Hono } from "hono";
@@ -31,6 +31,73 @@ export const referenceDomains = new Set([
   "google.com",
   "microsoft.com",
 ]);
+export const discoveryLookupInput = z
+  .object({ urls: z.array(publicUrl).min(1).max(10) })
+  .strict();
+export async function lookupDiscoveryLeads(
+  db: D1Database,
+  input: z.infer<typeof discoveryLookupInput>,
+) {
+  const urls = [
+    ...new Set(
+      input.urls.map((url) => {
+        const parsed = new URL(url);
+        parsed.hash = "";
+        return parsed.toString();
+      }),
+    ),
+  ];
+  const domains = [
+    ...new Set(urls.map((url) => new URL(url).hostname.replace(/^www\./, ""))),
+  ];
+  const placeholders = (items: string[]) => items.map(() => "?").join(",");
+  const [leads, products] = await db.batch([
+    db
+      .prepare(
+        `SELECT source_url,domain,proposed_name,outcome,rationale,next_check,observed_at,model,policy_version FROM discovery_leads WHERE source_url IN (${placeholders(urls)}) OR domain IN (${placeholders(domains)}) ORDER BY updated_at DESC,source_url LIMIT 31`,
+      )
+      .bind(...urls, ...domains),
+    db
+      .prepare(
+        `SELECT p.id,p.name,p.domain,p.status,r.status research_status FROM products p LEFT JOIN research_profiles r ON r.product_id=p.id WHERE p.domain IN (${placeholders(domains)})`,
+      )
+      .bind(...domains),
+  ]);
+  return {
+    leads: leads.results.slice(0, 30),
+    truncated: leads.results.length > 30,
+    existingProducts: products.results,
+    scope:
+      "Previous private discovery outcomes, including rejected or unclear leads. Read existing product research before revisiting. Absence does not establish a new or eligible product.",
+  };
+}
+const discoveryLeadInput = z
+  .object({
+    sourceUrl: publicUrl,
+    discoverySource: publicUrl,
+    proposedName: z.string().min(1).max(120),
+    outcome: z.enum([
+      "candidate",
+      "reference",
+      "out_of_scope",
+      "duplicate_or_feature",
+      "unclear",
+    ]),
+    rationale: z.string().min(1).max(2000),
+    nextCheck: z.string().min(1).max(2000),
+    observedAt: timestamp,
+    contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+    primaryMetadata: z
+      .object({
+        title: z.string().max(2000),
+        description: z.string().max(4000),
+        headings: z.array(z.string().max(2000)).max(20),
+      })
+      .strict(),
+    model: z.string().min(1).max(100),
+    policyVersion: z.string().min(1).max(100),
+  })
+  .strict();
 export const candidateInput = z
   .object({
     product: productInput,
@@ -259,6 +326,46 @@ researchAdmin.put("/research/candidates/:id/status", async (c) => {
 researchAdmin.post("/research/assessment", async (c) =>
   c.json(await saveAssessment(c.env.DB, await parse(c, assessmentInput)), 201),
 );
+researchAdmin.post("/research/leads/lookup", async (c) =>
+  c.json(
+    await lookupDiscoveryLeads(c.env.DB, await parse(c, discoveryLookupInput)),
+  ),
+);
+researchAdmin.post("/research/leads", async (c) => {
+  const { records } = await parse(
+    c,
+    z.object({ records: z.array(discoveryLeadInput).min(1).max(25) }).strict(),
+  );
+  const time = now();
+  const results = await c.env.DB.batch(
+    records.map((row) => {
+      const url = new URL(row.sourceUrl);
+      url.hash = "";
+      return c.env.DB.prepare(
+        `INSERT INTO discovery_leads(source_url,domain,discovery_source,proposed_name,outcome,rationale,next_check,observed_at,content_hash,primary_metadata,model,policy_version,first_recorded_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(source_url) DO UPDATE SET discovery_source=excluded.discovery_source,proposed_name=excluded.proposed_name,outcome=excluded.outcome,rationale=excluded.rationale,next_check=excluded.next_check,observed_at=excluded.observed_at,content_hash=excluded.content_hash,primary_metadata=excluded.primary_metadata,model=excluded.model,policy_version=excluded.policy_version,updated_at=excluded.updated_at WHERE excluded.observed_at>=discovery_leads.observed_at`,
+      ).bind(
+        url.toString(),
+        url.hostname.replace(/^www\./, ""),
+        row.discoverySource,
+        row.proposedName,
+        row.outcome,
+        row.rationale,
+        row.nextCheck,
+        row.observedAt,
+        row.contentHash,
+        JSON.stringify(row.primaryMetadata),
+        row.model,
+        row.policyVersion,
+        time,
+        time,
+      );
+    }),
+  );
+  const saved = results.reduce((sum, row) => sum + row.meta.changes, 0);
+  await audit(c.env.DB, "admin", "discovery.leads", "batch", { saved });
+  return c.json({ saved, submitted: records.length }, 201);
+});
 researchAdmin.post("/research/context", async (c) =>
   c.json(await researchContext(c.env.DB, await parse(c, researchContextInput))),
 );

@@ -420,6 +420,18 @@ export const openapi = {
       get: operation("All product drafts", "admin"),
       post: operation("Create draft product", "admin", "ProductInput"),
     },
+    "/api/v1/admin/research/leads": {
+      post: operation(
+        "Persist up to25 primary-metadata discovery outcomes, including rejected/unclear leads; operator only, no product publication",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/research/leads/lookup": {
+      post: operation(
+        "Look up at most10 source URLs and their domains against previous outcomes and existing products",
+        "admin",
+      ),
+    },
     "/api/v1/admin/products/{id}": {
       patch: operation("Update product", "admin", "ProductInput"),
     },

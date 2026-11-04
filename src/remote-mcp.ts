@@ -5,7 +5,13 @@ import { z } from "zod";
 import type { Bindings } from "./types";
 import { app } from "./index";
 import { audit, fail, rateLimit } from "./lib";
-import { candidateInput, registerCandidate, assessmentInput } from "./research";
+import {
+  candidateInput,
+  registerCandidate,
+  assessmentInput,
+  discoveryLookupInput,
+  lookupDiscoveryLeads,
+} from "./research";
 import { researchContextInput, checkpointInput } from "./research-context";
 import { fileStore } from "./file-store";
 import {
@@ -108,6 +114,15 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     },
     async (input) =>
       run(() => internal("POST", "/api/v1/admin/research/context", input)),
+  );
+  server.registerTool(
+    "lookup_discovery_leads",
+    {
+      description:
+        "Check up to ten prospective source URLs against prior private discovery outcomes and existing products BEFORE rediscovering them. Includes rejected/unclear leads and their next action. A missing record is not proof of eligibility. Does not authorize browsing or write data.",
+      inputSchema: discoveryLookupInput,
+    },
+    async (input) => run(() => lookupDiscoveryLeads(env.DB, input)),
   );
   server.registerTool(
     "read_product_research",
