@@ -428,6 +428,18 @@ export const openapi = {
     "/api/v1/admin/sources/{id}": {
       patch: operation("Enable source or change interval", "admin"),
     },
+    "/api/v1/admin/collection/status": {
+      get: operation(
+        "Collection allowances, backlog and source freshness",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/collection/policy/{lane}": {
+      patch: operation(
+        "Set daily claim and concurrency ceilings; zero pauses a lane",
+        "admin",
+      ),
+    },
     "/api/v1/admin/jobs": {
       get: operation("Job status and failure reasons", "admin"),
     },
@@ -445,16 +457,25 @@ export const openapi = {
       delete: operation("Clear reviewed billing hold", "admin"),
     },
     "/api/v1/collector/jobs/claim": {
-      post: operation("Atomically lease one supported job", "collector"),
+      post: operation(
+        "Lease one eligible job and atomically debit its lane allowance",
+        "collector",
+      ),
     },
     "/api/v1/collector/jobs/{id}/heartbeat": {
       post: operation("Extend current lease", "collector"),
     },
     "/api/v1/collector/jobs/{id}/complete": {
-      post: operation("Commit evidence drafts and job result", "collector"),
+      post: operation(
+        "Commit observed evidence or an unchanged HTTP fingerprint and source freshness",
+        "collector",
+      ),
     },
     "/api/v1/collector/jobs/{id}/fail": {
-      post: operation("Record failure and schedule bounded retry", "collector"),
+      post: operation(
+        "Record failure, bounded retry and optional blocked-source disable",
+        "collector",
+      ),
     },
     "/api/v1/media/upload": {
       post: operation(
