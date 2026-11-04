@@ -11,4 +11,5 @@ This repository now contains the arcex.dev platform. The retired T3 desktop fork
 - Never commit secrets, browser profiles, auth state, private DOM captures, or personally identifying screenshots.
 - Preserve ownership, publication and Pro access checks across API and MCP. Use parameterized SQL and bounded input.
 - Validate with pnpm check and pnpm smoke against an isolated local database. Do not test billing against live accounts.
+- Keep checks and tests lean and proportional to actual risk. Do not add tests that merely restate implementation, duplicate existing coverage, or inflate counts. Preserve vital access, credential, publication, billing and cost protections. Once checks pass, repeat only for a relevant change or unresolved issue.
 - Do not create a separate platform repository or revive the T3 fork.

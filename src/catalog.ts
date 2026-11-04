@@ -92,6 +92,18 @@ catalog.get("/radar", async (c) => {
     clauses.push("p.monetization=?");
     values.push(monetization.parse(c.req.query("monetization")));
   }
+  if (c.req.query("minObservedAdDays") !== undefined) {
+    const days = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(3650)
+      .parse(c.req.query("minObservedAdDays"));
+    clauses.push(
+      "EXISTS (SELECT 1 FROM distribution_signals ad JOIN evidence ae ON ae.id=ad.evidence_id WHERE ad.product_id=p.id AND ad.kind='ad_observed' AND ae.status='approved' AND json_extract(ad.detail,'$.activity')='active' GROUP BY ad.external_id HAVING count(DISTINCT substr(ad.observed_at,1,10))>=?)",
+    );
+    values.push(days);
+  }
   if (c.req.query("q")) {
     const q = z.string().max(120).parse(c.req.query("q"));
     clauses.push(

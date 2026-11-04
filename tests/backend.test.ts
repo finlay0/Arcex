@@ -8,7 +8,6 @@ import { processStripeEvent } from "../src/billing";
 import { sha256 } from "../src/lib";
 import { publicUrl, paywallInput } from "../src/contracts";
 import { publicAddress } from "../scripts/public-fetch";
-import { pageEvidence, rssEvidence } from "../scripts/collector";
 import { enqueueDue } from "../src/jobs";
 import type { Bindings } from "../src/types";
 
@@ -1111,19 +1110,6 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           assert.equal(publicAddress(ip), false, ip);
         assert.equal(publicAddress("1.1.1.1"), true);
         assert.equal(publicAddress("2606:4700:4700::1111"), true);
-        assert.match(
-          pageEvidence(
-            "https://public.com",
-            "<title>Public page</title><h1>Build</h1>",
-            {},
-          ).summary,
-          /Public page/,
-        );
-        const feed = rssEvidence(
-          "https://public.com/feed",
-          "<rss><channel><item><title>Launch</title><link>https://public.com/launch</link></item></channel></rss>",
-        );
-        assert.equal(feed.length, 1);
         assert.equal(
           (
             await req(

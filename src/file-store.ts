@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { StorageClient } from "@supabase/storage-js";
 import type { Bindings } from "./types";
 import { fail } from "./lib";
 
@@ -15,13 +15,12 @@ export function storageClient(env: Bindings) {
     url.password
   )
     fail(503, "Invalid storage origin configuration");
-  return createClient(url.origin, env.SUPABASE_STORAGE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+  return {
+    storage: new StorageClient(url.origin + "/storage/v1", {
+      apikey: env.SUPABASE_STORAGE_KEY,
+      Authorization: "Bearer " + env.SUPABASE_STORAGE_KEY,
+    }),
+  };
 }
 export function fileStore(env: Bindings) {
   if (env.MEDIA)

@@ -593,10 +593,23 @@ export async function distributionStatus(
           : null,
     };
   });
+  const cutoff = new Date(Date.now() - 60 * 86400000).toISOString();
+  const creatorCoverage = await db
+    .prepare(
+      `SELECT count(DISTINCT s.external_id) observed_mentions, count(DISTINCT CASE WHEN json_extract(s.detail,'$.placement')='sponsored' THEN s.external_id END) disclosed_sponsored_items, count(DISTINCT CASE WHEN json_extract(s.detail,'$.placement')='sponsored' THEN COALESCE(json_extract(s.detail,'$.videoMetadata.snippet.channelId'),json_extract(s.detail,'$.creator')) END) disclosed_sponsored_creators FROM distribution_signals s JOIN evidence e ON e.id=s.evidence_id WHERE s.kind='creator_mention' AND s.observed_at>=? AND (? IS NULL OR s.product_id=?) ${approvedOnly ? "AND e.status='approved'" : ""}`,
+    )
+    .bind(cutoff, productId ?? null, productId ?? null)
+    .first();
   return {
     watches: approvedOnly ? undefined : watches.results,
     ads: ads.results,
     launchVelocity,
+    creatorCoverage: {
+      ...creatorCoverage,
+      windowDays: 60,
+      windowUses:
+        "observation time; not video publication time or proof of an ongoing contract",
+    },
     scope:
       "Distinct observed UTC days per ad, not continuous active days. Search failures and absence are not inactivity. No spend or revenue inference.",
   };

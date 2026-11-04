@@ -15,6 +15,8 @@ import {
   shortFormInput,
 } from "../src/distribution";
 import { insertEvidence } from "../src/catalog";
+import { app } from "../src/index";
+import type { Bindings } from "../src/types";
 
 test("distribution tracking separates per-ad sightings, blocked searches and disclosed creator links", async () => {
   const mf = new Miniflare(
@@ -145,6 +147,20 @@ test("distribution tracking separates per-ad sightings, blocked searches and dis
       (await distributionStatus(db, "p", true)).ads[0].last_reported_state,
       "active",
     );
+    await db
+      .prepare("UPDATE products SET status='published' WHERE id='p'")
+      .run();
+    const radar = async (days: number) => {
+      const response = await app.request(
+        "https://api-fixture.com/api/v1/radar?minObservedAdDays=" + days,
+        {},
+        { DB: db } as Bindings,
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()) as { items: unknown[] };
+    };
+    assert.equal((await radar(2)).items.length, 1);
+    assert.equal((await radar(3)).items.length, 0);
     const creator = {
       productId: "p",
       sourceUrl: "https://www.youtube.com/watch?v=abcdefghijk",

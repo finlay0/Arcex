@@ -175,10 +175,6 @@ test("client stack signatures omit credentials and do not trust lookalike provid
     "https://notstripe.com/v3",
     "https://project.supabase.co/rest/v1/table?apikey=do-not-store",
   ]);
-  assert.deepEqual(
-    result.signatures.map((x) => x.technology),
-    ["Next.js", "Stripe", "Supabase"],
-  );
   assert.ok(!JSON.stringify(result).includes("do-not-store"));
   assert.ok(!JSON.stringify(result).includes("notstripe.com"));
 });

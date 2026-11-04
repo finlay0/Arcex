@@ -241,7 +241,7 @@ export const openapi = {
     "/auth/logout": { post: operation("Revoke current session", "user") },
     "/api/v1/radar": {
       get: operation(
-        "Published products; q, category, monetization, limit, offset",
+        "Published products; q, category, monetization, minObservedAdDays, limit, offset. Ad days are distinct approved observed dates per ad, not continuous delivery.",
       ),
     },
     "/api/v1/vault/{slug}": {

@@ -32,7 +32,7 @@
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.4",
     "@modelcontextprotocol/sdk": "1.32.2",
-    "@supabase/supabase-js": "2.118.0",
+    "@supabase/storage-js": "2.118.0",
     "fast-xml-parser": "5.11.2",
     "hono": "4.13.16",
     "stripe": "23.1.0",

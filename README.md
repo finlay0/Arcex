@@ -25,6 +25,8 @@ The API runs on port 8791. In another terminal, run `pnpm smoke`. Import an expl
 
 `pnpm check` runs typechecking, backend/storage/OAuth/MCP tests and both Worker/MCP builds. Tests use isolated in-memory storage and provider fixtures; they do not contact live billing or OAuth providers.
 
+Verification stays focused on access, evidence/publication, billing, provider failures and cost limits. Avoid duplicate implementation-shaped assertions or repeated full checks without a relevant change. The storage integration uses the standalone Storage SDK, rather than loading unused Supabase Auth, Realtime and database clients.
+
 ## Data and execution
 
 Cloudflare Workers hosts the API; D1 stores relational records and the durable collection queue. Research runs in [ChatGPT Work](https://chatgpt.com/c/6ae98035-fd98-83ea-86ec-e4c9f4937b0a), using GPT-6.1 Terra Medium and its cloud browser/computer. Local Terra browser agents configure connections only. The upfront batch comes first; the native Work daily 09:00 America/Halifax schedule is paused. The superseded local Codex automation is also paused and production `COLLECTION_ENABLED=false` prevents automatic cron enqueueing.
