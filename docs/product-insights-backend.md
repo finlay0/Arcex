@@ -8,4 +8,4 @@ Metrics are cached in resumable pages of 25 every ten minutes. At 10,000 publish
 
 Watch lists support three free products and paginated unlimited Insider products. Changes require approved evidence and explicit publication. Alert preferences are stored, but API responses explicitly report `deliveryEnabled: false` and `deliveryStatus: not_configured` until a delivery service is integrated. Saving a preference does not send email. Users can disable the preference after losing Insider access.
 
-The Google backend sign-in flow has passed a real consent/session test. Frontend sign-in also needs an API/auth origin on the same site as arcex.dev. The current workers.dev callback remains valid while api.arcex.dev and its provider redirects are being prepared.
+The Google backend sign-in flow has passed a real consent/session test on api.arcex.dev. The frontend should use that API base with credentials included. The existing workers.dev private Collector OAuth origin remains intact; GitHub's separate same-site web callback migration is still pending.
