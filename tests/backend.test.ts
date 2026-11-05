@@ -1106,6 +1106,19 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           );
         assert.equal((await uploadThumbnail(thumbnail, collector)).status, 401);
         assert.equal((await uploadThumbnail(thumbnail)).status, 201);
+        assert.deepEqual(
+          Buffer.from(
+            await (
+              await req(
+                "GET",
+                "/api/v1/media/" + asset.id + "/review?variant=thumbnail",
+                undefined,
+                admin,
+              )
+            ).arrayBuffer(),
+          ),
+          thumbnail,
+        );
         assert.equal(
           (await req("GET", "/api/v1/media/" + asset.id + "/thumbnail")).status,
           404,

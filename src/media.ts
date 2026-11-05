@@ -128,17 +128,27 @@ media.get("/:id", async (c) => {
 });
 
 media.get("/:id/review", requireAdmin, async (c) => {
+  const variant = z
+    .enum(["original", "thumbnail"])
+    .default("original")
+    .parse(c.req.query("variant"));
   const row = await c.env.DB.prepare(
-    "SELECT object_key,content_type FROM assets WHERE id=?",
+    "SELECT object_key,content_type,thumbnail_key FROM assets WHERE id=?",
   )
     .bind(c.req.param("id"))
-    .first<{ object_key: string; content_type: string }>();
+    .first<{
+      object_key: string;
+      content_type: string;
+      thumbnail_key: string | null;
+    }>();
   if (!row) fail(404, "Asset not found");
-  const body = await fileStore(c.env).get(row.object_key);
+  const key = variant === "thumbnail" ? row.thumbnail_key : row.object_key;
+  if (!key) fail(404, "Thumbnail not found");
+  const body = await fileStore(c.env).get(key);
   if (!body) fail(404, "Asset not found");
   return new Response(body, {
     headers: {
-      "content-type": row.content_type,
+      "content-type": variant === "thumbnail" ? "image/webp" : row.content_type,
       "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
     },

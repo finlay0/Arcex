@@ -6,6 +6,8 @@ The owner runs `pnpm thumbnails 10 PRODUCT_ID` using the existing protected admi
 
 Thumbnail generation does not approve evidence, captures or products. Public `GET /api/v1/media/:id/thumbnail` requires the parent asset and evidence to be approved and its product published with Full Screens coverage. Retraction is checked on every request; responses are not cached. The full original keeps its separate signed access route. A small preview is a product affordance, not a guarantee against copying or OCR.
 
+The owner can review the private derivative through the existing `GET /api/v1/media/:id/review?variant=thumbnail` route with admin authentication. The default review variant remains the original image. This avoids copying privileged storage credentials into local processing tools.
+
 Radar supplies `thumbnail_asset_id` and `thumbnail_url` only when an eligible generated derivative exists, preferring a paywall step where observed. Otherwise both remain null. Signals Only products do not acquire fabricated screenshot thumbnails. The frontend owns rendering.
 
 Run generation during the owner review/import process. The daily Work collector remains draft-only; neither it nor a public API key receives new admin credentials. No thumbnail service or recurring job is provisioned.
