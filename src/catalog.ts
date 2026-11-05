@@ -25,6 +25,7 @@ import {
   signedLinkParameters,
   signedLinkValid,
   unlockApp,
+  rememberProduct,
 } from "./insights";
 import {
   productInput,
@@ -380,6 +381,8 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
     ...steps.results.map((s) => s.evidence_id),
     ...results[1].results.map((r) => r.evidence_id),
   ]);
+  if (actor?.via === "session")
+    await rememberProduct(db, actor.userId, product.id);
   return c.json({
     ...shared,
     signals: results[0].results.map((r) => ({

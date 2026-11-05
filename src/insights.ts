@@ -16,6 +16,7 @@ export {
 
 export const DAILY_APP_LIMIT = 10;
 export const FREE_WATCH_LIMIT = 3;
+export const HISTORY_LIMIT = 100;
 const OWN_PRODUCT_LIMIT = 10;
 
 const DAY_MS = 86_400_000;
@@ -43,6 +44,26 @@ export async function appUsage(db: D1Database, userId: string) {
     limit: DAILY_APP_LIMIT,
     resetsAt: nextUtcMidnight(),
   };
+}
+
+/** Recent successful browser-session opens, independent of the daily access allowance. */
+export async function rememberProduct(
+  db: D1Database,
+  userId: string,
+  productId: string,
+) {
+  await db.batch([
+    db
+      .prepare(
+        "INSERT INTO product_view_history(user_id,product_id,last_opened_at) VALUES (?,?,?) ON CONFLICT(user_id,product_id) DO UPDATE SET last_opened_at=excluded.last_opened_at",
+      )
+      .bind(userId, productId, now()),
+    db
+      .prepare(
+        "DELETE FROM product_view_history WHERE user_id=? AND product_id NOT IN (SELECT product_id FROM product_view_history WHERE user_id=? ORDER BY last_opened_at DESC,product_id LIMIT ?)",
+      )
+      .bind(userId, userId, HISTORY_LIMIT),
+  ]);
 }
 
 /** Spends one of today's apps. Reopening an app is free. Returns false at the limit. */
@@ -341,6 +362,42 @@ insights.get("/me/usage", requireUser, requireSession, async (c) => {
       : { insider: false, ...(await appUsage(c.env.DB, actor.userId)) },
   );
 });
+
+insights.get("/me/history", requireUser, requireSession, async (c) => {
+  const { limit, offset } = page(c);
+  const result = await c.env.DB.prepare(
+    `SELECT p.id,p.slug,p.name,p.description,p.category,p.monetization,p.coverage_level,h.last_opened_at
+     FROM product_view_history h JOIN products p ON p.id=h.product_id
+     WHERE h.user_id=? AND p.status='published' ORDER BY h.last_opened_at DESC,h.product_id LIMIT ? OFFSET ?`,
+  )
+    .bind(c.get("actor").userId, limit, offset)
+    .all();
+  return c.json({
+    items: result.results,
+    retainedLimit: HISTORY_LIMIT,
+    limit,
+    offset,
+  });
+});
+insights.delete("/me/history", requireUser, requireSession, async (c) => {
+  await c.env.DB.prepare("DELETE FROM product_view_history WHERE user_id=?")
+    .bind(c.get("actor").userId)
+    .run();
+  return c.json({ ok: true });
+});
+insights.delete(
+  "/me/history/:productId",
+  requireUser,
+  requireSession,
+  async (c) => {
+    await c.env.DB.prepare(
+      "DELETE FROM product_view_history WHERE user_id=? AND product_id=?",
+    )
+      .bind(c.get("actor").userId, c.req.param("productId"))
+      .run();
+    return c.json({ ok: true });
+  },
+);
 
 insights.get("/me/watches", requireUser, requireSession, async (c) => {
   const actor = c.get("actor");

@@ -327,6 +327,28 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     );
     await json(await request("GET", "/api/v1/vault/captured", undefined, u1));
     await json(await request("GET", "/api/v1/vault/signals", undefined, u1));
+    const openedHistory = async (credential = u1) =>
+      (
+        await json<{ items: { id: string }[] }>(
+          await request("GET", "/api/v1/me/history", undefined, credential),
+        )
+      ).items.map((p) => p.id);
+    assert.equal((await request("GET", "/api/v1/me/history")).status, 401);
+    assert.deepEqual(
+      new Set(await openedHistory()),
+      new Set(["captured", "signals"]),
+    );
+    assert.deepEqual(await openedHistory(u2), []);
+    await json(
+      await request("DELETE", "/api/v1/me/history/captured", undefined, u2),
+    );
+    assert.equal((await openedHistory()).length, 2);
+    await json(
+      await request("DELETE", "/api/v1/me/history/captured", undefined, u1),
+    );
+    assert.deepEqual(await openedHistory(), ["signals"]);
+    await json(await request("DELETE", "/api/v1/me/history", undefined, u1));
+    assert.deepEqual(await openedHistory(), []);
     assert.equal(
       (
         await json<{ used: number }>(
@@ -354,6 +376,7 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     );
     assert.equal(limited.code, "daily_limit");
     assert.equal(limited.used, 10);
+    assert.ok(!(await openedHistory()).includes("one-too-many"));
     await json(await request("GET", "/api/v1/vault/captured", undefined, u1));
     const setInsider = (user: string, on: boolean) =>
       on
@@ -370,6 +393,7 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
       await request("GET", "/api/v1/vault/one-too-many", undefined, u1),
     );
     await setInsider("u1", false);
+    assert.ok((await openedHistory()).includes("one-too-many"));
 
     // Free keys can read app details, using the same allowance, but nothing private.
     await DB.prepare(
@@ -390,11 +414,16 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
       ).access,
       "full",
     );
-    for (const path of ["/api/v1/me/saves", "/api/v1/me/usage"])
+    for (const path of [
+      "/api/v1/me/saves",
+      "/api/v1/me/usage",
+      "/api/v1/me/history",
+    ])
       assert.equal(
         (await request("GET", path, undefined, "arcex_free")).status,
         403,
       );
+    assert.deepEqual(await openedHistory(u2), []);
     assert.equal(
       (
         await request(
@@ -894,6 +923,24 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     ).run();
     await DB.prepare(
       "INSERT INTO product_watches SELECT 'u1',id,'2026-01-01' FROM products WHERE id LIKE 'many%' AND id<>'many1'",
+    ).run();
+    await json(await request("DELETE", "/api/v1/me/history", undefined, u1));
+    await DB.prepare(
+      "INSERT INTO product_view_history SELECT 'u1',id,'2020-01-01' FROM products WHERE id LIKE 'many%' ORDER BY id LIMIT 101",
+    ).run();
+    await json(await request("GET", "/api/v1/vault/many520", undefined, u1));
+    assert.equal(
+      (await DB.prepare(
+        "SELECT count(*) n FROM product_view_history WHERE user_id='u1'",
+      ).first<{ n: number }>())!.n,
+      100,
+    );
+    await DB.prepare(
+      "UPDATE products SET status='draft' WHERE id='many520'",
+    ).run();
+    assert.ok(!(await openedHistory()).includes("many520"));
+    await DB.prepare(
+      "UPDATE products SET status='published' WHERE id='many520'",
     ).run();
     await json(await request("PUT", "/api/v1/me/watches/many1", {}, u1));
     const firstPage = await json<{

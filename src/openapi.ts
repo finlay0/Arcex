@@ -275,6 +275,22 @@ export const openapi = {
     "/api/v1/me/usage": {
       get: operation("Today's app usage and limit; session only", "user"),
     },
+    "/api/v1/me/history": {
+      get: operation(
+        "Your 100 most recently opened products, paginated; session only. Reading history never unlocks apps.",
+        "user",
+      ),
+      delete: operation(
+        "Clear your recent product history; session only. Does not reset app allowances.",
+        "user",
+      ),
+    },
+    "/api/v1/me/history/{productId}": {
+      delete: operation(
+        "Remove a product from your history; session only",
+        "user",
+      ),
+    },
     "/api/v1/me/watches": {
       get: operation("Tracked products and limit; session only", "user"),
     },

@@ -32,9 +32,9 @@ The baseline is server-side access and usage policy, lightweight public summarie
 
 ## Current implementation gaps
 
-- The existing published Vault read and approved-image routes remain public under the earlier brief. They need alignment with the latest free-login preference before public content release. No research product is currently published.
-- Consumer MCP currently requires Insider keys for blueprint export; the later discussion proposes some free metered access. The owner research collector is a separate OAuth connection and does not define consumer entitlements.
-- No customer Vault/MCP allowance policy, watermarking, canary bans, PostHog instrumentation or agent micropayments is claimed live. Numerical allowances need a coherent decision; analytics needs the future product integration.
+- Later implementation aligned full-capture access with sign-in, ten distinct free apps per UTC day and free reopening. Signals-only details and an explicitly selected open sample remain public. Approved full images require signed delivery. Owner-reviewed publication remains separate from these access controls.
+- Consumer MCP supports public search and free metered blueprint exports. Its ten-export daily allowance is separate from full-app opens. The owner research collector is a separate OAuth connection and cannot choose consumer entitlements or publish.
+- Account product history is separate from usage accounting: reading or clearing it never resets app allowances. Watermarking, canary bans, PostHog instrumentation and agent micropayments are not claimed live; analytics needs the future product integration.
 - The versioned research playbook, product-history retrieval and durable run checkpoints address collection repeatability. They do not establish that the current candidates are qualified, that all funnels were inspected or that the business is validated.
 
 The [research playbook](../src/research-playbook.ts) and [Work bootstrap](work-bootstrap.txt) operationalize collection. The original long discussion is source context, not a document to paste into every Work run. New direct user decisions take precedence over historical assistant pitches and these summaries.
