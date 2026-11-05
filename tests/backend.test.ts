@@ -45,6 +45,8 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       MCP_OWNER_GITHUB_ID: "207296386",
       ENABLE_DEV_AUTH: "true",
       COLLECTION_ENABLED: "true",
+      EMAIL_ALERTS_ENABLED: "false",
+      RESEND_SENDER_VERIFIED: "false",
       ADMIN_TOKEN: "admin-test-only",
       COLLECTOR_TOKEN: "collector-test-only",
       DEV_AUTH_TOKEN: "dev-test-only",

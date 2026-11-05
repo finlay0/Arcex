@@ -44,6 +44,8 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
       MCP_OWNER_GITHUB_ID: "42",
       ENABLE_DEV_AUTH: "false",
       COLLECTION_ENABLED: "false",
+      EMAIL_ALERTS_ENABLED: "false",
+      RESEND_SENDER_VERIFIED: "false",
       ADMIN_TOKEN: "admin-fixture",
       COLLECTOR_TOKEN: "collector-fixture",
     };

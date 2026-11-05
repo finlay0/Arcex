@@ -1,8 +1,10 @@
 # Product alert delivery
 
-Resend's existing team was verified as Transactional Free: 3,000/month and100/day, no payment method, transactional pay-as-you-go off. The dedicated arcex.dev sending domain is being verified. Its sending-only API key must be scoped to that domain. Do not upgrade, enable overages or use another app's credentials.
+Resend's existing team was verified as Transactional Free: 3,000/month and100/day, no payment method, transactional pay-as-you-go off. The dedicated arcex.dev sending domain is verified. Its sending-only API key is scoped to that domain and stored in the Worker's encrypted configuration. Do not upgrade, enable overages or use another app's credentials.
 
 Backend delivery is disabled by default. Configure encrypted `RESEND_API_KEY`, then set `RESEND_SENDER_VERIFIED=true` only after actual DNS verification. Set `EMAIL_ALERTS_ENABLED=true` only when the provider path and notification content are ready. The sender is `Arcex <alerts@arcex.dev>`; no mailbox is needed for this sending identity. No receiving/MX configuration is requested here.
+
+Production delivery is enabled after the deployed Worker sent a fixed Resend simulator message and Terra independently verified its Delivered receipt in Resend. This proves the provider path, not a real customer's inbox. No accounts were opted in and no products or changes were published at activation. Research collection and both daily research schedules remain paused independently.
 
 Each invocation processes at most one opted-in Insider digest, with at most20 approved, published changes to products that user still watches. Private or retracted evidence never enters an eligible digest. The outbox retains the exact provider request and stable idempotency key. Provider acceptance advances the change cursor in the same database transaction as the receipt. `sent` means the provider accepted the request, not proof of inbox delivery.
 
