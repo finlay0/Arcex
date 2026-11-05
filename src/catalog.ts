@@ -2,6 +2,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Actor, AppEnv } from "./types";
 import { now } from "./types";
+import {
+  replaceFunnel,
+  replacePaywall,
+  flowHistory,
+  flowVersion,
+} from "./flow-history";
 import { PUBLIC_PRICING_SELECT, pricingResponse } from "./public-pricing";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
 import {
@@ -743,63 +749,30 @@ adminCatalog.put("/products/:id/funnel", async (c) => {
   const input = await parse(c, funnelInput),
     productId = c.req.param("id");
   await productExists(c.env.DB, productId);
-  for (const step of input) {
-    await checkEvidence(c.env.DB, step.evidenceId, productId);
-    if (
-      step.assetId &&
-      !(await c.env.DB.prepare(
-        "SELECT id FROM assets WHERE id=? AND evidence_id=?",
-      )
-        .bind(step.assetId, step.evidenceId)
-        .first())
-    )
-      fail(422, "Asset must belong to step evidence");
-  }
-  await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM funnel_steps WHERE product_id=?").bind(
-      productId,
-    ),
-    ...input.map((s) =>
-      c.env.DB.prepare(
-        "INSERT INTO funnel_steps VALUES (?,?,?,?,?,?,?,?)",
-      ).bind(
-        crypto.randomUUID(),
-        productId,
-        s.position,
-        s.title,
-        s.stage,
-        s.annotation,
-        s.evidenceId,
-        s.assetId ?? null,
-      ),
-    ),
-    c.env.DB.prepare(
-      "UPDATE products SET status='draft',coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL,updated_at=? WHERE id=?",
-    ).bind(now(), productId),
-  ]);
-  return c.json({ ok: true });
+  return c.json(await replaceFunnel(c.env.DB, productId, input));
 });
 adminCatalog.put("/products/:id/paywall", async (c) => {
   const input = await parse(c, paywallInput),
     productId = c.req.param("id");
   await checkEvidence(c.env.DB, input.evidenceId, productId);
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      "INSERT INTO paywall_mechanics VALUES (?,?,?,?,?,?,?) ON CONFLICT(product_id) DO UPDATE SET evidence_id=excluded.evidence_id,pattern=excluded.pattern,states=excluded.states,transitions=excluded.transitions,credit_rules=excluded.credit_rules,notes=excluded.notes",
-    ).bind(
-      productId,
-      input.evidenceId,
-      input.pattern,
-      JSON.stringify(input.states),
-      JSON.stringify(input.transitions),
-      JSON.stringify(input.creditRules),
-      input.notes,
+  return c.json(await replacePaywall(c.env.DB, productId, input));
+});
+adminCatalog.get("/products/:id/flow-history", async (c) => {
+  const { limit, offset } = page(c);
+  await productExists(c.env.DB, c.req.param("id"));
+  return c.json(await flowHistory(c.env.DB, c.req.param("id"), limit, offset));
+});
+adminCatalog.get("/products/:id/flow-history/:revisionId", async (c) => {
+  const { limit, offset } = page(c);
+  return c.json(
+    await flowVersion(
+      c.env.DB,
+      c.req.param("id"),
+      c.req.param("revisionId"),
+      limit,
+      offset,
     ),
-    c.env.DB.prepare(
-      "UPDATE products SET status='draft',coverage_level='signals',coverage_notes=NULL,coverage_reviewed_at=NULL,updated_at=? WHERE id=?",
-    ).bind(now(), productId),
-  ]);
-  return c.json({ ok: true });
+  );
 });
 adminCatalog.post("/products/:id/blueprints", async (c) => {
   const input = await parse(c, blueprintInput),

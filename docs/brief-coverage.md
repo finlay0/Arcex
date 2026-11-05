@@ -1,19 +1,19 @@
 # Brief implementation coverage
 
-Backend scope only. This distinguishes working code, provider setup and observed content. Updated November 3, 2026.
+Backend scope only. This distinguishes working code, provider setup and observed content. Updated November 5, 2026.
 
 | Brief requirement | Implemented / verified | Remaining |
 | --- | --- | --- |
 | Radar discovery, categories, monetization filters | Deployed API, draft/public separation, search and filters | Reviewed real product cohort; frontend excluded |
-| Meta ad monitoring | Dedicated watches/jobs, Library IDs/creative/destination/state and per-ad observed days; three actual Work searches stored with captures | Initial searches found no attributable product ads; ad-first discovery underway; no historical continuity manufactured |
+| Meta ad monitoring | Dedicated watches/jobs, Library IDs/creative/destination/state and per-ad observed days; actual Work searches and captures, including one attributable inactive ChatPDF card | Only one ChatPDF destination inspected in that search; reported 2025 dates do not establish current activity, continuous delivery, spend or revenue; owner review pending |
 | YouTube/X creator distribution | Watches/jobs, video/post links, matching destinations and disclosures; actual Work YouTube search; bounded optional official Data API collector | Initial search found no verified product mention; server API key is unconfigured, so Work browser is current path |
 | Google Ads Transparency | Dedicated watches/jobs and creative records; actual Work domain-search/card-detail evidence saved | Displayed domain/advertiser data needs attribution review; no keyword-bid or spend inference |
 | Short-form hooks | Validated Shorts/TikTok/Reels/X clip records, hook quote/style, source/hash/time and visible counters | Actual clips and source review; no causal virality inferred |
 | Launch/engagement velocity | Numeric source snapshots, counter deltas and per-hour change from actual timestamps, approved-only public summaries | Real observations over time; one snapshot yields no rate |
 | SponsorBlock timestamps | Cached per-video adapter, bounded requests, attribution and sponsor-identity uncertainty | Disabled by default pending permission for commercial use under the database/API license |
 | Acquisition evidence | Source URLs, observation hashes/timestamps, structured distribution records and private captures | Real ads/sponsor records need collection and review |
-| Post-signup funnel and activation | Ordered evidence-backed steps, capture references, stage annotations, draft imports | Real authenticated full-funnel teardowns; landing pages alone do not fulfill this |
-| Paywall and credits | Validated state machines, transitions, credit rules and evidence checks | Observed credit exhaustion/upgrade triggers from real products |
+| Post-signup funnel and activation | Ordered evidence-backed steps, private captures, immutable revisions and bounded history; actual ChatPDF guest upload/question/cited-answer flow saved as three draft steps | Authenticated full-funnel teardowns remain untested; guest and landing coverage are labelled explicitly |
+| Paywall and credits | Validated state machines, immutable snapshots, bounded history, credit rules and evidence checks; five private public-offer snapshots across separate pricing observations | Observed authenticated credit exhaustion/upgrade triggers; public HTML offers do not prove checkout or paywall behavior |
 | Copyable blueprints | Immutable spec versions, signed-in export, evidence gates and partner disclosures | Reviewed deep blueprints for the initial cohort |
 | Inspector | Public metadata, optional automatic navigation/click captures, observed client stack signatures, Terra extraction and draft importer; isolated-browser capture test passed | Real authenticated flows; automatic publication remains gated by review |
 | Cloud research | Actual Work cloud computer/browser with Terra Medium; protected OAuth collector; real candidate writes and image uploads | Complete upfront research and qualification; daily schedule remains paused |

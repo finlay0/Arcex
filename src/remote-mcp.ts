@@ -147,6 +147,28 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
       ),
   );
   server.registerTool(
+    "read_flow_history",
+    {
+      description:
+        "Read private immutable funnel/paywall revision metadata or one selected revision. Funnel steps are paginated; oversized paywall payloads are omitted explicitly. Revisions are observations, not publication or approval. Use existing capture IDs for visual comparison.",
+      inputSchema: z
+        .object({
+          productId: id,
+          revisionId: id.optional(),
+          limit: z.number().int().min(1).max(10).default(5),
+          offset: z.number().int().min(0).max(10000).default(0),
+        })
+        .strict(),
+    },
+    async ({ productId, revisionId, limit, offset }) =>
+      run(() =>
+        internal(
+          "GET",
+          `/api/v1/admin/products/${encodeURIComponent(productId)}/flow-history${revisionId ? "/" + encodeURIComponent(revisionId) : ""}?limit=${limit}&offset=${offset}`,
+        ),
+      ),
+  );
+  server.registerTool(
     "save_research_assessment",
     {
       description:

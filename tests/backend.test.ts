@@ -309,36 +309,161 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           }).success,
           false,
         );
+        const step = {
+          position: 0,
+          title: "Paywall",
+          stage: "paywall",
+          annotation: "Observed credit gate",
+          evidenceId,
+        };
+        // Preserve an existing, pre-versioning state, and exercise the actual 100-step API boundary.
+        await bindings.DB.prepare(
+          "INSERT INTO funnel_steps VALUES ('legacy-step',?,0,'Paywall','paywall','Observed credit gate',?,NULL)",
+        )
+          .bind(productId, evidenceId)
+          .run();
+        let queries = 0;
+        const originalDb = env.DB;
+        env.DB = {
+          prepare(sql: string) {
+            queries++;
+            return originalDb.prepare(sql);
+          },
+          batch: originalDb.batch.bind(originalDb),
+        } as D1Database;
         await json(
           "PUT",
           `/api/v1/admin/products/${productId}/funnel`,
-          [
-            {
-              position: 0,
-              title: "Paywall",
-              stage: "paywall",
-              annotation: "Observed credit gate",
-              evidenceId,
-            },
-          ],
+          Array.from({ length: 100 }, (_, position) => ({ ...step, position })),
           admin,
+        );
+        env.DB = originalDb;
+        assert.ok(
+          queries <= 50,
+          `100-step replacement used ${queries} queries`,
+        );
+        const history = await json<{
+          items: { id: string; baseline: number }[];
+        }>(
+          "GET",
+          `/api/v1/admin/products/${productId}/flow-history`,
+          undefined,
+          admin,
+        );
+        const baseline = history.items.find((v) => v.baseline)!.id;
+        const oldFlow = await json<{
+          steps: { annotation: string }[];
+          totalSteps: number;
+        }>(
+          "GET",
+          `/api/v1/admin/products/${productId}/flow-history/${baseline}`,
+          undefined,
+          admin,
+        );
+        assert.equal(oldFlow.totalSteps, 1);
+        assert.equal(oldFlow.steps[0].annotation, step.annotation);
+        assert.equal(
+          (
+            await req(
+              "GET",
+              `/api/v1/admin/products/another-product/flow-history/${baseline}`,
+              undefined,
+              admin,
+            )
+          ).status,
+          404,
+        );
+        assert.equal(
+          (
+            await req(
+              "GET",
+              `/api/v1/admin/products/${productId}/flow-history/${baseline}`,
+            )
+          ).status,
+          401,
+        );
+        await json(
+          "PUT",
+          `/api/v1/admin/products/${productId}/funnel`,
+          [step],
+          admin,
+        );
+        await json(
+          "PUT",
+          `/api/v1/admin/products/${productId}/status`,
+          { status: "published" },
+          admin,
+        );
+        const beforeNoop = await originalDb
+          .prepare("SELECT id FROM funnel_steps WHERE product_id=?")
+          .bind(productId)
+          .first();
+        assert.equal(
+          (
+            await json(
+              "PUT",
+              `/api/v1/admin/products/${productId}/funnel`,
+              [step],
+              admin,
+            )
+          ).unchanged,
+          true,
+        );
+        assert.deepEqual(
+          await originalDb
+            .prepare("SELECT id FROM funnel_steps WHERE product_id=?")
+            .bind(productId)
+            .first(),
+          beforeNoop,
+        );
+        assert.equal(
+          (await originalDb
+            .prepare("SELECT status FROM products WHERE id=?")
+            .bind(productId)
+            .first())!.status,
+          "published",
+        );
+        const paywall = {
+          evidenceId,
+          pattern: "credit_exhaustion",
+          states: ["free", "exhausted", "paid"],
+          transitions: [
+            { from: "free", to: "exhausted", trigger: "last credit spent" },
+            { from: "exhausted", to: "paid", trigger: "payment confirmed" },
+          ],
+          creditRules: { observedFreeCredits: 3 },
+          notes: "Observed fixture only",
+        };
+        const firstPaywall = await json<{ revisionId: string }>(
+          "PUT",
+          `/api/v1/admin/products/${productId}/paywall`,
+          paywall,
+          admin,
+        );
+        assert.equal(
+          (
+            await json(
+              "PUT",
+              `/api/v1/admin/products/${productId}/paywall`,
+              paywall,
+              admin,
+            )
+          ).unchanged,
+          true,
         );
         await json(
           "PUT",
           `/api/v1/admin/products/${productId}/paywall`,
-          {
-            evidenceId,
-            pattern: "credit_exhaustion",
-            states: ["free", "exhausted", "paid"],
-            transitions: [
-              { from: "free", to: "exhausted", trigger: "last credit spent" },
-              { from: "exhausted", to: "paid", trigger: "payment confirmed" },
-            ],
-            creditRules: { observedFreeCredits: 3 },
-            notes: "Observed fixture only",
-          },
+          { ...paywall, notes: "Second observed fixture state" },
           admin,
         );
+        const oldPaywall = await json<{ snapshot: { notes: string } }>(
+          "GET",
+          `/api/v1/admin/products/${productId}/flow-history/${firstPaywall.revisionId}`,
+          undefined,
+          admin,
+        );
+        assert.equal(oldPaywall.snapshot.notes, paywall.notes);
         await json(
           "POST",
           `/api/v1/admin/products/${productId}/signals`,

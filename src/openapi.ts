@@ -514,16 +514,28 @@ export const openapi = {
     },
     "/api/v1/admin/products/{id}/funnel": {
       put: operation(
-        "Replace ordered funnel and return product to draft",
+        "Append an immutable flow revision and replace ordered funnel; unchanged input preserves IDs/review",
         "admin",
         "FunnelInput",
       ),
     },
     "/api/v1/admin/products/{id}/paywall": {
       put: operation(
-        "Replace paywall state machine and return product to draft",
+        "Append an immutable paywall revision and replace current state; changes return product to draft",
         "admin",
         "PaywallInput",
+      ),
+    },
+    "/api/v1/admin/products/{id}/flow-history": {
+      get: operation(
+        "Private funnel/paywall revision metadata, paginated",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/products/{id}/flow-history/{revisionId}": {
+      get: operation(
+        "Private selected revision; funnel steps paginated, oversized paywall data explicitly omitted",
+        "admin",
       ),
     },
     "/api/v1/admin/products/{id}/blueprints": {

@@ -7,6 +7,7 @@ import { id, publicUrl } from "./contracts";
 import { fail } from "./lib";
 import { collectionStatus } from "./collection-policy";
 import { now } from "./types";
+import { flowHistory } from "./flow-history";
 
 export const researchMode = z.enum([
   "discovery",
@@ -195,6 +196,7 @@ export async function productResearch(
     paywall: results[5].results,
     blueprints: results[6].results,
     recentChanges: results[7].results,
+    flowHistory: await flowHistory(db, productId, Math.min(limit, 10), offset),
     limit,
     offset,
     scope:
