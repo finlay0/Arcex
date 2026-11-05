@@ -17,7 +17,7 @@ async function jsonFetch(url: URL, headers: Record<string, string> = {}) {
   const response = await fetch(url, {
     headers,
     signal: AbortSignal.timeout(15000),
-    redirect: "error",
+    redirect: "manual",
   });
   if (response.status === 404 && url.hostname === "sponsor.ajay.app") return [];
   if (!response.ok)

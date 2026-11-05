@@ -990,6 +990,11 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     try {
       globalThis.fetch = async (url, init) => {
         assert.equal(String(url), "https://api.resend.com/emails");
+        assert.equal(
+          init?.redirect,
+          "manual",
+          "Workers supports manual redirects without forwarding credentials",
+        );
         sends.push({
           key: new Headers(init?.headers).get("Idempotency-Key"),
           body: String(init?.body),

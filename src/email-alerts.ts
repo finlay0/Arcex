@@ -48,7 +48,7 @@ async function sendResendRequest(env: Bindings, id: string, envelope: string) {
       "Idempotency-Key": `arcex-digest/${id}`,
     },
     body: envelope,
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(10000),
   });
 }
@@ -73,6 +73,7 @@ async function reserveSendLease(db: D1Database, id: string) {
       .prepare(
         `UPDATE email_outbox SET status='sending',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,?),lease_token=?,lease_until=? WHERE id=? AND attempts<3
       AND ((status='pending' AND available_at<=?) OR (status='sending' AND lease_until<=?))
+      AND (first_attempt_at IS NULL OR first_attempt_at>?)
       AND (SELECT attempts FROM email_send_usage WHERE period_key=?)<? AND (SELECT attempts FROM email_send_usage WHERE period_key=?)<? RETURNING *`,
       )
       .bind(
@@ -82,6 +83,7 @@ async function reserveSendLease(db: D1Database, id: string) {
         id,
         time,
         time,
+        new Date(Date.now() - 23 * 3600000).toISOString(),
         day,
         EMAIL_DAILY_LIMIT,
         month,
@@ -333,8 +335,12 @@ adminEmailAlerts.post("/alerts/:id/resolve", async (c) => {
   if (!row) fail(409, "Only an uncertain delivery can be resolved");
   const statements = [
     c.env.DB.prepare(
-      "UPDATE email_outbox SET status=?,last_error=NULL WHERE id=? AND status='uncertain'",
-    ).bind(outcome === "accepted" ? "sent" : "failed", c.req.param("id")),
+      "UPDATE email_outbox SET status=?,last_error=? WHERE id=? AND status='uncertain'",
+    ).bind(
+      outcome === "accepted" ? "sent" : "failed",
+      outcome === "accepted" ? null : "operator_not_accepted",
+      c.req.param("id"),
+    ),
   ];
   if (outcome === "accepted")
     statements.unshift(
@@ -365,7 +371,7 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
     day = time.slice(0, 10),
     month = time.slice(0, 7),
     id = "simulator-" + day;
-  const envelope = JSON.stringify({
+  let envelope = JSON.stringify({
     from: "Arcex <alerts@arcex.dev>",
     to: ["delivered@resend.dev"],
     subject: "Arcex sending-path verification",
@@ -388,14 +394,29 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
       EMAIL_MONTHLY_LIMIT,
     )
     .first();
-  if (!reserved)
-    return c.json(
-      {
-        error:
-          "Simulator already reserved today or sending allowance exhausted",
-      },
-      409,
-    );
+  if (!reserved) {
+    const reviewed = await c.env.DB.prepare(
+      "SELECT envelope FROM email_outbox WHERE id=? AND user_id IS NULL AND status='failed' AND last_error='operator_not_accepted' AND attempts<3",
+    )
+      .bind(id)
+      .first<{ envelope: string }>();
+    if (!reviewed)
+      return c.json(
+        {
+          error:
+            "Simulator already reserved today or sending allowance exhausted",
+        },
+        409,
+      );
+    envelope = reviewed.envelope;
+    const reset = await c.env.DB.prepare(
+      "UPDATE email_outbox SET status='pending',available_at=?,lease_token=NULL WHERE id=? AND status='failed' AND last_error='operator_not_accepted'",
+    )
+      .bind(time, id)
+      .run();
+    if (reset.meta.changes !== 1)
+      return c.json({ error: "Simulator is already being processed" }, 409);
+  }
   if (!(await reserveSendLease(c.env.DB, id)))
     return c.json({ error: "Sending allowance exhausted" }, 409);
   try {
