@@ -11,6 +11,9 @@ import { publicUrl, paywallInput } from "../src/contracts";
 import { publicAddress } from "../scripts/public-fetch";
 import { enqueueDue } from "../src/jobs";
 import type { Bindings } from "../src/types";
+import sharp from "sharp";
+import { makeThumbnail } from "../scripts/thumbnail-image";
+import { validThumbnail } from "../src/thumbnail-format";
 
 test("Arcex backend: permissions, publication, community, jobs and billing", async (t) => {
   const mf = new Miniflare(
@@ -1072,9 +1075,95 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           ).status,
           409,
         );
+        const synthetic = await sharp({
+          create: {
+            width: 640,
+            height: 400,
+            channels: 3,
+            background: "#147b8f",
+          },
+        })
+          .png()
+          .toBuffer();
+        const thumbnail = await makeThumbnail(synthetic);
+        assert.ok(validThumbnail(thumbnail));
+        const uploadThumbnail = (
+          body: Buffer,
+          credential = admin,
+          bindings = env,
+        ) =>
+          app.request(
+            "http://localhost:8791/api/v1/media/" + asset.id + "/thumbnail",
+            {
+              method: "POST",
+              headers: {
+                authorization: "Bearer " + credential,
+                "content-type": "image/webp",
+              },
+              body: new Uint8Array(body),
+            },
+            bindings,
+          );
+        assert.equal((await uploadThumbnail(thumbnail, collector)).status, 401);
+        assert.equal((await uploadThumbnail(thumbnail)).status, 201);
+        assert.equal(
+          (await req("GET", "/api/v1/media/" + asset.id + "/thumbnail")).status,
+          404,
+        );
+        const prior = await db
+          .prepare(
+            "SELECT e.status evidence_status,p.status product_status,p.coverage_level FROM evidence e JOIN products p ON p.id=e.product_id WHERE e.id=?",
+          )
+          .bind(evidenceId)
+          .first<{
+            evidence_status: string;
+            product_status: string;
+            coverage_level: string;
+          }>();
+        await db.batch([
+          db
+            .prepare("UPDATE evidence SET status='approved' WHERE id=?")
+            .bind(evidenceId),
+          db
+            .prepare(
+              "UPDATE products SET status='published',coverage_level='full' WHERE id=?",
+            )
+            .bind(productId),
+          db.prepare("UPDATE assets SET approved=1 WHERE id=?").bind(asset.id),
+        ]);
+        const publicThumbnail = await req(
+          "GET",
+          "/api/v1/media/" + asset.id + "/thumbnail",
+        );
+        assert.equal(publicThumbnail.status, 200);
+        assert.deepEqual(
+          Buffer.from(await publicThumbnail.arrayBuffer()),
+          thumbnail,
+        );
+        assert.equal(
+          (await req("GET", "/api/v1/media/" + asset.id)).status,
+          403,
+        );
         await db
-          .prepare("UPDATE assets SET size=50000000 WHERE id=?")
-          .bind(asset.id)
+          .prepare("UPDATE evidence SET status='draft' WHERE id=?")
+          .bind(evidenceId)
+          .run();
+        assert.equal(
+          (await req("GET", "/api/v1/media/" + asset.id + "/thumbnail")).status,
+          404,
+        );
+        await db.batch([
+          db
+            .prepare("UPDATE evidence SET status=? WHERE id=?")
+            .bind(prior!.evidence_status, evidenceId),
+          db
+            .prepare("UPDATE products SET status=?,coverage_level=? WHERE id=?")
+            .bind(prior!.product_status, prior!.coverage_level, productId),
+          db.prepare("UPDATE assets SET approved=0 WHERE id=?").bind(asset.id),
+        ]);
+        await db
+          .prepare("UPDATE assets SET size=? WHERE id=?")
+          .bind(50000000 - thumbnail.byteLength, asset.id)
           .run();
         const denied = await app.request(
           "http://localhost:8791/api/v1/media/upload",

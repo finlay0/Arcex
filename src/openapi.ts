@@ -262,6 +262,21 @@ export const openapi = {
         "admin",
       ),
     },
+    "/api/v1/media/thumbnails/pending": {
+      get: operation(
+        "Owner thumbnail queue, maximum25; optional productId. Private captures remain private.",
+        "admin",
+      ),
+    },
+    "/api/v1/media/{id}/thumbnail": {
+      post: operation(
+        "Save owner-generated small WebP derivative within shared evidence quota; does not approve or publish",
+        "admin",
+      ),
+      get: operation(
+        "Small derivative for an approved capture/evidence on a published Full Screens product; never serves the full capture",
+      ),
+    },
     "/api/v1/admin/mcp/grants": {
       get: operation("List owner collector authorization grants", "admin"),
     },

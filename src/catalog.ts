@@ -193,7 +193,8 @@ catalog.get("/radar", async (c) => {
         COALESCE(m.step_count,0) AS step_count,
         m.active_ads,m.ads_delta_7d,m.longest_ad_days,m.creators,m.sponsors,m.creators_delta_7d,m.activity_change_4w,m.activity_weekly,m.first_seen,m.last_seen,
         r.low_usd AS revenue_low_usd,r.high_usd AS revenue_high_usd,r.confidence AS revenue_confidence,r.method_version AS revenue_method_version,
-        (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint
+        (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint,
+        (SELECT a.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id JOIN assets a ON a.id=f.asset_id AND a.evidence_id=e.id WHERE f.product_id=p.id AND p.coverage_level='full' AND e.status='approved' AND a.approved=1 AND a.thumbnail_key IS NOT NULL ORDER BY (f.stage='paywall') DESC,f.position DESC LIMIT 1) AS thumbnail_asset_id
        ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
     ).bind(...values, limit, offset),
   ]);
@@ -207,6 +208,9 @@ catalog.get("/radar", async (c) => {
       ),
       has_blueprint: !!row.has_blueprint,
       open_sample: !!row.open_sample,
+      thumbnail_url: row.thumbnail_asset_id
+        ? `${c.env.API_ORIGIN}/api/v1/media/${row.thumbnail_asset_id}/thumbnail`
+        : null,
     })),
     total: Number(total.results[0].total),
     limit,

@@ -27,6 +27,7 @@
     "collect": "tsx scripts/collector.ts",
     "mcp": "tsx scripts/mcp.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "thumbnails": "tsx scripts/thumbnails.ts",
     "deploy:production": "wrangler deploy --env production"
   },
   "dependencies": {
@@ -46,6 +47,7 @@
     "miniflare": "5.20261102.0-beta",
     "playwright": "1.64.1",
     "prettier": "3.9.10",
+    "sharp": "0.35.5",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "wrangler": "4.156.2"

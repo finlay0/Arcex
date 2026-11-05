@@ -5,6 +5,7 @@ import { now } from "./types";
 import { audit, fail, parse, sha256 } from "./lib";
 import { requireAdmin, requireCollector } from "./auth";
 import { mediaLinkValid } from "./insights";
+import { validThumbnail } from "./thumbnail-format";
 import {
   fileStore,
   setupStorage,
@@ -43,7 +44,7 @@ media.post("/upload", requireCollector, async (c) => {
   const assetId = crypto.randomUUID(),
     objectKey = "evidence/" + assetId;
   const reservation = await c.env.DB.prepare(
-    "INSERT INTO assets(id,evidence_id,object_key,content_type,size,sha256,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(sum(size),0) FROM assets)+?<=?",
+    "INSERT INTO assets(id,evidence_id,object_key,content_type,size,sha256,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(sum(size+thumbnail_size),0) FROM assets)+?<=?",
   )
     .bind(
       assetId,
@@ -145,9 +146,11 @@ media.get("/:id/review", requireAdmin, async (c) => {
 });
 
 media.delete("/:id", requireAdmin, async (c) => {
-  const row = await c.env.DB.prepare("SELECT object_key FROM assets WHERE id=?")
+  const row = await c.env.DB.prepare(
+    "SELECT object_key,thumbnail_key FROM assets WHERE id=?",
+  )
     .bind(c.req.param("id"))
-    .first<{ object_key: string }>();
+    .first<{ object_key: string; thumbnail_key: string | null }>();
   if (!row) fail(404, "Asset not found");
   if (
     await c.env.DB.prepare("SELECT id FROM funnel_steps WHERE asset_id=?")
@@ -156,6 +159,7 @@ media.delete("/:id", requireAdmin, async (c) => {
   )
     fail(409, "Remove the capture from funnel steps before deleting it");
   await fileStore(c.env).delete(row.object_key);
+  if (row.thumbnail_key) await fileStore(c.env).delete(row.thumbnail_key);
   await c.env.DB.prepare("DELETE FROM assets WHERE id=?")
     .bind(c.req.param("id"))
     .run();
@@ -172,7 +176,7 @@ media.get("/storage/status", requireAdmin, async (c) => {
   );
   if (error) fail(502, "Evidence storage is not ready");
   const used = await c.env.DB.prepare(
-    "SELECT COALESCE(sum(size),0) bytes,count(*) objects FROM assets",
+    "SELECT COALESCE(sum(size+thumbnail_size),0) bytes,count(*) objects,sum(thumbnail_key IS NOT NULL) thumbnails FROM assets",
   ).first();
   return c.json({
     provider: "supabase",
@@ -180,5 +184,91 @@ media.get("/storage/status", requireAdmin, async (c) => {
     private: !data.public,
     usage: used,
     applicationLimitBytes: MEDIA_LIMIT_BYTES,
+  });
+});
+
+media.get("/thumbnails/pending", requireAdmin, async (c) => {
+  const limit = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(25)
+    .default(10)
+    .parse(c.req.query("limit"));
+  const productId = c.req.query("productId");
+  const result = await c.env.DB.prepare(
+    "SELECT a.id,a.sha256,e.product_id FROM assets a JOIN evidence e ON e.id=a.evidence_id JOIN products p ON p.id=e.product_id WHERE a.thumbnail_key IS NULL AND p.status!='archived' AND (? IS NULL OR e.product_id=?) ORDER BY a.created_at,a.id LIMIT ?",
+  )
+    .bind(productId ?? null, productId ?? null, limit)
+    .all();
+  return c.json({ items: result.results, limit });
+});
+media.post("/:id/thumbnail", requireAdmin, async (c) => {
+  if (c.req.header("content-type") !== "image/webp")
+    fail(422, "Use an owner-generated WebP thumbnail");
+  const bytes = await c.req.arrayBuffer();
+  if (!validThumbnail(new Uint8Array(bytes)))
+    fail(422, "Thumbnail must be a single WebP frame, at most160x100 and20KB");
+  const assetId = c.req.param("id"),
+    hash = await sha256(bytes);
+  const row = await c.env.DB.prepare(
+    "SELECT thumbnail_key,thumbnail_sha256 FROM assets WHERE id=?",
+  )
+    .bind(assetId)
+    .first<{ thumbnail_key: string | null; thumbnail_sha256: string | null }>();
+  if (!row) fail(404, "Asset not found");
+  if (row.thumbnail_key) {
+    if (row.thumbnail_sha256 === hash)
+      return c.json({ id: assetId, unchanged: true });
+    fail(409, "This capture already has a thumbnail");
+  }
+  const key = "thumbnails/" + assetId + ".webp";
+  const result = await c.env.DB.prepare(
+    "UPDATE assets SET thumbnail_key=?,thumbnail_size=?,thumbnail_sha256=? WHERE id=? AND thumbnail_key IS NULL AND (SELECT COALESCE(sum(size+thumbnail_size),0) FROM assets)+?<=?",
+  )
+    .bind(
+      key,
+      bytes.byteLength,
+      hash,
+      assetId,
+      bytes.byteLength,
+      MEDIA_LIMIT_BYTES,
+    )
+    .run();
+  if (!result.meta.changes)
+    fail(409, "Evidence storage quota reached or thumbnail already reserved");
+  try {
+    await fileStore(c.env).put(key, bytes, "image/webp");
+  } catch (error) {
+    await c.env.DB.prepare(
+      "UPDATE assets SET thumbnail_key=NULL,thumbnail_size=0,thumbnail_sha256=NULL WHERE id=? AND thumbnail_key=?",
+    )
+      .bind(assetId, key)
+      .run();
+    throw error;
+  }
+  await audit(c.env.DB, "admin", "asset.thumbnail", assetId, {
+    bytes: bytes.byteLength,
+  });
+  return c.json(
+    { id: assetId, bytes: bytes.byteLength, approvalChanged: false },
+    201,
+  );
+});
+media.get("/:id/thumbnail", async (c) => {
+  const row = await c.env.DB.prepare(
+    "SELECT a.thumbnail_key FROM assets a JOIN evidence e ON e.id=a.evidence_id JOIN products p ON p.id=e.product_id WHERE a.id=? AND a.approved=1 AND e.status='approved' AND p.status='published' AND p.coverage_level='full' AND a.thumbnail_key IS NOT NULL",
+  )
+    .bind(c.req.param("id"))
+    .first<{ thumbnail_key: string }>();
+  if (!row) fail(404, "Thumbnail not found");
+  const body = await fileStore(c.env).get(row.thumbnail_key);
+  if (!body) fail(404, "Thumbnail not found");
+  return new Response(body, {
+    headers: {
+      "content-type": "image/webp",
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff",
+    },
   });
 });
