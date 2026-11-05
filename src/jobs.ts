@@ -191,7 +191,7 @@ jobAdmin.get("/audit", async (c) => {
   return c.json({
     items: (
       await c.env.DB.prepare(
-        "SELECT * FROM audit_events ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        "SELECT id,actor,action,target,CASE WHEN length(detail)<=8000 THEN detail ELSE NULL END detail,length(detail)>8000 detail_omitted,created_at FROM audit_events ORDER BY created_at DESC LIMIT ? OFFSET ?",
       )
         .bind(limit, offset)
         .all()

@@ -342,6 +342,15 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           queries <= 50,
           `100-step replacement used ${queries} queries`,
         );
+        const auditList = await json<{
+          items: { detail: string | null; detail_omitted: number }[];
+        }>("GET", "/api/v1/admin/audit", undefined, admin);
+        assert.ok(
+          auditList.items.some(
+            (row) => row.detail_omitted && row.detail === null,
+          ),
+          "Large snapshots must not expand the generic audit listing",
+        );
         const history = await json<{
           items: { id: string; baseline: number }[];
         }>(
