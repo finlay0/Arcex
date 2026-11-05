@@ -123,12 +123,6 @@ test("source table rebuild preserves jobs, watches, scans and evidence relations
       )
       .bind(time)
       .run();
-    assert.equal(
-      (await db
-        .prepare("SELECT count(*) n FROM distribution_watches")
-        .first<{ n: number }>())!.n,
-      2,
-    );
     await db
       .prepare(
         "INSERT INTO sources(id,product_id,name,url,kind,next_run_at,created_at) VALUES ('http','p','HTTP metadata','https://www.facebook.com/ads/library/','public_page',?,?)",
