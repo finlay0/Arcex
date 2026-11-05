@@ -109,6 +109,16 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
     const jobs = claims.flatMap((r) => (r.job ? [r.job] : []));
     assert.equal(jobs.length, 1);
     const job = jobs[0];
+    await db
+      .prepare(
+        "INSERT INTO products(id,slug,name,url,domain,description,category,monetization,created_at,updated_at) VALUES ('tracked','tracked','Tracked','https://fixture.com','fixture.com','Fixture','other','unknown',?,?)",
+      )
+      .bind(new Date().toISOString(), new Date().toISOString())
+      .run();
+    await db
+      .prepare("UPDATE sources SET product_id='tracked' WHERE id=?")
+      .bind(job.source.id)
+      .run();
     assert.equal((await req("/claim", { kinds: ["browser"] })).job, null);
     const discovery = (
       await req("/claim", { kinds: ["browser"], lane: "discovery" })
@@ -207,6 +217,155 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
         .prepare("SELECT claims FROM collection_usage WHERE lane='http'")
         .first<{ claims: number }>())!.claims,
       2,
+    );
+    assert.equal(
+      (await db
+        .prepare("SELECT count(*) n FROM product_changes")
+        .first<{ n: number }>())!.n,
+      0,
+      "Baseline and unchanged checks are not change events",
+    );
+    await db
+      .prepare(
+        "UPDATE sources SET next_run_at='2026-01-03T00:00:00.000Z' WHERE id=?",
+      )
+      .bind(job.source.id)
+      .run();
+    await db
+      .prepare("UPDATE collection_policy SET daily_limit=3 WHERE lane='http'")
+      .run();
+    await enqueueDue(env);
+    const changedJob = (await req("/claim", { kinds: ["public_page"] })).job;
+    const changed = pageEvidence(
+      job.source.url,
+      "<title>New positioning</title><h1>New public offer</h1>",
+      {},
+    );
+    await req(`/${changedJob.id}/complete`, {
+      leaseToken: changedJob.leaseToken,
+      evidence: [changed],
+      fingerprint: "b".repeat(64),
+    });
+    const comparison = await db.prepare("SELECT * FROM product_changes").first<{
+      id: string;
+      evidence_id: string;
+      previous_evidence_id: string;
+      kind: string;
+      status: string;
+    }>();
+    assert.equal(comparison!.status, "draft");
+    assert.equal(comparison!.kind, "public_page");
+    assert.notEqual(comparison!.evidence_id, comparison!.previous_evidence_id);
+    const admin = (path: string, body?: unknown) =>
+      app.request(
+        "http://localhost:8791/api/v1/admin" + path,
+        {
+          method: body ? "PUT" : "GET",
+          headers: {
+            authorization: "Bearer admin-test-only",
+            "content-type": "application/json",
+          },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        },
+        env,
+      );
+    const feed = async () =>
+      (await (
+        await app.request("http://localhost:8791/api/v1/changes", {}, env)
+      ).json()) as { items: unknown[] };
+    assert.equal((await feed()).items.length, 0);
+    const review = (await (
+      await admin("/changes?productId=tracked")
+    ).json()) as { items: { previous_evidence_id: string }[] };
+    assert.equal(
+      review.items[0].previous_evidence_id,
+      comparison!.previous_evidence_id,
+    );
+    await db
+      .prepare(
+        "UPDATE evidence SET status='approved' WHERE product_id='tracked'",
+      )
+      .run();
+    await db
+      .prepare("UPDATE products SET status='published' WHERE id='tracked'")
+      .run();
+    assert.equal(
+      (
+        await admin(`/changes/${comparison!.id}`, {
+          summary: "Public title and offer heading changed.",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await admin(`/changes/${comparison!.id}/status`, {
+          status: "published",
+        })
+      ).status,
+      200,
+    );
+    assert.equal((await feed()).items.length, 1);
+    await db
+      .prepare("UPDATE evidence SET status='rejected' WHERE id=?")
+      .bind(comparison!.previous_evidence_id)
+      .run();
+    assert.equal(
+      (await feed()).items.length,
+      0,
+      "Retracting the previous observation hides the comparison too",
+    );
+    assert.equal(
+      (
+        await admin(`/changes/${comparison!.id}/status`, {
+          status: "published",
+        })
+      ).status,
+      409,
+    );
+
+    // The REST completion accepts up to 30 entries. Measure that boundary, not only one-page jobs.
+    const stamp = new Date().toISOString();
+    await db
+      .prepare(
+        "INSERT INTO sources(id,name,url,kind,enabled,next_run_at,created_at,lane) VALUES ('feed','Feed','https://fixture.com/feed','rss',1,?,?,'http')",
+      )
+      .bind(stamp, stamp)
+      .run();
+    await db
+      .prepare("UPDATE collection_policy SET daily_limit=4 WHERE lane='http'")
+      .run();
+    await enqueueDue(env);
+    const feedJob = (await req("/claim", { kinds: ["rss"] })).job;
+    const entries = Array.from({ length: 30 }, (_, i) => ({
+      ...pageEvidence(
+        `https://fixture.com/post/${i}`,
+        `<title>Entry ${i}</title>`,
+        {},
+      ),
+      kind: "rss_item",
+    }));
+    let queries = 0;
+    env.DB = {
+      prepare(sql: string) {
+        queries++;
+        return db.prepare(sql);
+      },
+      batch: db.batch.bind(db),
+    } as D1Database;
+    const bulk = await req(`/${feedJob.id}/complete`, {
+      leaseToken: feedJob.leaseToken,
+      evidence: entries,
+    });
+    env.DB = db;
+    assert.equal(bulk.inserted, 30);
+    assert.ok(queries <= 50, `30-item completion used ${queries} queries`);
+    assert.equal(
+      (await db
+        .prepare("SELECT count(*) n FROM evidence_observations WHERE job_id=?")
+        .bind(feedJob.id)
+        .first<{ n: number }>())!.n,
+      30,
     );
   } finally {
     await mf.dispose();

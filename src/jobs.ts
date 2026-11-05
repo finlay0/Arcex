@@ -354,39 +354,62 @@ collector.post("/:id/complete", async (c) => {
     )
       fail(422, "Evidence must match the registered source host");
   }
-  const statements = input.evidence.map((item) =>
-    c.env.DB.prepare(
-      "INSERT INTO evidence(id,product_id,source_url,observed_at,kind,content_hash,summary,payload,created_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?) ON CONFLICT DO NOTHING",
-    ).bind(
-      crypto.randomUUID(),
-      job.product_id,
-      item.sourceUrl,
-      item.observedAt,
-      item.kind,
-      item.contentHash,
-      item.summary,
-      JSON.stringify(item.payload),
-      time,
-      jobId,
-      input.leaseToken,
-      time,
-    ),
+  // Bulk inserts keep a 30-item completion below D1 Free's per-invocation query limit.
+  const rows = JSON.stringify(
+    input.evidence.map((item) => ({ ...item, id: crypto.randomUUID() })),
   );
-  for (const item of input.evidence)
+  const statements = [
+    c.env.DB.prepare(
+      `INSERT INTO evidence(id,product_id,source_url,observed_at,kind,content_hash,summary,payload,created_at)
+       SELECT json_extract(value,'$.id'),?,json_extract(value,'$.sourceUrl'),json_extract(value,'$.observedAt'),json_extract(value,'$.kind'),
+         json_extract(value,'$.contentHash'),json_extract(value,'$.summary'),json_extract(value,'$.payload'),?
+       FROM json_each(?) WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?) ON CONFLICT DO NOTHING`,
+    ).bind(job.product_id, time, rows, jobId, input.leaseToken, time),
+    c.env.DB.prepare(
+      `INSERT INTO evidence_observations(evidence_id,observed_at,job_id)
+       SELECT e.id,json_extract(j.value,'$.observedAt'),? FROM json_each(?) j JOIN evidence e
+         ON e.product_id IS ? AND e.source_url=json_extract(j.value,'$.sourceUrl') AND e.content_hash=json_extract(j.value,'$.contentHash')
+       WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?) ON CONFLICT DO NOTHING`,
+    ).bind(jobId, rows, job.product_id, jobId, input.leaseToken, time),
+  ];
+  if (job.kind === "public_page" && input.outcome === "observed") {
+    // A first check establishes a baseline. Only a later, different observation creates a private comparison.
     statements.push(
       c.env.DB.prepare(
-        "INSERT INTO evidence_observations(evidence_id,observed_at,job_id) SELECT e.id,?,? FROM evidence e WHERE e.product_id IS ? AND e.source_url=? AND e.content_hash=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?) ON CONFLICT DO NOTHING",
+        `INSERT INTO product_changes(id,product_id,evidence_id,previous_evidence_id,source_id,kind,summary,observed_at,created_at)
+       SELECT ?,s.product_id,e.id,previous.id,s.id,'public_page',
+         'Public page metadata changed. Review the linked observations before describing the change.',json_extract(j.value,'$.observedAt'),?
+       FROM sources s JOIN evidence previous ON previous.id=s.last_evidence_id AND previous.product_id=s.product_id
+       JOIN json_each(?) j ON json_extract(j.value,'$.sourceUrl')=s.url AND json_extract(j.value,'$.kind')='page'
+       JOIN evidence e ON e.product_id=s.product_id AND e.source_url=s.url AND e.content_hash=json_extract(j.value,'$.contentHash')
+       WHERE s.id=? AND s.last_fingerprint IS NOT NULL AND s.last_fingerprint<>? AND previous.content_hash<>e.content_hash
+         AND json_extract(j.value,'$.observedAt')>COALESCE((SELECT max(observed_at) FROM evidence_observations WHERE evidence_id=previous.id),previous.observed_at)
+         AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?)
+       LIMIT 1 ON CONFLICT DO NOTHING`,
       ).bind(
-        item.observedAt,
-        jobId,
-        job.product_id,
-        item.sourceUrl,
-        item.contentHash,
+        "page:" + jobId,
+        time,
+        rows,
+        job.id,
+        fingerprint,
         jobId,
         input.leaseToken,
         time,
       ),
     );
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE sources SET last_evidence_id=COALESCE((
+         SELECT e.id FROM json_each(?) j JOIN evidence e ON e.product_id=sources.product_id
+           AND e.source_url=sources.url AND e.content_hash=json_extract(j.value,'$.contentHash')
+         WHERE json_extract(j.value,'$.sourceUrl')=sources.url AND json_extract(j.value,'$.kind')='page'
+           AND json_extract(j.value,'$.observedAt')>=COALESCE((SELECT max(observed_at) FROM evidence_observations WHERE evidence_id=sources.last_evidence_id),'')
+         ORDER BY json_extract(j.value,'$.observedAt') DESC LIMIT 1),last_evidence_id)
+       WHERE id=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?)
+         AND EXISTS(SELECT 1 FROM json_each(?) WHERE json_extract(value,'$.sourceUrl')=sources.url AND json_extract(value,'$.kind')='page')`,
+      ).bind(rows, job.id, jobId, input.leaseToken, time, rows),
+    );
+  }
   statements.push(
     c.env.DB.prepare(
       `UPDATE sources SET
@@ -433,9 +456,7 @@ collector.post("/:id/complete", async (c) => {
   if (!results.at(-1)!.meta.changes) fail(409, "Job lease replaced");
   return c.json({
     ok: true,
-    inserted: results
-      .slice(0, input.evidence.length)
-      .reduce((n, r) => n + r.meta.changes, 0),
+    inserted: results[0].meta.changes,
   });
 });
 collector.post("/:id/fail", async (c) => {

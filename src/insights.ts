@@ -6,6 +6,7 @@ import { audit, decode, fail, page, parse } from "./lib";
 import { requireAdmin, requirePro, requireSession, requireUser } from "./auth";
 import { id, publicUrl } from "./contracts";
 import { emailDeliveryStatus } from "./email-alerts";
+import { CHANGE_EVIDENCE_APPROVED } from "./change-history";
 export {
   signedMediaUrl,
   mediaLinkValid,
@@ -301,8 +302,14 @@ const CHANGE_FEED = `SELECT c.id,c.kind,c.summary,c.observed_at,p.slug,p.name
   FROM product_changes c
   JOIN products p ON p.id=c.product_id
   JOIN evidence e ON e.id=c.evidence_id
-  WHERE c.status='published' AND p.status='published' AND e.status='approved'`;
-const changeKind = z.enum(["ads", "creators", "paywall", "flow"]);
+  WHERE c.status='published' AND p.status='published' AND ${CHANGE_EVIDENCE_APPROVED}`;
+const changeKind = z.enum([
+  "ads",
+  "creators",
+  "paywall",
+  "flow",
+  "public_page",
+]);
 
 /** Publishes only while every evidence item behind a range is still approved. */
 export const PUBLISHED_REVENUE_RANGE = `r.status='published' AND NOT EXISTS (
@@ -664,6 +671,38 @@ adminInsights.get("/products/:id/revenue/history", async (c) => {
   });
 });
 
+adminInsights.get("/changes", async (c) => {
+  const { limit, offset } = page(c);
+  const status = publication.shape.status.parse(
+    c.req.query("status") ?? "draft",
+  );
+  const productId = c.req.query("productId")
+    ? id.parse(c.req.query("productId"))
+    : null;
+  const result = await c.env.DB.prepare(
+    `SELECT c.*,e.source_url,e.summary AS evidence_summary,previous.summary AS previous_summary
+     FROM product_changes c JOIN evidence e ON e.id=c.evidence_id
+     LEFT JOIN evidence previous ON previous.id=c.previous_evidence_id
+     WHERE c.status=? AND (? IS NULL OR c.product_id=?) ORDER BY c.observed_at DESC,c.id LIMIT ? OFFSET ?`,
+  )
+    .bind(status, productId, productId, limit, offset)
+    .all();
+  return c.json({ items: result.results, limit, offset });
+});
+adminInsights.put("/changes/:id", async (c) => {
+  const input = await parse(
+    c,
+    z.object({ summary: z.string().min(5).max(280) }).strict(),
+  );
+  const result = await c.env.DB.prepare(
+    "UPDATE product_changes SET summary=? WHERE id=? AND status='draft' RETURNING id",
+  )
+    .bind(input.summary, c.req.param("id"))
+    .first();
+  if (!result) fail(409, "Only an existing draft change can be edited");
+  await audit(c.env.DB, "admin", "change.edit", c.req.param("id"));
+  return c.json({ ok: true });
+});
 adminInsights.post("/products/:id/changes", async (c) => {
   const input = await parse(
     c,
@@ -704,13 +743,13 @@ adminInsights.post("/products/:id/changes", async (c) => {
 adminInsights.put("/changes/:id/status", async (c) => {
   const { status } = await parse(c, publication);
   const change = await c.env.DB.prepare(
-    "SELECT e.status FROM product_changes c JOIN evidence e ON e.id=c.evidence_id WHERE c.id=?",
+    `SELECT (${CHANGE_EVIDENCE_APPROVED}) AS approved FROM product_changes c JOIN evidence e ON e.id=c.evidence_id WHERE c.id=?`,
   )
     .bind(c.req.param("id"))
-    .first<{ status: string }>();
+    .first<{ approved: number }>();
   if (!change) fail(404, "Change not found");
-  if (status === "published" && change.status !== "approved")
-    fail(409, "Approve the evidence before publishing this change");
+  if (status === "published" && !change.approved)
+    fail(409, "Approve all comparison evidence before publishing this change");
   await c.env.DB.prepare(
     "UPDATE product_changes SET status=?,published_at=CASE WHEN ?='published' THEN COALESCE(published_at,?) ELSE NULL END WHERE id=?",
   )

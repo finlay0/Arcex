@@ -323,6 +323,18 @@ export const openapi = {
     "/api/v1/admin/products/{id}/changes": {
       post: operation("Save an observed change as a draft", "admin"),
     },
+    "/api/v1/admin/changes": {
+      get: operation(
+        "Bounded change review queue; status defaults to draft, optional productId",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/changes/{id}": {
+      put: operation(
+        "Edit a draft summary before explicit publication",
+        "admin",
+      ),
+    },
     "/api/v1/admin/changes/{id}/status": {
       put: operation("Publish or unpublish a change", "admin"),
     },

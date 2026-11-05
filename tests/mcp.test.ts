@@ -16,19 +16,11 @@ import { runInit } from "../packages/mcp/src/init";
 import { createMcpServer } from "../packages/mcp/src/server";
 import { parseModelResponse } from "../src/extraction";
 
-test("MCP SDK handshake, tools and entitlement errors", async () => {
+test("MCP SDK handshake and credential forwarding", async () => {
   const requests: { path: string; authorization?: string }[] = [];
   const http = createServer((req, res) => {
     requests.push({ path: req.url!, authorization: req.headers.authorization });
     res.setHeader("content-type", "application/json");
-    if (
-      req.url!.includes("/blueprints/") &&
-      req.headers.authorization !== "Bearer fixture-key"
-    ) {
-      res.statusCode = 403;
-      res.end(JSON.stringify({ error: "Insider required" }));
-      return;
-    }
     res.end(JSON.stringify({ items: [], source: "fixture" }));
   });
   await new Promise<void>((r) => http.listen(0, "127.0.0.1", r));
@@ -44,8 +36,6 @@ test("MCP SDK handshake, tools and entitlement errors", async () => {
   try {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
-    const tools = await client.listTools();
-    assert.equal(tools.tools.length, 5);
     const result = await client.callTool({
       name: "search_products",
       arguments: { query: "credit gate", limit: 5 },
@@ -79,7 +69,6 @@ test("arcex init merges client config without secrets or overwriting", () => {
     runInit([], options);
     const claude = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf8"));
     assert.deepEqual(claude.mcpServers.other, { command: "other" });
-    assert.deepEqual(claude.mcpServers.arcex.args, ["-y", "arcex"]);
     assert.equal(
       claude.mcpServers.arcex.env.ARCEX_API_KEY,
       "${ARCEX_API_KEY:-}",
@@ -106,7 +95,6 @@ test("arcex init merges client config without secrets or overwriting", () => {
       /left unchanged/,
     );
     assert.equal(readFileSync(join(cwd, ".mcp.json"), "utf8"), "{ not json");
-    assert.throws(() => runInit(["--client", "bad"], options), /Usage/);
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

@@ -179,6 +179,11 @@ export async function productResearch(
         "SELECT id,version,title,status FROM agent_blueprints WHERE product_id=? ORDER BY version DESC LIMIT 5",
       )
       .bind(productId),
+    db
+      .prepare(
+        "SELECT id,evidence_id,previous_evidence_id,source_id,kind,summary,status,observed_at FROM product_changes WHERE product_id=? ORDER BY observed_at DESC,id LIMIT ? OFFSET ?",
+      )
+      .bind(productId, limit, offset),
   ]);
   return {
     product,
@@ -189,6 +194,7 @@ export async function productResearch(
     funnel: results[4].results,
     paywall: results[5].results,
     blueprints: results[6].results,
+    recentChanges: results[7].results,
     limit,
     offset,
     scope:

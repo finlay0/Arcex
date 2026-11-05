@@ -5,6 +5,7 @@ import { now } from "./types";
 import { requireAdmin } from "./auth";
 import { audit, fail, parse } from "./lib";
 import { signedLinkParameters, signedLinkValid } from "./signed-links";
+import { CHANGE_EVIDENCE_APPROVED } from "./change-history";
 
 // Conservative application reservations, below the separately verified Resend Free quotas.
 export const EMAIL_DAILY_LIMIT = 50;
@@ -28,7 +29,7 @@ export function emailDeliveryStatus(env: Bindings) {
 const ELIGIBLE = `a.email_alerts=1 AND u.email IS NOT NULL
   AND EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id=u.id AND s.status IN ('active','trialing') AND s.period_end>?)
   AND NOT EXISTS(SELECT 1 FROM billing_holds h WHERE h.user_id=u.id)`;
-const APPROVED_CHANGE = `c.status='published' AND c.published_at IS NOT NULL AND p.status='published' AND e.status='approved'`;
+const APPROVED_CHANGE = `c.status='published' AND c.published_at IS NOT NULL AND p.status='published' AND ${CHANGE_EVIDENCE_APPROVED}`;
 type Outbox = {
   id: string;
   user_id: string;
