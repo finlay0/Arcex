@@ -20,6 +20,7 @@ import { openapi } from "./openapi";
 import { researchAdmin } from "./research";
 import { distributionAdmin, distributionStatus } from "./distribution";
 import { externalSignalsAdmin } from "./external-signals";
+import { publicPricing, adminPublicPricing } from "./public-pricing";
 import {
   emailAlerts,
   adminEmailAlerts,
@@ -73,6 +74,7 @@ app.route("/auth", auth);
 app.route("/api/v1", catalog);
 app.route("/api/v1", community);
 app.route("/api/v1", insights);
+app.route("/api/v1", publicPricing);
 app.route("/api/v1", emailAlerts);
 app.route("/api/v1/admin", adminCatalog);
 app.route("/api/v1/admin", adminCommunity);
@@ -82,6 +84,7 @@ app.route("/api/v1/admin", researchAdmin);
 app.route("/api/v1/admin", distributionAdmin);
 app.route("/api/v1/admin", externalSignalsAdmin);
 app.route("/api/v1/admin", adminInsights);
+app.route("/api/v1/admin", adminPublicPricing);
 app.route("/api/v1/admin", adminEmailAlerts);
 app.get("/api/v1/distribution/:slug", async (c) => {
   const product = await c.env.DB.prepare(

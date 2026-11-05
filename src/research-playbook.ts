@@ -1,4 +1,4 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-04.3";
+export const RESEARCH_POLICY_VERSION = "2026-11-04.4";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
@@ -45,6 +45,9 @@ For creator coverage, inspect the actual video/post and outbound link. A mention
 For Google transparency, preserve advertiser/domain ambiguity and displayed dates. A displayed domain or a search result alone does not verify an expanded destination, ownership or keyword bids.
 Record search URL, filters, time and coverage. Distinguish observed, no_results, blocked and failed. Wait for stable results before calling a page empty; Meta has shown transient empty/loading/error states. No-result observations never prove that no ads exist.
 Use real counter snapshots for engagement changes; do not invent earlier baselines or describe public counters as verified users or sales.
+
+PUBLIC OFFERS
+Use save_public_pricing for actually observed public pricing plans, packs, credits and limits. Save the primary evidence first and use its exact source URL and observation time. Preserve the literal displayed price; an ambiguous dollar symbol does not establishUSD. Currency can remain null, amount is a decimal string with no conversion, and unknown billing intervals stay unknown. Public offers are separate from authenticated paywall mechanics. Snapshots remain private drafts, with immutable history; only owner-reviewed snapshots and approved source evidence may be public.
 
 VAULT
 Start from an explicitly selected product and existing research, not a random site. Capture only actually visited screens and states. Record source/time/hash and private capture IDs. Landing screenshots are not authenticated funnel teardowns.

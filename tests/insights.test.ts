@@ -698,6 +698,91 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
       "published",
     ]);
 
+    // Public offers are separate from full-screen gating and keep unknown currencies explicit.
+    const pricingSource = "https://signals-fixture.com/";
+    await DB.prepare("UPDATE evidence SET source_url=? WHERE id='ev-signals'")
+      .bind(pricingSource)
+      .run();
+    await DB.prepare(
+      "INSERT INTO evidence_observations(evidence_id,observed_at) VALUES ('ev-signals',?) ON CONFLICT DO NOTHING",
+    )
+      .bind(stamp)
+      .run();
+    const offerInput = {
+      evidenceIds: ["ev-signals"],
+      observedAt: stamp,
+      offers: [
+        {
+          name: "Single product",
+          displayedPrice: "$9 per product",
+          amount: "9",
+          currency: null,
+          interval: "one_time",
+          limits: ["One product"],
+          sourceUrl: pricingSource,
+        },
+      ],
+    };
+    assert.equal(
+      (
+        await request(
+          "POST",
+          "/api/v1/admin/products/captured/public-pricing",
+          offerInput,
+          ADMIN,
+        )
+      ).status,
+      422,
+    );
+    const price = await json<{ id: string }>(
+      await request(
+        "POST",
+        "/api/v1/admin/products/signals/public-pricing",
+        offerInput,
+        ADMIN,
+      ),
+      201,
+    );
+    assert.equal(
+      (
+        await json<{ publicPricing: unknown }>(
+          await request("GET", "/api/v1/vault/signals"),
+        )
+      ).publicPricing,
+      null,
+    );
+    await DB.prepare(
+      "UPDATE evidence SET status='draft' WHERE id='ev-signals'",
+    ).run();
+    assert.equal(
+      (
+        await request(
+          "PUT",
+          `/api/v1/admin/pricing/${price.id}/status`,
+          { status: "published" },
+          ADMIN,
+        )
+      ).status,
+      409,
+    );
+    await DB.prepare(
+      "UPDATE evidence SET status='approved' WHERE id='ev-signals'",
+    ).run();
+    await json(
+      await request(
+        "PUT",
+        `/api/v1/admin/pricing/${price.id}/status`,
+        { status: "published" },
+        ADMIN,
+      ),
+    );
+    const priced = await json<{
+      publicPricing: { offers: { currency: string | null }[] };
+      usage: unknown;
+    }>(await request("GET", "/api/v1/vault/signals"));
+    assert.equal(priced.publicPricing.offers[0].currency, null);
+    assert.equal(priced.usage, null);
+
     // Changes stay private until published, and leave with their evidence.
     const change = {
       evidenceId: "ev-signals",
@@ -745,6 +830,15 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
       "UPDATE evidence SET status='rejected' WHERE id='ev-signals'",
     ).run();
     assert.equal(await changes(), 0);
+    assert.equal(
+      (
+        await json<{ publicPricing: unknown }>(
+          await request("GET", "/api/v1/vault/signals"),
+        )
+      ).publicPricing,
+      null,
+      "Retracted source removes public pricing too",
+    );
     await DB.prepare(
       "UPDATE evidence SET status='approved' WHERE id='ev-signals'",
     ).run();

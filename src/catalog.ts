@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { Actor, AppEnv } from "./types";
 import { now } from "./types";
+import { PUBLIC_PRICING_SELECT, pricingResponse } from "./public-pricing";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
 import {
   optionalUser,
@@ -296,6 +297,7 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
         `SELECT r.low_usd,r.high_usd,r.confidence,r.method_version,r.inputs,r.evidence_ids,r.updated_at FROM revenue_ranges r WHERE r.product_id=? AND ${PUBLISHED_REVENUE_RANGE}`,
       )
       .bind(product.id),
+    db.prepare(PUBLIC_PRICING_SELECT + " LIMIT 1").bind(product.id),
   ]);
   const metricsRow = results[5].results[0];
   const shared = {
@@ -303,6 +305,7 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
     coverage,
     access,
     usage: usage ?? null,
+    publicPricing: pricingResponse(results[7].results[0]),
     metrics: metricsRow
       ? {
           ...metricsRow,

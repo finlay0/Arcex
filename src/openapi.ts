@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { candidateInput, assessmentInput } from "./research";
 import { researchContextInput, checkpointInput } from "./research-context";
+import { publicPricingInput } from "./public-pricing";
 import {
   watchInput,
   scanInput,
@@ -24,6 +25,7 @@ import {
 } from "./contracts";
 
 const schemas = {
+  PublicPricingInput: publicPricingInput,
   ResearchContextInput: researchContextInput,
   ResearchCheckpointInput: checkpointInput,
   ResearchAssessmentInput: assessmentInput,
@@ -354,6 +356,24 @@ export const openapi = {
       post: operation(
         "Create a seven-day link to one approved screen; JSON position. Open the app first, or use Insider access.",
         "user",
+      ),
+    },
+    "/api/v1/pricing/{slug}": {
+      get: operation(
+        "Reviewed public-offer history for a published product; no full-app allowance required. Unknown currency stays null.",
+      ),
+    },
+    "/api/v1/admin/products/{id}/public-pricing": {
+      post: operation(
+        "Save an immutable draft public-offer snapshot with source evidenceIDs and actual observationtime",
+        "admin",
+        "PublicPricingInput",
+      ),
+    },
+    "/api/v1/admin/pricing/{id}/status": {
+      put: operation(
+        "Explicitly publish/withdraw a pricing snapshot; all linked source evidence must be approved",
+        "admin",
       ),
     },
     "/api/v1/blueprints/{id}/export": {

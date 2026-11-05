@@ -13,6 +13,7 @@ import {
   lookupDiscoveryLeads,
 } from "./research";
 import { researchContextInput, checkpointInput } from "./research-context";
+import { publicPricingInput } from "./public-pricing";
 import { fileStore } from "./file-store";
 import {
   watchInput,
@@ -425,6 +426,24 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
           "PUT",
           `/api/v1/admin/products/${encodeURIComponent(productId)}/paywall`,
           paywall,
+        ),
+      ),
+  );
+  server.registerTool(
+    "save_public_pricing",
+    {
+      description:
+        "Save immutable observed public-offer snapshots as private drafts, separately from authenticated paywalls. Use exact saved evidence URLs/times, literal displayed prices and limits. Currency stays null if not stated; never inferUSDfrom$. Cannot approve or publish.",
+      inputSchema: z
+        .object({ productId: id, pricing: publicPricingInput })
+        .strict(),
+    },
+    async ({ productId, pricing }) =>
+      run(() =>
+        internal(
+          "POST",
+          `/api/v1/admin/products/${encodeURIComponent(productId)}/public-pricing`,
+          pricing,
         ),
       ),
   );
