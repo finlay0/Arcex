@@ -21,6 +21,7 @@ import { researchAdmin } from "./research";
 import { distributionAdmin, distributionStatus } from "./distribution";
 import { externalSignalsAdmin } from "./external-signals";
 import { publicPricing, adminPublicPricing } from "./public-pricing";
+import { libraries } from "./libraries";
 import {
   emailAlerts,
   adminEmailAlerts,
@@ -75,6 +76,7 @@ app.route("/api/v1", catalog);
 app.route("/api/v1", community);
 app.route("/api/v1", insights);
 app.route("/api/v1", publicPricing);
+app.route("/api/v1", libraries);
 app.route("/api/v1", emailAlerts);
 app.route("/api/v1/admin", adminCatalog);
 app.route("/api/v1/admin", adminCommunity);

@@ -272,6 +272,16 @@ export const openapi = {
     "/api/v1/changes": {
       get: operation("Published observed changes across products"),
     },
+    "/api/v1/screens": {
+      get: operation(
+        "Published reviewed screen library; locked metadata until the app is unlocked today, a sample, or Insider. Listing spends no allowance. Filters: product slug, category, monetization, stage, q, limit, offset.",
+      ),
+    },
+    "/api/v1/ads": {
+      get: operation(
+        "Latest approved observation per ad across published products; no current activity or revenue inference. Filters: product slug, category, monetization, platform, activity, q, limit, offset.",
+      ),
+    },
     "/api/v1/me/usage": {
       get: operation("Today's app usage and limit; session only", "user"),
     },

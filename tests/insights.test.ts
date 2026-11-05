@@ -254,6 +254,30 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     assert.deepEqual(preview.funnel, []);
     assert.equal(preview.outline!.length, 2);
     assert.ok(!JSON.stringify(preview).includes("Secret note"));
+    const screenLibrary = async (credential?: string, query = "") =>
+      await json<{
+        items: {
+          locked: boolean;
+          image_url: string | null;
+          annotation: string | null;
+          product: { slug: string };
+        }[];
+      }>(
+        await request("GET", "/api/v1/screens" + query, undefined, credential),
+      );
+    const publicScreens = await screenLibrary();
+    assert.equal(
+      publicScreens.items.find((s) => s.product.slug === "captured")!.image_url,
+      null,
+    );
+    assert.equal(
+      publicScreens.items.find((s) => s.product.slug === "captured")!
+        .annotation,
+      null,
+    );
+    assert.ok(
+      publicScreens.items.find((s) => s.product.slug === "sample")!.image_url,
+    );
     const unshared = await json<Vault>(
       await request("GET", "/api/v1/vault/captured?step=0"),
     );
@@ -301,11 +325,35 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
         .run();
     const u1 = "cookie:cookie-one";
     const u2 = "cookie:cookie-two";
+    await screenLibrary(u1);
+    assert.equal(
+      (
+        await json<{ used: number }>(
+          await request("GET", "/api/v1/me/usage", undefined, u1),
+        )
+      ).used,
+      0,
+    );
     const opened = await json<Vault>(
       await request("GET", "/api/v1/vault/captured", undefined, u1),
     );
     assert.equal(opened.funnel.length, 2);
     assert.equal(opened.usage!.used, 1);
+    assert.ok(
+      (await screenLibrary(u1, "?product=captured&stage=paywall")).items[0]
+        .image_url,
+    );
+    assert.equal(
+      (await screenLibrary(u2, "?product=captured")).items[0].locked,
+      true,
+    );
+    await DB.prepare(
+      "UPDATE evidence SET status='rejected' WHERE id='ev-captured'",
+    ).run();
+    assert.deepEqual((await screenLibrary(u1, "?product=captured")).items, []);
+    await DB.prepare(
+      "UPDATE evidence SET status='approved' WHERE id='ev-captured'",
+    ).run();
     const share = await json<{ url: string }>(
       await request(
         "POST",

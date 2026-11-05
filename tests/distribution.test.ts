@@ -132,7 +132,7 @@ test("distribution tracking separates per-ad sightings, blocked searches and dis
       .bind(a.evidenceId)
       .run();
     assert.equal((await distributionStatus(db, "p", true)).ads.length, 1);
-    await recordAdSighting(db, {
+    const inactive = await recordAdSighting(db, {
       ...first,
       observedAt: "2026-10-17T08:00:00.000Z",
       activity: "inactive",
@@ -147,6 +147,38 @@ test("distribution tracking separates per-ad sightings, blocked searches and dis
       (await distributionStatus(db, "p", true)).ads[0].last_reported_state,
       "active",
     );
+    await db
+      .prepare("UPDATE products SET status='published' WHERE id='p'")
+      .run();
+    const adLibrary = async (query = "") => {
+      const r = await app.request(
+        "https://api-fixture.com/api/v1/ads" + query,
+        {},
+        { DB: db } as Bindings,
+      );
+      assert.equal(r.status, 200);
+      return (await r.json()) as {
+        items: { external_id: string; activity: string }[];
+      };
+    };
+    assert.equal((await adLibrary()).items[0].activity, "active");
+    await db
+      .prepare("UPDATE evidence SET status='approved' WHERE id=?")
+      .bind(inactive.evidenceId)
+      .run();
+    assert.equal(
+      (await adLibrary("?platform=meta&activity=inactive")).items[0]
+        .external_id,
+      "meta:" + first.libraryId,
+    );
+    assert.equal((await adLibrary("?activity=active")).items.length, 0);
+    await db
+      .prepare("UPDATE evidence SET status='rejected' WHERE id=?")
+      .bind(inactive.evidenceId)
+      .run();
+    assert.equal((await adLibrary()).items[0].activity, "active");
+    await db.prepare("UPDATE products SET status='draft' WHERE id='p'").run();
+    assert.deepEqual((await adLibrary()).items, []);
     await db
       .prepare("UPDATE products SET status='published' WHERE id='p'")
       .run();
