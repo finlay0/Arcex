@@ -82,8 +82,8 @@ jobAdmin.post("/sources", async (c) => {
   if (input.productId) await productExists(c.env.DB, input.productId);
   const sourceId = crypto.randomUUID(),
     time = now();
-  await c.env.DB.prepare(
-    "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane) VALUES (?,?,?,?,?,?,?,?,?,?)",
+  const inserted = await c.env.DB.prepare(
+    "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(url,kind) DO NOTHING RETURNING id",
   )
     .bind(
       sourceId,
@@ -97,7 +97,12 @@ jobAdmin.post("/sources", async (c) => {
       time,
       input.lane ?? (input.kind === "browser" ? "browser" : "http"),
     )
-    .run();
+    .first();
+  if (!inserted)
+    fail(
+      409,
+      "A source with this URL and collection kind already exists; reuse it",
+    );
   await audit(c.env.DB, "admin", "source.create", sourceId);
   return c.json({ id: sourceId }, 201);
 });

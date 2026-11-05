@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
-test("Google watch migration preserves existing source and scan evidence relationships", async () => {
+test("source migrations preserve jobs, watches, scans and evidence relationships", async () => {
   const mf = new Miniflare(
     convertV4MiniflareOptions({
       modules: true,
@@ -56,7 +56,50 @@ test("Google watch migration preserves existing source and scan evidence relatio
       )
       .bind(time, time)
       .run();
-    for (const file of files.filter((f) => f >= "0006")) await apply(file);
+    await db
+      .prepare(
+        "INSERT INTO jobs(id,source_id,dedupe_key,status,available_at,created_at,updated_at) VALUES ('j','s','fixture-job','succeeded',?,?,?)",
+      )
+      .bind(time, time, time)
+      .run();
+    await db
+      .prepare("INSERT INTO evidence_observations VALUES ('e',?,'j')")
+      .bind(time)
+      .run();
+    for (const file of files.filter((f) => f >= "0006" && f < "0018"))
+      await apply(file);
+    await db
+      .prepare(
+        "UPDATE sources SET last_evidence_id='e',last_fingerprint=? WHERE id='s'",
+      )
+      .bind("a".repeat(64))
+      .run();
+    await db
+      .prepare(
+        "INSERT INTO product_changes(id,product_id,evidence_id,kind,summary,observed_at,created_at,source_id) VALUES ('change','p','e','ads','Observed fixture change',?,?,'s')",
+      )
+      .bind(time, time)
+      .run();
+    const history = () =>
+      Promise.all(
+        [
+          "sources",
+          "jobs",
+          "distribution_watches",
+          "distribution_scans",
+          "evidence_observations",
+          "product_changes",
+        ].map((table) =>
+          db.prepare(`SELECT * FROM ${table} ORDER BY 1,2`).all(),
+        ),
+      );
+    const before = await history();
+    for (const file of files.filter((f) => f >= "0018")) await apply(file);
+    assert.deepEqual(
+      (await history()).map((r) => r.results),
+      before.map((r) => r.results),
+      "Rebuilding the source constraint must preserve every existing row and link",
+    );
     const row = await db
       .prepare(
         "SELECT w.platform,w.source_id,d.evidence_id,d.outcome FROM distribution_watches w JOIN distribution_scans d ON d.watch_id=w.id WHERE w.id='w'",
@@ -83,6 +126,21 @@ test("Google watch migration preserves existing source and scan evidence relatio
         .prepare("SELECT count(*) n FROM distribution_watches")
         .first<{ n: number }>())!.n,
       2,
+    );
+    await db
+      .prepare(
+        "INSERT INTO sources(id,product_id,name,url,kind,next_run_at,created_at) VALUES ('http','p','HTTP metadata','https://www.facebook.com/ads/library/','public_page',?,?)",
+      )
+      .bind(time, time)
+      .run();
+    await assert.rejects(
+      db
+        .prepare(
+          "INSERT INTO sources(id,name,url,kind,next_run_at,created_at) VALUES ('duplicate','Duplicate','https://www.facebook.com/ads/library/','public_page',?,?)",
+        )
+        .bind(time, time)
+        .run(),
+      /UNIQUE/,
     );
   } finally {
     await mf.dispose();

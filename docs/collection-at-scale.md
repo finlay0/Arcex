@@ -18,7 +18,7 @@ flowchart LR
   J --> K[Owner review before publication]
 ```
 
-A product is an identity, not one daily browser task. Its landing page, pricing, advertiser, creator mentions and authenticated funnel have different sources and freshness. Shared feeds have unique source URLs, so the same feed is not registered per product. Shared channel ingestion and matching many product domains is the next provider optimization; the current YouTube adapter still performs bounded per-product searches. No broad cross-product fan-out is being claimed as implemented.
+A product is an identity, not one daily browser task. Its landing page, pricing, advertiser, creator mentions and authenticated funnel have different sources and freshness. Sources are unique by URL and collection kind: the same page may have a cheap HTTP check and a separate browser investigation, without duplicating the same kind per product. Each retains its own validator, baseline, schedule and claims. Shared feeds are still registered once per URL/kind. Shared channel ingestion and matching many product domains is the next provider optimization; the current YouTube adapter still performs bounded per-product searches. No broad cross-product fan-out is being claimed as implemented.
 
 Work uses the database rather than chat memory. `research_context` returns the versioned playbook, current allowances, checkpoints and a paginated directory. `afterProductId` follows `nextProductCursor`. Directory order does not assign work. Before browser research, Work must `claim_capture_job`, read the returned source/product history, then complete/fail and checkpoint. Existing native prompts fetch this updated playbook at run start.
 
