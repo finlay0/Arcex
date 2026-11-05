@@ -51,6 +51,25 @@ test("Google sign-in verifies signature, audience, nonce and state; preserves id
       GOOGLE_CLIENT_SECRET: "fixture-secret",
     } as Bindings;
     const origin = env.API_ORIGIN;
+    const githubEnv = {
+      ...env,
+      GITHUB_CLIENT_ID: "github-fixture",
+      GITHUB_CLIENT_SECRET: "github-secret",
+      GITHUB_AUTH_ORIGIN: "https://api.arcex.dev",
+    };
+    for (const host of ["https://api.arcex.dev", origin]) {
+      const githubStart = await app.request(
+        host + "/auth/github/start",
+        {},
+        githubEnv,
+      );
+      assert.equal(
+        new URL(githubStart.headers.get("location")!).searchParams.get(
+          "redirect_uri",
+        ),
+        host + "/auth/github/callback",
+      );
+    }
     const sameSiteEnv = { ...env, GOOGLE_AUTH_ORIGIN: "https://api.arcex.dev" };
     const move = await app.request(
       origin + "/auth/google/start?returnTo=%2Fapp",

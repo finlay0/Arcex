@@ -13,6 +13,7 @@ export type Bindings = {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_AUTH_ORIGIN?: string;
+  GITHUB_AUTH_ORIGIN?: string;
   RESEND_API_KEY?: string;
   RESEND_SENDER_VERIFIED?: string;
   EMAIL_ALERTS_ENABLED?: string;

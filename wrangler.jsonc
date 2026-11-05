@@ -43,6 +43,7 @@
         "APP_ORIGIN": "https://arcex.dev",
         "API_ORIGIN": "https://arcex-api.peak-era-avern.workers.dev",
         "GOOGLE_AUTH_ORIGIN": "https://api.arcex.dev",
+        "GITHUB_AUTH_ORIGIN": "https://api.arcex.dev",
         "ENABLE_DEV_AUTH": "false",
         "COLLECTION_ENABLED": "false",
         "EMAIL_ALERTS_ENABLED": "true",

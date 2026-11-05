@@ -18,4 +18,10 @@ References: [Google OIDC](https://developers.google.com/identity/openid-connect/
 
 Google's basic identity scopes are exempt from the Testing allowlist/100-test-user restriction: [Manage App Audience](https://support.google.com/cloud/answer/15549945). Do not apply the warning for sensitive/restricted scopes to this basic sign-in configuration.
 
-The custom domain is live and a real Google authorization flow followed by authenticated `/api/v1/me` passed on api.arcex.dev on November4. The frontend should use that API base with credentials included. Google starts received on workers.dev redirect before creating state, so the browser-bound cookie is created on the callback's own origin. GitHub's existing callback/private Collector OAuth remain on workers.dev; their separate same-site web migration is still pending. Public launch branding/name/logo can be completed with the frontend's verified home/privacy URLs.
+The custom domain is live and a real Google authorization flow followed by authenticated `/api/v1/me` passed on api.arcex.dev on November4. The frontend should use that API base with credentials included. Google starts received on workers.dev redirect before creating state, so the browser-bound cookie is created on the callback's own origin. GitHub's same-site web migration is separately configured as described below. Public launch branding/name/logo can be completed with the frontend's verified home/privacy URLs.
+
+## GitHub same-site callback
+
+`GITHUB_AUTH_ORIGIN=https://api.arcex.dev` makes GitHub starts and callbacks received on that exact origin use `https://api.arcex.dev/auth/github/callback`. Requests on the existing workers.dev origin keep its original callback, credentials and host-bound cookies, preserving private Collector authentication. Google behavior is unchanged. No cross-domain session token bridge or second OAuth app is needed.
+
+The existing GitHub app must allow the new exact callback alongside both existing workers.dev callbacks before production activation. The provider form is prepared but its save requires the computer-use runtime's action-time approval. Local origin-routing checks passed; a real customer callback/session test is still required. The frontend can offer GitHub only after that provider test succeeds.

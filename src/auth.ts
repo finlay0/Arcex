@@ -156,7 +156,11 @@ const providers = {
     scope: "users.read tweet.read",
   },
 } as const;
-function providerConfig(env: Bindings, provider: keyof typeof providers) {
+function providerConfig(
+  env: Bindings,
+  provider: keyof typeof providers,
+  requestOrigin: string,
+) {
   const clientId =
     provider === "github"
       ? env.GITHUB_CLIENT_ID
@@ -174,7 +178,7 @@ function providerConfig(env: Bindings, provider: keyof typeof providers) {
     ...providers[provider],
     clientId,
     secret,
-    callback: `${provider === "google" ? (env.GOOGLE_AUTH_ORIGIN ?? env.API_ORIGIN) : env.API_ORIGIN}/auth/${provider}/callback`,
+    callback: `${provider === "google" ? (env.GOOGLE_AUTH_ORIGIN ?? env.API_ORIGIN) : provider === "github" && requestOrigin === env.GITHUB_AUTH_ORIGIN ? env.GITHUB_AUTH_ORIGIN : env.API_ORIGIN}/auth/${provider}/callback`,
   };
 }
 export const auth = new Hono<AppEnv>();
@@ -197,7 +201,7 @@ auth.get("/:provider/start", async (c) => {
   const provider = z
     .enum(["github", "x", "google"])
     .parse(c.req.param("provider"));
-  const config = providerConfig(c.env, provider);
+  const config = providerConfig(c.env, provider, new URL(c.req.url).origin);
   // Bind the OAuth state cookie on the callback's own origin before starting consent.
   if (
     provider === "google" &&
@@ -266,7 +270,7 @@ auth.get("/:provider/callback", async (c) => {
   const provider = z
     .enum(["github", "x", "google"])
     .parse(c.req.param("provider"));
-  const config = providerConfig(c.env, provider),
+  const config = providerConfig(c.env, provider, new URL(c.req.url).origin),
     state = c.req.query("state"),
     code = c.req.query("code");
   const cookie = getCookie(c, "arcex_oauth");
