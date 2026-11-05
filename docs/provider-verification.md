@@ -12,6 +12,8 @@ Same-site origin selection is prepared in main71a7b02 and passed the existing31t
 
 The existing app's form is prepared with https://api.arcex.dev/auth/github/callback alongside the existing workers.dev callback and its /mcp callback. It has not been saved. The Windows computer-use confirmation policy requires action-time approval for this cloud-access edit. Production activation and real sign-in verification remain pending.
 
+An actual connected Collector research_context call succeeded before deployment, returning policy 2026-11-05.2 and 30 private cohort rows. This is a baseline, not proof that the pending callback/deployment preserves the connection afterward.
+
 ## X
 
 X remains unconfigured under the zero-spend constraint. Current account inspection opened developer onboarding and did not establish an existing free app. No account/credential creation, terms acceptance, card, credit purchase or auto-recharge was performed.
@@ -31,6 +33,8 @@ Hosted sandbox checkout completed once on November 5, 2026 with Stripe's public 
 - evt_1UYWFiE9BaJEv4JpE6e9N3Cb
 
 At 19:26:27.986Z a fresh authenticated request through the normal /api/v1/billing/status route returned insider:true with that active subscription. Its five-minute synthetic session was deleted immediately after verification. The normal billing portal route also returned the expected Stripe-hosted portal. No real money, customer identity or live-mode account was used.
+
+All remaining sessions for the synthetic fixture were subsequently deleted; the remote database read back zero sessions. The provider subscription remains active pending the cancellation below.
 
 Cleanup remains incomplete: Computer Use stopped before cancellation because it could not determine the current browser URL confidently enough to enforce its policy, and instructed the setup worker to stop. No cancellation click, provider cancellation timing or cancellation webhook was observed. Do not retry the blocked browser action or report cleanup complete. The fixture remains clearly labelled and separate from actual customers. The Stripe connector requires reauthentication, and no local Stripe key is available; do not add an administrative credential proxy just for cleanup.
 
