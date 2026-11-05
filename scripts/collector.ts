@@ -207,7 +207,14 @@ export async function collect(limit = 5) {
       });
       failed++;
       console.error(
-        JSON.stringify({ jobId: job.id, status: "failed", reason }),
+        JSON.stringify({
+          jobId: job.id,
+          status: "failed",
+          code:
+            error instanceof SourceHttpError
+              ? `http_${error.status}`
+              : "collection_failed",
+        }),
       );
     }
   }

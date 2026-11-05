@@ -613,6 +613,12 @@ export const openapi = {
     "/api/v1/admin/billing/holds/{userId}": {
       delete: operation("Clear reviewed billing hold", "admin"),
     },
+    "/api/v1/collector/jobs/status": {
+      get: operation(
+        "Whether recurring source collection is enabled; no work is claimed",
+        "collector",
+      ),
+    },
     "/api/v1/collector/jobs/claim": {
       post: operation(
         "Lease one eligible job and atomically debit its lane allowance",

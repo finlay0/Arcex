@@ -196,6 +196,9 @@ jobAdmin.get("/audit", async (c) => {
 
 export const collector = new Hono<AppEnv>();
 collector.use("*", requireCollector);
+collector.get("/status", (c) =>
+  c.json({ collectionEnabled: c.env.COLLECTION_ENABLED === "true" }),
+);
 export const claimInput = z
   .object({
     kinds: z
