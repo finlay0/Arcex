@@ -189,6 +189,7 @@ export const shipInput = z
     monetization,
   })
   .strict();
+export const sourceCaptureMode = z.enum(["metadata", "text"]);
 export const sourceInput = z
   .object({
     productId: id.optional(),
@@ -198,7 +199,15 @@ export const sourceInput = z
     lane: z.enum(["http", "browser", "discovery"]).optional(),
     intervalHours: z.number().int().min(1).max(720).default(24),
     enabled: z.boolean().default(false),
+    captureMode: sourceCaptureMode.default("metadata"),
   })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.captureMode === "text" && input.kind !== "public_page")
+      ctx.addIssue({
+        code: "custom",
+        message: "Text capture is only supported for public-page HTTP sources",
+      });
+  });
 export type ProductInput = z.infer<typeof productInput>;
 export type EvidenceInput = z.infer<typeof evidenceInput>;

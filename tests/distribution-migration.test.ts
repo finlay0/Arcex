@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 
-test("source migrations preserve jobs, watches, scans and evidence relationships", async () => {
+test("source table rebuild preserves jobs, watches, scans and evidence relationships", async () => {
   const mf = new Miniflare(
     convertV4MiniflareOptions({
       modules: true,
@@ -94,12 +94,14 @@ test("source migrations preserve jobs, watches, scans and evidence relationships
         ),
       );
     const before = await history();
-    for (const file of files.filter((f) => f >= "0018")) await apply(file);
+    for (const file of files.filter((f) => f >= "0018" && f < "0019"))
+      await apply(file);
     assert.deepEqual(
       (await history()).map((r) => r.results),
       before.map((r) => r.results),
       "Rebuilding the source constraint must preserve every existing row and link",
     );
+    for (const file of files.filter((f) => f >= "0019")) await apply(file);
     const row = await db
       .prepare(
         "SELECT w.platform,w.source_id,d.evidence_id,d.outcome FROM distribution_watches w JOIN distribution_scans d ON d.watch_id=w.id WHERE w.id='w'",

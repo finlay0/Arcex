@@ -16,6 +16,7 @@ type Job = {
     last_fingerprint: string | null;
     http_etag: string | null;
     http_last_modified: string | null;
+    capture_mode?: "metadata" | "text";
   };
 };
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -24,10 +25,47 @@ const strip = (s: string) =>
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+export function htmlText(html: string) {
+  return strip(
+    html
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(
+        /<(script|style|noscript|template|head)\b[^>]*>[\s\S]*?<\/\1>/gi,
+        " ",
+      ),
+  )
+    .replace(
+      /&(nbsp|amp|quot|apos|lt|gt|#\d{1,7}|#x[\da-f]{1,6});/gi,
+      (match, entity: string) => {
+        const named: Record<string, string> = {
+          nbsp: " ",
+          amp: "&",
+          quot: '"',
+          apos: "'",
+          lt: "<",
+          gt: ">",
+        };
+        if (!entity.startsWith("#"))
+          return named[entity.toLowerCase()] ?? match;
+        const code =
+          entity[1].toLowerCase() === "x"
+            ? parseInt(entity.slice(2), 16)
+            : parseInt(entity.slice(1), 10);
+        return code > 0 &&
+          code <= 0x10ffff &&
+          !(code >= 0xd800 && code <= 0xdfff)
+          ? String.fromCodePoint(code)
+          : "�";
+      },
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export function pageEvidence(
   url: string,
   text: string,
   headers: Record<string, string>,
+  mode: "metadata" | "text" = "metadata",
 ) {
   const title = strip(
     text.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "Untitled page",
@@ -46,19 +84,52 @@ export function pageEvidence(
   )
     .slice(0, 20)
     .map((m) => strip(m[1]).slice(0, 300));
+  const normalizedText = mode === "text" ? htmlText(text) : null;
+  if (mode === "text" && !normalizedText)
+    throw new Error("No HTML text captured; source needs browser review");
+  const characters =
+    normalizedText === null ? null : Array.from(normalizedText);
+  const normalizedTextHash =
+    normalizedText === null ? null : digest(normalizedText);
   const payload = {
     title,
     description,
     headings,
     headers,
+    captureMode: mode,
+    ...(characters
+      ? {
+          normalizationVersion: 1,
+          text: characters.slice(0, 20000).join(""),
+          normalizedTextCharacters: characters.length,
+          textTruncated: characters.length > 20000,
+          normalizedTextHash,
+          rawHtmlHash: digest(text),
+        }
+      : {}),
     scope:
-      "Public HTML metadata only. No authenticated funnel or paywall observed.",
+      mode === "text"
+        ? "Public HTTP HTML text projection, not a rendered or authenticated view. Hidden markup and both billing-toggle states may be present. No checkout or paywall behavior tested."
+        : "Public HTML metadata only. No authenticated funnel or paywall observed.",
   };
   return evidenceInput.omit({ productId: true }).parse({
     sourceUrl: url,
     observedAt: new Date().toISOString(),
     kind: "page",
-    contentHash: digest(JSON.stringify({ title, description, headings })),
+    contentHash: digest(
+      JSON.stringify(
+        mode === "text"
+          ? {
+              title,
+              description,
+              headings,
+              captureMode: mode,
+              normalizationVersion: 1,
+              normalizedTextHash,
+            }
+          : { title, description, headings },
+      ),
+    ),
     summary: `${title}${description ? " — " + description : ""}`,
     payload,
   });
@@ -158,7 +229,14 @@ export async function collect(limit = 5) {
       const evidence =
         job.source.kind === "rss"
           ? rssEvidence(job.source.url, result.text)
-          : [pageEvidence(job.source.url, result.text, result.headers)];
+          : [
+              pageEvidence(
+                job.source.url,
+                result.text,
+                result.headers,
+                job.source.capture_mode ?? "metadata",
+              ),
+            ];
       if (!evidence.length)
         throw new Error("No usable feed items; source requires review");
       if (

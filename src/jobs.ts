@@ -4,7 +4,7 @@ import type { AppEnv, Bindings } from "./types";
 import { now, later } from "./types";
 import { audit, fail, page, parse, randomToken, sha256 } from "./lib";
 import { requireAdmin, requireCollector } from "./auth";
-import { sourceInput, evidenceInput } from "./contracts";
+import { sourceInput, evidenceInput, sourceCaptureMode } from "./contracts";
 import { collectionStatus } from "./collection-policy";
 import { productExists } from "./catalog";
 
@@ -83,7 +83,7 @@ jobAdmin.post("/sources", async (c) => {
   const sourceId = crypto.randomUUID(),
     time = now();
   const inserted = await c.env.DB.prepare(
-    "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(url,kind) DO NOTHING RETURNING id",
+    "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane,capture_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(url,kind) DO NOTHING RETURNING id",
   )
     .bind(
       sourceId,
@@ -96,6 +96,7 @@ jobAdmin.post("/sources", async (c) => {
       time,
       time,
       input.lane ?? (input.kind === "browser" ? "browser" : "http"),
+      input.captureMode,
     )
     .first();
   if (!inserted)
@@ -125,15 +126,44 @@ jobAdmin.patch("/sources/:id", async (c) => {
       .object({
         enabled: z.boolean(),
         intervalHours: z.number().int().min(1).max(720).optional(),
+        captureMode: sourceCaptureMode.optional(),
       })
       .strict(),
   );
   const result = await c.env.DB.prepare(
-    "UPDATE sources SET enabled=?,interval_hours=COALESCE(?,interval_hours) WHERE id=?",
+    `UPDATE sources SET enabled=?2,interval_hours=COALESCE(?3,interval_hours),
+     last_fingerprint=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE last_fingerprint END,
+     last_evidence_id=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE last_evidence_id END,
+     http_etag=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE http_etag END,
+     http_last_modified=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE http_last_modified END,
+     last_checked_at=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE last_checked_at END,
+     last_changed_at=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN NULL ELSE last_changed_at END,
+     unchanged_streak=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN 0 ELSE unchanged_streak END,
+     next_run_at=CASE WHEN capture_mode<>COALESCE(?1,capture_mode) THEN ?4 ELSE next_run_at END,
+     capture_mode=COALESCE(?1,capture_mode)
+     WHERE id=?5 AND (?1 IS NULL OR ?1='metadata' OR kind='public_page')
+       AND (capture_mode=COALESCE(?1,capture_mode) OR NOT EXISTS(SELECT 1 FROM jobs WHERE source_id=sources.id AND status='running'))`,
   )
-    .bind(input.enabled ? 1 : 0, input.intervalHours ?? null, c.req.param("id"))
+    .bind(
+      input.captureMode ?? null,
+      input.enabled ? 1 : 0,
+      input.intervalHours ?? null,
+      now(),
+      c.req.param("id"),
+    )
     .run();
-  if (!result.meta.changes) fail(404, "Source not found");
+  if (!result.meta.changes) {
+    const source = await c.env.DB.prepare("SELECT kind FROM sources WHERE id=?")
+      .bind(c.req.param("id"))
+      .first<{ kind: string }>();
+    if (!source) fail(404, "Source not found");
+    if (input.captureMode === "text" && source.kind !== "public_page")
+      fail(422, "Text capture is only supported for public-page HTTP sources");
+    fail(
+      409,
+      "Finish or reclaim the running source job before changing capture mode",
+    );
+  }
   return c.json({ ok: true });
 });
 jobAdmin.get("/collection/status", async (c) =>
@@ -324,7 +354,7 @@ collector.post("/:id/complete", async (c) => {
   const jobId = c.req.param("id"),
     time = now();
   const job = await c.env.DB.prepare(
-    "SELECT s.id,s.product_id,s.url,s.kind,s.last_fingerprint FROM jobs j JOIN sources s ON s.id=j.source_id WHERE j.id=? AND j.status='running' AND j.lease_token=? AND j.lease_expires_at>?",
+    "SELECT s.id,s.product_id,s.url,s.kind,s.last_fingerprint,s.capture_mode FROM jobs j JOIN sources s ON s.id=j.source_id WHERE j.id=? AND j.status='running' AND j.lease_token=? AND j.lease_expires_at>?",
   )
     .bind(jobId, input.leaseToken, time)
     .first<{
@@ -333,8 +363,23 @@ collector.post("/:id/complete", async (c) => {
       url: string;
       kind: string;
       last_fingerprint: string | null;
+      capture_mode: "metadata" | "text";
     }>();
   if (!job) fail(409, "Job lease expired or replaced");
+  if (
+    job.kind === "public_page" &&
+    job.capture_mode === "text" &&
+    input.outcome === "observed" &&
+    (input.evidence.length !== 1 ||
+      input.evidence[0].kind !== "page" ||
+      input.evidence[0].sourceUrl !== job.url ||
+      input.evidence[0].payload.captureMode !== "text" ||
+      typeof input.evidence[0].payload.text !== "string")
+  )
+    fail(
+      422,
+      "Text-mode sources require one matching text capture from an updated HTTP collector",
+    );
   if (
     input.outcome === "unchanged" &&
     (job.kind === "browser" ||
@@ -386,7 +431,7 @@ collector.post("/:id/complete", async (c) => {
       c.env.DB.prepare(
         `INSERT INTO product_changes(id,product_id,evidence_id,previous_evidence_id,source_id,kind,summary,observed_at,created_at)
        SELECT ?,s.product_id,e.id,previous.id,s.id,'public_page',
-         'Public page metadata changed. Review the linked observations before describing the change.',json_extract(j.value,'$.observedAt'),?
+         'Public page content changed. Review the linked observations before describing the change.',json_extract(j.value,'$.observedAt'),?
        FROM sources s JOIN evidence previous ON previous.id=s.last_evidence_id AND previous.product_id=s.product_id
        JOIN json_each(?) j ON json_extract(j.value,'$.sourceUrl')=s.url AND json_extract(j.value,'$.kind')='page'
        JOIN evidence e ON e.product_id=s.product_id AND e.source_url=s.url AND e.content_hash=json_extract(j.value,'$.contentHash')

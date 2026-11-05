@@ -263,13 +263,34 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
           kind: "page",
           contentHash: "d".repeat(64),
           summary: "Observed public landing page",
-          payload: {},
+          payload: { text: "A😀BCDE", textTruncated: false },
         },
       });
       assert.notEqual(evidence.isError, true);
       const evidenceId = JSON.parse(
         (evidence.content as { text: string }[])[0].text,
       ).id as string;
+      const firstText = await client.callTool({
+        name: "read_source_text",
+        arguments: { evidenceId, limit: 2 },
+      });
+      const firstWindow = JSON.parse(
+        (firstText.content as { text: string }[])[0].text,
+      );
+      assert.equal(firstWindow.text, "A😀");
+      assert.equal(
+        firstWindow.nextOffset,
+        2,
+        "Pagination counts Unicode characters, not JavaScript code units",
+      );
+      const secondText = await client.callTool({
+        name: "read_source_text",
+        arguments: { evidenceId, offset: firstWindow.nextOffset, limit: 2 },
+      });
+      assert.equal(
+        JSON.parse((secondText.content as { text: string }[])[0].text).text,
+        "BC",
+      );
       const contextResult = await client.callTool({
         name: "research_context",
         arguments: { mode: "qualification" },

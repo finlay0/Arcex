@@ -625,6 +625,12 @@ export const openapi = {
     "/api/v1/admin/billing/holds/{userId}": {
       delete: operation("Clear reviewed billing hold", "admin"),
     },
+    "/api/v1/admin/evidence/{id}/text": {
+      get: operation(
+        "Private captured-text window, at most 6000 Unicode characters; no collection or publication",
+        "admin",
+      ),
+    },
     "/api/v1/collector/jobs/status": {
       get: operation(
         "Whether recurring source collection is enabled; no work is claimed",

@@ -109,6 +109,24 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
     const jobs = claims.flatMap((r) => (r.job ? [r.job] : []));
     assert.equal(jobs.length, 1);
     const job = jobs[0];
+    const setMode = (mode: string) =>
+      app.request(
+        `http://localhost:8791/api/v1/admin/sources/${job.source.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            authorization: "Bearer admin-test-only",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ enabled: true, captureMode: mode }),
+        },
+        env,
+      );
+    assert.equal(
+      (await setMode("text")).status,
+      409,
+      "A running collector must finish before its capture mode changes",
+    );
     await db
       .prepare(
         "INSERT INTO products(id,slug,name,url,domain,description,category,monetization,created_at,updated_at) VALUES ('tracked','tracked','Tracked','https://fixture.com','fixture.com','Fixture','other','unknown',?,?)",
@@ -324,6 +342,65 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
       409,
     );
 
+    const price9 =
+      "<title>Fixture pricing</title><h1>Pricing</h1><p>Pro $9 per month</p>";
+    const price19 = price9.replace("$9", "$19");
+    assert.equal(
+      pageEvidence(job.source.url, price9, {}).contentHash,
+      pageEvidence(job.source.url, price19, {}).contentHash,
+      "Metadata mode retains its documented limited scope",
+    );
+    const textCapture = pageEvidence(job.source.url, price9, {}, "text");
+    assert.notEqual(
+      textCapture.contentHash,
+      pageEvidence(job.source.url, price19, {}, "text").contentHash,
+      "Text capture must detect price-only edits",
+    );
+    assert.equal(
+      textCapture.contentHash,
+      pageEvidence(
+        job.source.url,
+        price9 + "<script>changing nonce</script>",
+        {},
+        "text",
+      ).contentHash,
+      "Script nonces do not create text-content changes",
+    );
+    assert.equal((await setMode("text")).status, 200);
+    const reset = await db
+      .prepare(
+        "SELECT last_fingerprint,last_evidence_id,http_etag,last_checked_at FROM sources WHERE id=?",
+      )
+      .bind(job.source.id)
+      .first();
+    assert.deepEqual(reset, {
+      last_fingerprint: null,
+      last_evidence_id: null,
+      http_etag: null,
+      last_checked_at: null,
+    });
+    await db
+      .prepare("UPDATE collection_policy SET daily_limit=4 WHERE lane='http'")
+      .run();
+    await enqueueDue(env);
+    const textJob = (await req("/claim", { kinds: ["public_page"] })).job;
+    await req(
+      `/${textJob.id}/complete`,
+      { leaseToken: textJob.leaseToken, evidence: [evidence] },
+      422,
+    );
+    await req(`/${textJob.id}/complete`, {
+      leaseToken: textJob.leaseToken,
+      evidence: [textCapture],
+    });
+    assert.equal(
+      (await db
+        .prepare("SELECT count(*) n FROM product_changes")
+        .first<{ n: number }>())!.n,
+      1,
+      "Changing capture mode establishes a new baseline, not a product-change claim",
+    );
+
     // The REST completion accepts up to 30 entries. Measure that boundary, not only one-page jobs.
     const stamp = new Date().toISOString();
     await db
@@ -333,7 +410,7 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
       .bind(stamp, stamp)
       .run();
     await db
-      .prepare("UPDATE collection_policy SET daily_limit=4 WHERE lane='http'")
+      .prepare("UPDATE collection_policy SET daily_limit=5 WHERE lane='http'")
       .run();
     await enqueueDue(env);
     const feedJob = (await req("/claim", { kinds: ["rss"] })).job;
