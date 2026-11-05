@@ -1,26 +1,26 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
-import { Bell, Bookmark, Cable, Check, ChartNoAxesColumn, CircleUser, Crosshair, HardDrive, History, Layers, Megaphone, Radio, Search, Trophy, type LucideIcon } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Bell, Bookmark, Cable, Check, CircleUser, Crosshair, History, Layers, Megaphone, Radio, Search, Trophy, type LucideIcon } from "lucide-react";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { CHANGES, MODEL_LABEL, products, type Change, type Product } from "./data";
-import { CodeLine, CopyBlock, DAILY_LIMIT, FREE_WATCHES, GateModal, INSIDER_PRICE, InsiderModal, MCP_URL, mcpPrompt, ProductIcon, useCopy } from "./ui";
+import { api, ApiError, errorMessage, fetchRadar, MCP_URL, toProduct, useQuery, type Change, type Product, type Usage } from "./api";
+import { MODEL_LABEL } from "./data";
+import { CodeLine, CopyBlock, DAILY_LIMIT, GateModal, INSIDER_PRICE, InsiderModal, mcpPrompt, ProductIcon, useCopy, useDebounced } from "./ui";
 
 export type FirstRun = { mcp?: boolean; blueprint?: boolean; dismissed?: boolean };
 type Session = {
-  signedIn: boolean; signIn: (via: string) => void; signOut: () => void; via: string | null;
-  unlocked: string[]; unlock: (slug: string) => boolean; resetLimit: () => void; fillLimit: () => void;
-  saved: string[]; toggleSave: (slug: string) => void;
-  history: string[]; visit: (slug: string) => void;
-  requested: string[]; requestFull: (slug: string) => void;
-  watching: string[]; toggleWatch: (slug: string) => void;
-  mine: string[]; addMine: (url: string) => void; removeMine: (url: string) => void;
-  alerts: boolean; setAlerts: (on: boolean) => void;
-  unseen: Change[]; markSeen: () => void;
+  status: "loading" | "in" | "out"; signedIn: boolean; userName: string | null; insider: boolean;
+  signOut: () => void; checkout: () => Promise<void>; portal: () => Promise<void>; notify: (message: string) => void;
+  usage: Usage | null; setUsage: (usage: Usage) => void;
+  saved: Product[]; isSaved: (id: string) => boolean; toggleSave: (p: Product) => void;
+  history: Product[]; visit: (p: Product) => void;
+  requested: string[]; requestFull: (p: Product) => void;
+  watches: Product[]; isWatching: (id: string) => boolean; toggleWatch: (p: Product) => void;
+  changes: Change[]; unseen: Change[]; markSeen: () => void;
   firstRun: FirstRun; setFirstRun: (patch: FirstRun) => void;
-  insider: boolean; subscribe: () => void; cancelInsider: () => void; insiderOpen: boolean;
-  openMcp: () => void; openRequest: () => void; openPalette: () => void; openSignIn: () => void; openInsider: () => void;
+  insiderOpen: boolean;
+  openMcp: () => void; openPalette: () => void; openSignIn: () => void; openInsider: () => void;
 };
 const Ctx = createContext<Session | null>(null);
 export const useSession = () => {
@@ -29,13 +29,13 @@ export const useSession = () => {
   return v;
 };
 
-/** Opens an app's page. Signed-out visitors meet the gate there, unless it's the open sample. */
+/** Opens an app's page. Signed-out visitors meet the gate there, unless it's open to everyone. */
 export function useOpenProduct() {
   const nav = useNavigate();
   const { pathname, search } = useLocation();
-  return (p: Product, step?: number, hash = "") => {
+  return (slug: string, step?: number, hash = "") => {
     sessionStorage.setItem("arcex.radarBack", pathname + search);
-    nav(`/app/${p.slug}${step ? `/${step}` : ""}${hash}`, { state: { fromRow: true } });
+    nav(`/app/${slug}${step ? `/${step}` : ""}${hash}`, { state: { fromRow: true } });
   };
 }
 
@@ -57,29 +57,31 @@ function Palette({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => vo
   const s = useSession();
   const { copy } = useCopy();
   const openProduct = useOpenProduct();
-  const go = (fn: () => void) => { setOpen(false); fn(); };
+  const [text, setText] = useState("");
+  const q = useDebounced(text.trim());
+  const { data } = useQuery((signal) => fetchRadar({ limit: 8, ...(q ? { q } : {}) }, signal), [q], open);
+  const go = (fn: () => void) => { setOpen(false); setText(""); fn(); };
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} title="Search Arcex" description="Search products, patterns and actions">
-      <CommandInput placeholder="Search products, paywalls, patterns..." />
+    <CommandDialog open={open} onOpenChange={setOpen} title="Search Arcex" description="Search products and actions">
+      <CommandInput placeholder="Search products..." value={text} onValueChange={setText} />
       <CommandList>
         <CommandEmpty>No matches.</CommandEmpty>
-        <CommandGroup heading="Products">
-          {products.map((p) => (
-            <CommandItem key={p.slug} value={`${p.name} ${p.tagline} ${MODEL_LABEL[p.model]}`} onSelect={() => go(() => openProduct(p))}>
-              <ProductIcon p={p} size={18} />
-              <span>{p.name}</span><span className="truncate text-t3">{p.tagline}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {!!data?.items.length && (
+          <CommandGroup heading="Products">
+            {data.items.map((p) => (
+              <CommandItem key={p.slug} value={`${p.name} ${p.description} ${MODEL_LABEL[p.monetization]}`} onSelect={() => go(() => openProduct(p.slug))}>
+                <ProductIcon p={p} size={18} />
+                <span>{p.name}</span><span className="truncate text-t3">{p.description}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         <CommandGroup heading="Actions">
           <CommandItem value="what's new changes updates" onSelect={() => go(() => nav("/updates"))}>See what's new</CommandItem>
-          <CommandItem value="all paywall screens" onSelect={() => go(() => nav("/screens"))}>Browse all paywalls</CommandItem>
-          <CommandItem value="ads library" onSelect={() => go(() => nav("/ads"))}>Browse all ads</CommandItem>
           <CommandItem value="tracking competitors" onSelect={() => go(() => nav("/tracking"))}>Track competitors</CommandItem>
           <CommandItem value="copy mcp setup" onSelect={() => go(() => { copy(mcpPrompt()); s.setFirstRun({ mcp: true }); })}>Copy MCP setup</CommandItem>
-          <CommandItem value="request a product" onSelect={() => go(s.openRequest)}>Request a product</CommandItem>
-          <CommandItem value="filter hard paywall" onSelect={() => go(() => nav("/?model=hard"))}>Filter: hard paywall</CommandItem>
-          <CommandItem value="filter credit gate" onSelect={() => go(() => nav("/?model=credit"))}>Filter: credit gate</CommandItem>
+          <CommandItem value="filter hard paywall" onSelect={() => go(() => nav("/?model=hard_trial_gate"))}>Filter: hard paywall</CommandItem>
+          <CommandItem value="filter credit gate" onSelect={() => go(() => nav("/?model=credit_exhaustion"))}>Filter: credit gate</CommandItem>
         </CommandGroup>
       </CommandList>
     </CommandDialog>
@@ -98,10 +100,21 @@ const CLIENT_SETUP = [
 /** The paste-in connection flow. Used by the MCP dialog and the MCP & API page. */
 export function McpSetup({ onClose }: { onClose?: () => void }) {
   const s = useSession();
-  // Prototype only. The real key comes from POST /api/v1/me/api-keys and is shown once.
   const [key, setKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [manual, setManual] = useState(false);
   const markDone = () => s.setFirstRun({ mcp: true });
+  const createKey = async () => {
+    setBusy(true);
+    try {
+      const created = await api<{ token: string }>("/api/v1/me/api-keys", { method: "POST", body: { name: "Agent setup" } });
+      setKey(created.token);
+    } catch (error) {
+      s.notify(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="flex flex-col gap-3">
         <CopyBlock text={mcpPrompt(key ?? undefined)} label="Copy instructions" onCopy={markDone} />
@@ -109,9 +122,9 @@ export function McpSetup({ onClose }: { onClose?: () => void }) {
           <div className="font-medium">Blueprints need a free key</div>
           <p className="mt-0.5 text-[13px] leading-[18px] text-t2">Search works without one. A key gives you {DAILY_LIMIT} blueprint pulls a day, and Insider is unlimited.</p>
           {key ? (
-            <p role="status" className="mt-2 flex items-start gap-2 text-[13px] leading-[18px] text-t2"><Check className="mt-px size-4 shrink-0 text-teal" />Your key is in the instructions above. Keep it private, like a password.</p>
+            <p role="status" className="mt-2 flex items-start gap-2 text-[13px] leading-[18px] text-t2"><Check className="mt-px size-4 shrink-0 text-teal" />Your key is in the instructions above. It's only shown this once, so copy it now and keep it private, like a password.</p>
           ) : s.signedIn ? (
-            <button className="btn btn-ghost mt-2 w-full" onClick={() => setKey("arcex_prototype_" + crypto.randomUUID().slice(0, 8))}>Add my key to the instructions</button>
+            <button disabled={busy} className="btn btn-ghost mt-2 w-full disabled:opacity-60" onClick={() => void createKey()}>{busy ? "Creating key..." : "Add my key to the instructions"}</button>
           ) : (
             <button className="btn btn-ghost mt-2 w-full" onClick={() => { onClose?.(); s.openSignIn(); }}>Sign in for a free key</button>
           )}
@@ -145,79 +158,149 @@ function McpDialog({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => 
   );
 }
 
-function RequestDialog({ open, setOpen }: { open: boolean; setOpen: (o: boolean) => void }) {
-  const [sent, setSent] = useState(false);
-  const change = (o: boolean) => { setOpen(o); if (!o) setSent(false); };
-  return (
-    <Dialog open={open} onOpenChange={change}>
-      <DialogContent className={`${DIALOG} sm:max-w-[440px]`}>
-        <DialogTitle className={DIALOG_TITLE}>{sent ? "It's in the queue" : "Request a product"}</DialogTitle>
-        <DialogDescription className="text-t2">{sent ? "We pick from this list live on stream." : "Paste any AI product you want us to break down."}</DialogDescription>
-        {sent ? <button className="btn btn-ghost" onClick={() => change(false)}>Done</button> : (
-          <form className="flex flex-col gap-3" onSubmit={(e) => { e.preventDefault(); setSent(true); }}>
-            <input required type="url" aria-label="Product URL" placeholder="https://" className="h-11 rounded-xl border border-line-strong bg-canvas px-3 outline-none focus:border-teal" />
-            <label className="flex items-center gap-2 text-t2"><input type="checkbox" className="accent-teal" /> It's my product</label>
-            <button className="btn btn-primary h-11">Add to queue</button>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
+type RawRow = Parameters<typeof toProduct>[0];
+const STARTED_AT = new Date().toISOString();
 
-function SessionProvider({ children, openers, insiderOpen }: { children: ReactNode; insiderOpen: boolean; openers: Pick<Session, "openMcp" | "openRequest" | "openPalette" | "openSignIn" | "openInsider"> }) {
-  const [via, setVia] = usePersisted<string | null>("arcex.via", null);
-  const [unlocked, setUnlocked] = usePersisted<string[]>("arcex.unlocked", []);
-  const [saved, setSaved] = usePersisted<string[]>("arcex.saved", []);
-  const [history, setHistory] = usePersisted<string[]>("arcex.history", []);
-  const [insider, setInsider] = usePersisted<boolean>("arcex.insider", false);
+function SessionProvider({ children, openers, insiderOpen }: { children: ReactNode; insiderOpen: boolean; openers: Pick<Session, "openMcp" | "openPalette" | "openSignIn" | "openInsider"> }) {
+  const [sp] = useSearchParams();
+  const nav = useNavigate();
+  const { pathname } = useLocation();
+  const [status, setStatus] = useState<Session["status"]>("loading");
+  const [userName, setUserName] = useState<string | null>(null);
+  const [insider, setInsider] = useState(false);
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [saved, setSaved] = useState<Product[]>([]);
+  const [watches, setWatches] = useState<Product[]>([]);
+  const [changes, setChanges] = useState<Change[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  // The API has no read route for these, so they stay on this browser.
+  const [history, setHistory] = usePersisted<Product[]>("arcex.history", []);
   const [requested, setRequested] = usePersisted<string[]>("arcex.requested", []);
-  const [watching, setWatching] = usePersisted<string[]>("arcex.watching", []);
-  const [mine, setMine] = usePersisted<string[]>("arcex.mine", []);
-  const [alerts, setAlerts] = usePersisted<boolean>("arcex.alerts", false);
-  const [seen, setSeen] = usePersisted<string[]>("arcex.seenChanges", CHANGES.filter((c) => c.daysAgo > 1).map((c) => c.id));
+  const [seenAt, setSeenAt] = usePersisted<string>("arcex.changesSeenAt", STARTED_AT);
   const [firstRun, setFirstRunState] = usePersisted<FirstRun>("arcex.firstRun", {});
-  const value = useMemo<Session>(() => ({
-    via, signedIn: !!via,
-    signIn: setVia,
-    signOut: () => setVia(null),
-    unlocked,
-    unlock: (slug) => {
-      if (insider || unlocked.includes(slug)) return true;
-      if (unlocked.length >= DAILY_LIMIT) return false;
-      setUnlocked([...unlocked, slug]);
-      return true;
+  const [loads, setLoads] = useState(0);
+
+  const notify = useCallback((message: string) => setNotice(message), []);
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    (async () => {
+      try {
+        const me = await api<{ user: { name: string } | null; insider: boolean }>("/api/v1/me", { signal });
+        const [nextUsage, nextSaved, nextWatches] = await Promise.all([
+          api<Usage | { unlimited: true }>("/api/v1/me/usage", { signal }),
+          api<{ items: RawRow[] }>("/api/v1/me/saves?limit=100", { signal }),
+          api<{ items: RawRow[] }>("/api/v1/me/watches?limit=100", { signal }),
+        ]);
+        if (signal.aborted) return;
+        setUserName(me.user?.name ?? null);
+        setInsider(me.insider);
+        setUsage("used" in nextUsage ? nextUsage : null);
+        setSaved(nextSaved.items.map(toProduct));
+        setWatches(nextWatches.items.map(toProduct));
+        setStatus("in");
+      } catch (error) {
+        if (signal.aborted) return;
+        if (!(error instanceof ApiError) || error.status !== 401) notify(errorMessage(error));
+        setStatus("out");
+      }
+    })();
+    return () => controller.abort();
+  }, [loads, notify]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api<{ items: Change[] }>("/api/v1/changes?limit=50", { signal: controller.signal }).then((r) => setChanges(r.items), () => {});
+    return () => controller.abort();
+  }, []);
+
+  // Stripe sends people back here. The webhook may land a moment later, so reload the session.
+  const checkoutResult = sp.get("checkout");
+  useEffect(() => {
+    if (!checkoutResult) return;
+    if (checkoutResult === "success") {
+      notify("Thanks. Insider turns on as soon as Stripe confirms your payment.");
+      setLoads((n) => n + 1);
+    }
+    nav(pathname, { replace: true });
+  }, [checkoutResult]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const redirectTo = async (path: string) => {
+    try {
+      const { url } = await api<{ url: string }>(path, { method: "POST" });
+      location.assign(url);
+    } catch (error) {
+      notify(errorMessage(error));
+    }
+  };
+
+  const value: Session = {
+    status, signedIn: status === "in", userName, insider, notify,
+    signOut: () => {
+      api("/auth/logout", { method: "POST" }).then(() => {
+        setStatus("out");
+        setUserName(null);
+        setInsider(false);
+        setUsage(null);
+        setSaved([]);
+        setWatches([]);
+        setHistory([]);
+      }, (error) => notify(errorMessage(error)));
     },
-    resetLimit: () => setUnlocked([]),
-    fillLimit: () => setUnlocked(Array.from({ length: DAILY_LIMIT }, (_, i) => `used-${i}`)),
+    checkout: () => redirectTo("/api/v1/billing/checkout"),
+    portal: () => redirectTo("/api/v1/billing/portal"),
+    usage, setUsage,
     saved,
-    toggleSave: (slug) => setSaved(saved.includes(slug) ? saved.filter((s) => s !== slug) : [...saved, slug]),
-    history,
-    visit: (slug) => setHistory((h) => (h[0] === slug ? h : [slug, ...h.filter((x) => x !== slug)].slice(0, 50))),
-    unseen: CHANGES.filter((c) => !seen.includes(c.id)),
-    markSeen: () => setSeen(CHANGES.map((c) => c.id)),
-    requested,
-    requestFull: (slug) => setRequested((r) => (r.includes(slug) ? r : [...r, slug])),
-    watching,
-    toggleWatch: (slug) => {
-      if (watching.includes(slug)) setWatching(watching.filter((x) => x !== slug));
-      else if (!insider && watching.length >= FREE_WATCHES) openers.openInsider();
-      else setWatching([...watching, slug]);
+    isSaved: (id) => saved.some((p) => p.id === id),
+    toggleSave: (p) => {
+      const on = saved.some((x) => x.id === p.id);
+      setSaved(on ? saved.filter((x) => x.id !== p.id) : [p, ...saved]);
+      api(`/api/v1/me/saves/${encodeURIComponent(p.id)}`, { method: on ? "DELETE" : "PUT" }).catch((error) => {
+        setSaved((list) => (on ? [p, ...list] : list.filter((x) => x.id !== p.id)));
+        notify(errorMessage(error));
+      });
     },
-    mine,
-    addMine: (url) => setMine(mine.includes(url) ? mine : [...mine, url]),
-    removeMine: (url) => setMine(mine.filter((x) => x !== url)),
-    alerts,
-    setAlerts,
-    insider,
-    subscribe: () => setInsider(true),
-    cancelInsider: () => setInsider(false),
+    history,
+    visit: (p) => setHistory((h) => (h[0]?.id === p.id ? h : [p, ...h.filter((x) => x.id !== p.id)].slice(0, 50))),
+    requested,
+    requestFull: (p) => {
+      setRequested((r) => (r.includes(p.id) ? r : [...r, p.id]));
+      api(`/api/v1/me/requests/${encodeURIComponent(p.id)}`, { method: "PUT" }).catch((error) => {
+        setRequested((r) => r.filter((x) => x !== p.id));
+        notify(errorMessage(error));
+      });
+    },
+    watches,
+    isWatching: (id) => watches.some((p) => p.id === id),
+    toggleWatch: (p) => {
+      const on = watches.some((x) => x.id === p.id);
+      setWatches(on ? watches.filter((x) => x.id !== p.id) : [p, ...watches]);
+      api(`/api/v1/me/watches/${encodeURIComponent(p.id)}`, { method: on ? "DELETE" : "PUT" }).catch((error) => {
+        setWatches((list) => (on ? [p, ...list] : list.filter((x) => x.id !== p.id)));
+        if (error instanceof ApiError && error.code === "watch_limit") openers.openInsider();
+        else notify(errorMessage(error));
+      });
+    },
+    changes,
+    unseen: changes.filter((c) => c.observed_at > seenAt),
+    markSeen: () => setSeenAt(new Date().toISOString()),
     insiderOpen,
     firstRun,
     setFirstRun: (patch) => setFirstRunState((f) => ({ ...f, ...patch })),
     ...openers,
-  }), [via, unlocked, saved, history, seen, firstRun, insider, insiderOpen, requested, watching, mine, alerts, openers, setVia, setUnlocked, setSaved, setHistory, setSeen, setFirstRunState, setInsider, setRequested, setWatching, setMine, setAlerts]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  };
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      {notice && <div role="status" className="fade-in fixed bottom-5 left-1/2 z-[60] max-w-[90vw] -translate-x-1/2 rounded-xl border border-line-strong bg-s2 px-4 py-2.5 text-[13px] shadow-2xl">{notice}</div>}
+    </Ctx.Provider>
+  );
 }
 
 function AccountMenu() {
@@ -228,9 +311,11 @@ function AccountMenu() {
       <button aria-label="Account menu" aria-expanded={open} className="flex size-10 items-center justify-center rounded-xl border border-line-strong hover:bg-s2" onClick={() => setOpen(!open)}><CircleUser className="size-[18px]" /></button>
       {open && (
         <div className="fade-in absolute right-0 top-12 z-50 w-56 rounded-xl border border-line-strong bg-s2 p-1 shadow-2xl" onMouseLeave={() => setOpen(false)}>
-          <div className="px-3 py-2 text-t2">{s.insider ? <span className="text-teal">Insider: unlimited</span> : <><span className="num text-t1">{Math.min(s.unlocked.length, DAILY_LIMIT)} of {DAILY_LIMIT}</span> apps today</>}</div>
-          {!s.insider && <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.openInsider(); setOpen(false); }}>Go Insider ({INSIDER_PRICE})</button>}
-          <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.openRequest(); setOpen(false); }}>Request a product</button>
+          {s.userName && <div className="truncate px-3 pt-2 font-medium">{s.userName}</div>}
+          <div className="px-3 py-2 text-t2">{s.insider ? <span className="text-teal">Insider: unlimited</span> : s.usage ? <><span className="num text-t1">{Math.min(s.usage.used, s.usage.limit)} of {s.usage.limit}</span> apps today</> : null}</div>
+          {s.insider
+            ? <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { void s.portal(); setOpen(false); }}>Manage billing</button>
+            : <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.openInsider(); setOpen(false); }}>Go Insider ({INSIDER_PRICE})</button>}
           <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.signOut(); setOpen(false); }}>Sign out</button>
         </div>
       )}
@@ -238,15 +323,13 @@ function AccountMenu() {
   );
 }
 
-function SoonBadge() {
-  return <span className="rounded-md bg-s3 px-1.5 py-0.5 text-[12px] leading-[16px] text-t2">Soon</span>;
-}
-
-function Soon({ children }: { children: ReactNode }) {
+function SoonItem({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent>Arena is coming soon</TooltipContent>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Icon className="size-[18px]" />{label}<span className="ml-auto rounded-md bg-s3 px-1.5 py-0.5 text-[12px] leading-[16px] text-t2">Soon</span></span>
+      </TooltipTrigger>
+      <TooltipContent>{label} is coming soon</TooltipContent>
     </Tooltip>
   );
 }
@@ -271,7 +354,7 @@ function TopNav() {
           <Search className="size-4" /><kbd className="hidden lg:inline">⌘K</kbd>
         </button>
         <button onClick={s.openMcp} className="hidden h-10 items-center gap-2 rounded-xl px-3 font-medium text-t1 transition-colors hover:bg-s2 md:flex"><Cable className="size-4 text-t2" />MCP</button>
-        {s.signedIn ? <AccountMenu /> : <button onClick={s.openSignIn} className="h-10 rounded-xl border border-line-strong px-3.5 font-medium transition-colors hover:bg-s2 md:px-4">Sign in</button>}
+        {s.status === "loading" ? <span className="size-10" /> : s.signedIn ? <AccountMenu /> : <button onClick={s.openSignIn} className="h-10 rounded-xl border border-line-strong px-3.5 font-medium transition-colors hover:bg-s2 md:px-4">Sign in</button>}
       </div>
     </header>
   );
@@ -286,24 +369,6 @@ function RailLink({ to, icon: Icon, label, end, badge }: { to: string; icon: Luc
   );
 }
 
-function PrototypeMenu() {
-  const s = useSession();
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative mb-2">
-      {open && (
-        <div className="fade-in absolute bottom-full left-0 mb-1 flex w-full flex-col rounded-xl border border-line-strong bg-s2 p-1 text-[12px] shadow-xl">
-          <button className="rounded-lg px-2 py-1.5 text-left hover:bg-s3" onClick={() => (s.signedIn ? s.signOut() : s.signIn("X"))}>{s.signedIn ? "Sign out" : "Sign in instantly"}</button>
-          <button className="rounded-lg px-2 py-1.5 text-left hover:bg-s3" onClick={s.fillLimit}>Use up daily limit</button>
-          <button className="rounded-lg px-2 py-1.5 text-left hover:bg-s3" onClick={s.resetLimit}>Reset daily limit</button>
-          {s.insider && <button className="rounded-lg px-2 py-1.5 text-left hover:bg-s3" onClick={s.cancelInsider}>Cancel Insider</button>}
-        </div>
-      )}
-      <button onClick={() => setOpen(!open)} className="w-full rounded-lg px-2 py-1 text-left text-[11px] text-t3 hover:text-t2">Prototype · sample data</button>
-    </div>
-  );
-}
-
 function Rail() {
   const s = useSession();
   return (
@@ -313,28 +378,18 @@ function Rail() {
         <RailLink to="/updates" icon={Bell} label="What's New" badge={s.unseen.length} />
         <RailLink to="/tracking" icon={Crosshair} label="Tracking" />
         <div className="my-3 h-px bg-line" />
-        <RailLink to="/ads" icon={Megaphone} label="Ads" />
-        <RailLink to="/screens" icon={Layers} label="Screens" />
+        <SoonItem icon={Megaphone} label="Ads" />
+        <SoonItem icon={Layers} label="Screens" />
         <RailLink to="/developers" icon={Cable} label="MCP & API" />
-        <Soon>
-          <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Trophy className="size-[18px]" />Arena<span className="ml-auto"><SoonBadge /></span></span>
-        </Soon>
+        <SoonItem icon={Trophy} label="Arena" />
         <div className="my-3 h-px bg-line" />
         <RailLink to="/saved" icon={Bookmark} label="Saved" />
         <RailLink to="/history" icon={History} label="History" />
       </nav>
       <div className="flex-1" />
-      <PrototypeMenu />
       {s.signedIn && !s.insider && (
-        <button onClick={s.openInsider} className="mb-2 rounded-xl px-3 py-2 text-left text-[13px] text-t2 transition-colors hover:bg-s1 hover:text-t1">Go Insider <span className="text-t3">{INSIDER_PRICE}</span></button>
+        <button onClick={s.openInsider} className="rounded-xl px-3 py-2 text-left text-[13px] text-t2 transition-colors hover:bg-s1 hover:text-t1">Go Insider <span className="text-t3">{INSIDER_PRICE}</span></button>
       )}
-      <div className="panel flex items-center justify-between rounded-xl p-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2"><span className="live-dot" />Live scan</div>
-          <div className="mt-1 flex items-center gap-2 whitespace-nowrap text-[12px] text-t2"><HardDrive className="size-3" />Updated 3m ago</div>
-        </div>
-        <ChartNoAxesColumn className="size-5 shrink-0 text-t3" />
-      </div>
     </aside>
   );
 }
@@ -342,11 +397,10 @@ function Rail() {
 export function Shell() {
   const [palette, setPalette] = useState(false);
   const [mcp, setMcp] = useState(false);
-  const [request, setRequest] = useState(false);
   const [signIn, setSignIn] = useState(false);
   const [insiderOpen, setInsiderOpen] = useState(false);
   const { pathname } = useLocation();
-  const openers = useMemo(() => ({ openMcp: () => setMcp(true), openRequest: () => setRequest(true), openPalette: () => setPalette(true), openSignIn: () => setSignIn(true), openInsider: () => setInsiderOpen(true) }), []);
+  const openers = useMemo(() => ({ openMcp: () => setMcp(true), openPalette: () => setPalette(true), openSignIn: () => setSignIn(true), openInsider: () => setInsiderOpen(true) }), []);
   const workspace = pathname.startsWith("/app/");
 
   useEffect(() => {
@@ -380,8 +434,7 @@ export function Shell() {
       </div>
       <Palette open={palette} setOpen={setPalette} />
       <McpDialog open={mcp} setOpen={setMcp} />
-      <RequestDialog open={request} setOpen={setRequest} />
-      {signIn && <SignInGate onClose={() => setSignIn(false)} />}
+      {signIn && <GateModal onClose={() => setSignIn(false)} />}
       {insiderOpen && <InsiderDialog onClose={() => setInsiderOpen(false)} />}
     </SessionProvider>
   );
@@ -389,10 +442,5 @@ export function Shell() {
 
 function InsiderDialog({ onClose }: { onClose: () => void }) {
   const s = useSession();
-  return <InsiderModal onSubscribe={() => { s.subscribe(); onClose(); }} onClose={onClose} />;
-}
-
-function SignInGate({ onClose }: { onClose: () => void }) {
-  const s = useSession();
-  return <GateModal onSignIn={(via) => { s.signIn(via); onClose(); }} onClose={onClose} />;
+  return <InsiderModal onSubscribe={s.checkout} onClose={onClose} />;
 }

@@ -1,6 +1,6 @@
 # Arcex
 
-Backend for arcex.dev: Radar discovery, Vault evidence and commercial blueprints, Arena model experiments, Ship community submissions, and MCP access. The retired T3 Code desktop fork has been replaced. This repository contains no frontend UI.
+Backend for arcex.dev: Radar discovery, Vault evidence and commercial blueprints, Arena model experiments, Ship community submissions, and MCP access. The retired T3 Code desktop fork has been replaced. The web app is in `apps/web`. It isn't deployed yet.
 
 Live API: https://arcex-api.peak-era-avern.workers.dev
 
@@ -11,6 +11,10 @@ Live API: https://arcex-api.peak-era-avern.workers.dev
 - [Product direction and decisions](docs/product-direction.md)
 - [Repeatable Work bootstrap](docs/work-bootstrap.txt)
 - [MCP package](packages/mcp/README.md)
+
+## Web app
+
+`pnpm --filter @arcex/web dev` serves it on port 5174 and proxies `/api` and `/auth` to the local Worker on 8791. Start that Worker with `--var APP_ORIGIN:http://localhost:5174`. To read live data instead, set `ARCEX_API_PROXY=https://api.arcex.dev`. Writes won't pass the live origin check from localhost. Production builds call `https://api.arcex.dev`, and the API only accepts `https://arcex.dev` as an origin.
 
 ## Run locally
 

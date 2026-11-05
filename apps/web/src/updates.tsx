@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { bySlug, CHANGE_LABEL, CHANGES, type ChangeKind } from "./data";
+import { CHANGE_LABEL, shortDate, type ChangeKind } from "./data";
 import { useOpenProduct, useSession } from "./shell";
 import { PageHeading, ProductIcon } from "./ui";
-
-const dayLabel = (n: number) => (n === 0 ? "Today" : n === 1 ? "Yesterday" : `${n} days ago`);
 
 export function Updates() {
   const s = useSession();
@@ -14,34 +12,32 @@ export function Updates() {
   const [fresh] = useState(() => new Set(s.unseen.map((c) => c.id)));
   useEffect(() => s.markSeen(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = CHANGES.filter((c) => !kind || c.kind === kind);
-  const days = [...new Set(shown.map((c) => c.daysAgo))];
+  const shown = s.changes.filter((c) => !kind || c.kind === kind);
+  const days = [...new Set(shown.map((c) => shortDate(c.observed_at)))];
   return (
     <main className="px-4 py-5 pb-24 lg:px-6 lg:py-6">
-      <PageHeading title="What's New" sub="Changes we've observed across tracked products this week." />
+      <PageHeading title="What's New" sub="Reviewed changes we've observed across tracked products." />
       <div className="no-scrollbar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
         <button className="chip" data-on={!kind} onClick={() => setKind(null)}>All</button>
         {(Object.keys(CHANGE_LABEL) as ChangeKind[]).map((k) => <button key={k} className="chip" data-on={kind === k} onClick={() => setKind(k)}>{CHANGE_LABEL[k]}</button>)}
       </div>
       <div className="mt-5 flex max-w-[900px] flex-col gap-5">
+        {!shown.length && <p className="panel rounded-2xl p-6 text-center text-t2">{kind ? "No changes of this kind yet." : "No changes have been published yet."}</p>}
         {days.map((day) => (
           <section key={day}>
-            <h2 className="eyebrow mb-2">{dayLabel(day)}</h2>
+            <h2 className="eyebrow mb-2">{day}</h2>
             <div className="panel flex flex-col gap-0.5 rounded-2xl p-1.5">
-              {shown.filter((c) => c.daysAgo === day).map((c) => {
-                const p = bySlug(c.slug)!;
-                return (
-                  <button key={c.id} onClick={() => openProduct(p)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-s2">
-                    <ProductIcon p={p} />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 font-medium">{p.name}{fresh.has(c.id) && <span title="New since your last visit" className="size-1.5 shrink-0 rounded-full bg-teal" />}</span>
-                      <span className="block text-[13px] leading-[18px] text-t2">{c.text}</span>
-                    </span>
-                    <span className="pill hidden sm:inline-flex">{CHANGE_LABEL[c.kind]}</span>
-                    <ChevronRight className="size-4 shrink-0 text-t2" />
-                  </button>
-                );
-              })}
+              {shown.filter((c) => shortDate(c.observed_at) === day).map((c) => (
+                <button key={c.id} onClick={() => openProduct(c.slug)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-s2">
+                  <ProductIcon p={c} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 font-medium">{c.name}{fresh.has(c.id) && <span title="New since your last visit" className="size-1.5 shrink-0 rounded-full bg-teal" />}</span>
+                    <span className="block text-[13px] leading-[18px] text-t2">{c.summary}</span>
+                  </span>
+                  <span className="pill hidden sm:inline-flex">{CHANGE_LABEL[c.kind] ?? c.kind}</span>
+                  <ChevronRight className="size-4 shrink-0 text-t2" />
+                </button>
+              ))}
             </div>
           </section>
         ))}

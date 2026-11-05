@@ -4,7 +4,7 @@ Version 1, November 3, 2026, updated November 4. Covers the launch UI for Radar,
 
 ## Current direction (November 4, 2026)
 
-**The structure is one table and one app page.** Clicking a row opens a single page with everything about that app: analytics, estimated revenue, model, every screen, ads, creators and the blueprint. There's no Vault tab or preview panel, and the interface doesn't use the words Vault or X-Ray. Where this section disagrees with anything below, this section wins. The prototype in `apps/web` follows it.
+**The structure is one table and one app page.** Clicking a row opens a single page with everything about that app: analytics, estimated revenue, model, every screen, ads, creators and the blueprint. There's no Vault tab or preview panel, and the interface doesn't use the words Vault or X-Ray. Where this section disagrees with anything below, this section wins. The app in `apps/web` follows it.
 
 - **Table:** sortable headers, growth with a trend line, estimated revenue, first seen, a screen thumbnail, visible filter chips, All / Trending / Rising / New presets, and 50 rows a page. Sample data has 308 products to test scale.
 - **Tracking:** add your own product, watch competitors and see their changes. Free accounts watch 3. Insider is unlimited, with email alerts.
@@ -12,7 +12,7 @@ Version 1, November 3, 2026, updated November 4. Covers the launch UI for Radar,
 - **MCP & API:** paste-in connection, key management and API examples.
 - **Limits:** 10 apps and 10 blueprint pulls a day, and reopening an app is free. This replaces the 5-a-day figures below.
 - **Backend built:** coverage on Radar rows, sorting, filters and totals, activity and trend metrics from approved observations (null where not collected), draft-then-published manual revenue ranges and changes, tracking, own products, full-breakdown requests, the server-side gate and daily limit, and signed image links.
-- **Frontend when connected:** show unknown values as a dash, label revenue as a range rather than an estimate unless a real model exists, and leave gaps in trend lines.
+- **Frontend, connected November 5:** every page reads the API, with no sample data. Unknown values show a dash, revenue is labeled as a range, and trend lines keep their gaps. Sign-in offers Google only, because the GitHub callback is on the workers.dev host, so its session can't reach arcex.dev. The Ads and Screens libraries are marked Soon until a cross-product API with access rules exists. History stays on the browser because the API has no read route for it. Requesting a product that isn't listed is gone until the API can store one.
 - **Backend still needed:** a revenue model, if one is ever built, wider change detection, and small thumbnail images for the table.
 - **Coverage levels:** products are either "Full Screens" or "Signals Only". The table marks signals-only rows and has a Coverage filter. Signals-only pages show overview, ads, creators and public pricing plus a "Request full breakdown" button, without sign-in or using the daily limit. The 50 MB capture quota holds roughly 50 to 125 full products.
 
@@ -541,7 +541,7 @@ Main measures:
 - **API routing:** `arcex.dev/api/*` goes to `arcex-api`, so session cookies are same-site.
 - **Location:** `apps/web` in this repo, using the existing pnpm workspace.
 - **Replaces:** the arcex.dev waitlist site. Existing Loops signups get a launch email.
-- **Prototype:** `apps/web` currently runs as a Vite single-page app on sample data. Server rendering and the API connection come when it becomes the real frontend.
+- **App:** `apps/web` is a Vite single-page app on the live API. It isn't deployed yet. Server rendering can come later.
 - **Testing:** Claude runs its own browser checks. Terra is for ChatGPT agents.
 
 ## 16. Build order

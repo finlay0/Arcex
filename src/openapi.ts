@@ -356,7 +356,7 @@ export const openapi = {
     "/auth/logout": { post: operation("Revoke current session", "user") },
     "/api/v1/radar": {
       get: operation(
-        "Published products; q, category, monetization, minObservedAdDays, limit, offset. Ad days are distinct approved observed dates per ad, not continuous delivery.",
+        "Published products; q, category, monetization, coverage, firstSeenDays, changedDays, minObservedAdDays, sponsored, hasBlueprint, sort, dir, limit, offset. Ad days are distinct approved observed dates per ad, not continuous delivery.",
       ),
     },
     "/api/v1/vault/{slug}": {

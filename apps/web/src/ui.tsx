@@ -2,13 +2,12 @@ import { useEffect, useState, type ReactNode } from "react";
 import { DropdownMenu } from "radix-ui";
 import { Check, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import type { Product } from "./data";
+import { fetchProviders, MCP_URL, signInUrl, type Usage } from "./api";
+import { DASH } from "./data";
 
 export const DAILY_LIMIT = 10;
 export const FREE_WATCHES = 3;
 export const INSIDER_PRICE = "$12/mo";
-export const API_URL = "https://arcex-api.peak-era-avern.workers.dev";
-export const MCP_URL = API_URL + "/public/mcp";
 /** Paste into any agent. It adds the server the way that agent normally does. */
 export const mcpPrompt = (key?: string) =>
   `Connect the Arcex MCP server to this agent. It's a remote HTTP (Streamable HTTP) MCP server named "arcex" at ${MCP_URL}${key ? `. Send the header "Authorization: Bearer ${key}" with every request` : ""}. Add it the normal way for this agent, then tell me if I need to restart.`;
@@ -23,6 +22,15 @@ export function useMedia(query: string) {
     return () => m.removeEventListener("change", f);
   }, [query]);
   return on;
+}
+
+export function useDebounced<T>(value: T, ms = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced(value), ms);
+    return () => window.clearTimeout(t);
+  }, [value, ms]);
+  return debounced;
 }
 
 export function useCopy() {
@@ -59,34 +67,51 @@ export function CopyBlock({ text, label = "Copy", onCopy }: { text: string; labe
 
 export function Confidence({ level }: { level: number }) {
   return (
-    <span className="inline-flex gap-[3px]" role="img" aria-label={`Estimate confidence ${level} of 4`} title={`Estimate confidence: ${level} of 4`}>
+    <span className="inline-flex gap-[3px]" role="img" aria-label={`Confidence ${level} of 4`} title={`Confidence: ${level} of 4`}>
       {[1, 2, 3, 4].map((i) => <span key={i} className={`size-[5px] rounded-full ${i <= level ? "bg-teal" : "bg-s3"}`} />)}
     </span>
   );
 }
 
-export function Sparkline({ data }: { data: number[] }) {
-  const max = Math.max(...data), min = Math.min(...data);
+/** Weeks with no collection stay as gaps instead of dropping to zero. */
+export function Sparkline({ data }: { data: (number | null)[] }) {
+  const known = data.filter((d): d is number => d !== null);
+  if (known.length < 2) return <span aria-hidden className="block h-[18px] w-14" />;
+  const max = Math.max(...known), min = Math.min(...known);
   const range = max - min || 1;
-  const points = data.map((d, i) => `${(i / (data.length - 1)) * 54 + 1},${17 - ((d - min) / range) * 16}`).join(" ");
-  const up = data[data.length - 1] >= data[0];
-  return <svg width="56" height="18" viewBox="0 0 56 18" aria-hidden><polyline points={points} fill="none" stroke={up ? "var(--color-teal)" : "var(--color-t3)"} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" /></svg>;
+  const runs: [number, number][][] = [[]];
+  data.forEach((d, i) => {
+    if (d === null) runs.push([]);
+    else runs[runs.length - 1].push([(i / (data.length - 1)) * 54 + 1, 17 - ((d - min) / range) * 16]);
+  });
+  const color = known[known.length - 1] >= known[0] ? "var(--color-teal)" : "var(--color-t3)";
+  return (
+    <svg width="56" height="18" viewBox="0 0 56 18" aria-hidden>
+      {runs.map((run, i) => run.length === 1
+        ? <circle key={i} cx={run[0][0]} cy={run[0][1]} r="1" fill={color} />
+        : run.length > 1 && <polyline key={i} points={run.map((p) => p.join(",")).join(" ")} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />)}
+    </svg>
+  );
 }
 
-export function ProductIcon({ p, size = 36 }: { p: Product; size?: number }) {
+/** Change in observed ads and creators. Not product or business growth. */
+export function GrowthValue({ value }: { value: number | null }) {
+  if (value === null) return <span title="Not enough comparable scans yet" className="num text-[13px] text-t3">{DASH}</span>;
+  return <span className={`num text-[13px] font-medium ${value > 0 ? "text-teal" : value < 0 ? "text-t3" : "text-t2"}`}>{value > 0 ? "+" : ""}{value}%</span>;
+}
+
+const iconHue = (name: string) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+
+export function ProductIcon({ p, size = 36 }: { p: { name: string }; size?: number }) {
   return (
-    <span className="flex shrink-0 items-center justify-center font-bold text-white" style={{ width: size, height: size, borderRadius: size * 0.24, background: p.theme.accent, fontSize: size * 0.5 }}>
-      {p.name[0]}
+    <span className="flex shrink-0 items-center justify-center font-bold text-white" style={{ width: size, height: size, borderRadius: size * 0.24, background: `hsl(${iconHue(p.name)} 42% 34%)`, fontSize: size * 0.5 }}>
+      {p.name[0]?.toUpperCase()}
     </span>
   );
 }
 
-export function XIcon({ className }: { className?: string }) {
-  return <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor"><path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3l-4.9-6.4L6.3 22H3.2l7.3-8.3L2.8 2h6.4l4.4 5.9L18.9 2Zm-1.1 18h1.7L8.3 3.9H6.5L17.8 20Z" /></svg>;
-}
-
-export function GitHubIcon({ className }: { className?: string }) {
-  return <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.8-1 2.8-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9V21c0 .3.2.6.7.5A10 10 0 0 0 12 2Z" /></svg>;
+function GoogleIcon({ className }: { className?: string }) {
+  return <svg viewBox="0 0 24 24" aria-hidden className={className}><path fill="#4285F4" d="M22.5 12.2c0-.8-.1-1.5-.2-2.2H12v4.2h5.9a5 5 0 0 1-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8Z" /><path fill="#34A853" d="M12 23c3 0 5.4-1 7.2-2.7l-3.5-2.7c-1 .7-2.2 1-3.7 1-2.9 0-5.3-1.9-6.2-4.5H2.2v2.8A11 11 0 0 0 12 23Z" /><path fill="#FBBC05" d="M5.8 14.1a6.6 6.6 0 0 1 0-4.2V7.1H2.2a11 11 0 0 0 0 9.8l3.6-2.8Z" /><path fill="#EA4335" d="M12 5.4c1.6 0 3 .6 4.2 1.6l3.1-3.1A11 11 0 0 0 2.2 7.1l3.6 2.8C6.7 7.3 9.1 5.4 12 5.4Z" /></svg>;
 }
 
 export function VideoCountIcon({ className }: { className?: string }) {
@@ -120,20 +145,22 @@ const OVERLAY = "bg-black/60 backdrop-blur-[6px]";
 const IN_APP_BROWSER = /Twitter|FBAN|FBAV|Instagram|LinkedInApp/i;
 
 /** Sign-in dialog. With a product it is the app page gate; without one it is plain sign-in. */
-export function GateModal({ product, screens, onSignIn, onClose }: { product?: Product; screens?: number; onSignIn: (via: string) => void; onClose: () => void }) {
+export function GateModal({ product, screens, onClose }: { product?: { name: string }; screens?: number; onClose: () => void }) {
   const inApp = IN_APP_BROWSER.test(navigator.userAgent);
   const { copied, copy } = useCopy();
+  const [providers, setProviders] = useState<string[] | null>(null);
+  useEffect(() => { void fetchProviders().then(setProviders); }, []);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="overflow-hidden rounded-2xl border-line-strong bg-s1 p-0 sm:max-w-[440px]" overlayClassName={OVERLAY}>
         <div className="p-6">
           <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-teal">Arcex access // 100% free</div>
           <DialogTitle className="mt-3 font-display text-[26px] font-semibold leading-[32px] tracking-[-0.02em]">
-            {product ? `See all ${screens} screens inside ${product.name} & copy the Agent Blueprint.` : "Sign in to Arcex"}
+            {product ? `See ${screens ? `all ${screens} screens` : "everything"} inside ${product.name} & copy the Agent Blueprint.` : "Sign in to Arcex"}
           </DialogTitle>
-          <DialogDescription className="sr-only">Sign in for free with X or GitHub</DialogDescription>
+          <DialogDescription className="sr-only">Sign in for free</DialogDescription>
           <ul className="mt-5 flex flex-col gap-2.5 text-t2">
-            {["Every screen from sign-up to paywall", "Ads, creators and estimated revenue", "1-click blueprint for Claude and Cursor"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
+            {["Every screen from sign-up to paywall", "Ads, creators and sourced revenue ranges", "1-click blueprint for Claude and Cursor"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
           </ul>
           {inApp && (
             <div className="mt-5 rounded-xl border border-line-strong bg-s2 p-3 text-[13px] leading-[19px] text-t2">
@@ -141,8 +168,10 @@ export function GateModal({ product, screens, onSignIn, onClose }: { product?: P
               <button className="btn btn-ghost mt-2 w-full" onClick={() => copy(location.href, "link")}>{copied ? "Link copied. Paste it in your browser" : "Copy link"}</button>
             </div>
           )}
-          <button className="btn btn-primary mt-6 h-11 w-full" onClick={() => onSignIn("X")}><XIcon className="size-4" />Continue with X</button>
-          <button className="btn btn-ghost mt-2 h-11 w-full" onClick={() => onSignIn("GitHub")}><GitHubIcon className="size-4" />Continue with GitHub</button>
+          <div className="mt-6 flex min-h-11 flex-col gap-2">
+            {providers?.includes("google") && <a className="btn btn-primary h-11 w-full" href={signInUrl("google")}><GoogleIcon className="size-4" />Continue with Google</a>}
+            {providers?.length === 0 && <p role="status" className="text-center text-t2">Sign-in isn't available right now. Please try again soon.</p>}
+          </div>
           <div className="mt-4 text-center text-[12px] leading-[18px] text-t3">Free account includes {DAILY_LIMIT} apps and {DAILY_LIMIT} blueprint pulls a day. No credit card required.</div>
         </div>
       </DialogContent>
@@ -150,12 +179,17 @@ export function GateModal({ product, screens, onSignIn, onClose }: { product?: P
   );
 }
 
-export function LimitModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
+const untilReset = (iso?: string) => {
+  const minutes = iso ? Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 60000)) : null;
+  return minutes === null ? "tomorrow" : `in ${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+};
+
+export function LimitModal({ usage, onClose, onUpgrade }: { usage?: Usage | null; onClose: () => void; onUpgrade: () => void }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl border-line-strong bg-s1 sm:max-w-[440px]" overlayClassName={OVERLAY}>
         <DialogTitle className="font-display text-[26px] font-semibold leading-[32px] tracking-[-0.02em]">You've opened your {DAILY_LIMIT} free apps for today.</DialogTitle>
-        <DialogDescription className="text-t2">Resets in <span className="num text-t1">14h 22m</span>. Apps you've already opened stay free. Insider is unlimited.</DialogDescription>
+        <DialogDescription className="text-t2">Resets <span className="num text-t1">{untilReset(usage?.resetsAt)}</span>. Apps you've already opened today stay free. Insider is unlimited.</DialogDescription>
         <button className="btn btn-primary h-11 w-full" onClick={onUpgrade}>Go Insider ({INSIDER_PRICE})</button>
         <button className="btn btn-ghost h-11 w-full" onClick={onClose}>Come back tomorrow</button>
       </DialogContent>
@@ -163,7 +197,8 @@ export function LimitModal({ onClose, onUpgrade }: { onClose: () => void; onUpgr
   );
 }
 
-export function InsiderModal({ onSubscribe, onClose }: { onSubscribe: () => void; onClose: () => void }) {
+export function InsiderModal({ onSubscribe, onClose }: { onSubscribe: () => Promise<void>; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl border-line-strong bg-s1 sm:max-w-[440px]" overlayClassName={OVERLAY}>
@@ -171,12 +206,21 @@ export function InsiderModal({ onSubscribe, onClose }: { onSubscribe: () => void
         <DialogTitle className="font-display text-[26px] font-semibold leading-[32px] tracking-[-0.02em]">No daily limits. {INSIDER_PRICE}.</DialogTitle>
         <DialogDescription className="text-t2">Arcex stays free. Insider is for when {DAILY_LIMIT} a day isn't enough.</DialogDescription>
         <ul className="flex flex-col gap-2.5 text-t2">
-          {["Unlimited apps", "Unlimited blueprint pulls over MCP", "Unlimited tracking with email alerts", "Collections to organize what you save", "Priority when you request a product"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
+          {["Unlimited apps", "Unlimited blueprint pulls over MCP", "Unlimited tracking with email alerts", "Priority on full-breakdown requests"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
         </ul>
-        <button className="btn btn-primary h-11 w-full" onClick={onSubscribe}>Go Insider</button>
-        <div className="text-center text-[12px] text-t3">Prototype: no payment is taken.</div>
+        <button disabled={busy} className="btn btn-primary h-11 w-full disabled:opacity-60" onClick={() => { setBusy(true); void onSubscribe().finally(() => setBusy(false)); }}>{busy ? "Opening checkout..." : "Go Insider"}</button>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A failed request, with a way to try again. */
+export function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="text-t2">{message}</div>
+      <button className="btn btn-ghost" onClick={onRetry}>Try again</button>
+    </div>
   );
 }
 

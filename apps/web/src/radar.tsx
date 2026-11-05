@@ -1,16 +1,17 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Lock, Search, X } from "lucide-react";
-import { bySlug, CATEGORY_LABEL, CHANGES, formatRevenue, hasBlueprint, MODEL_LABEL, postLoginCount, products, SAMPLE_SLUG, verdict, type Category, type Model, type Product } from "./data";
-import { ScaledScreen } from "./screens";
+import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, X } from "lucide-react";
+import { errorMessage, fetchRadar, useQuery, type Product } from "./api";
+import { ago, CATEGORY_LABEL, DASH, formatRevenue, MODEL_LABEL, type Category, type Model } from "./data";
 import { useOpenProduct, useSession } from "./shell";
-import { Confidence, FilterMenu, PageHeading, ProductIcon, Sparkline, useMedia, VideoCountIcon } from "./ui";
+import { Confidence, ErrorPanel, FilterMenu, GrowthValue, PageHeading, ProductIcon, Sparkline, useDebounced, useMedia, VideoCountIcon } from "./ui";
 
 const PAGE_SIZE = 50;
+const DAY = 86_400_000;
 const SIGNALS = [
   { value: "", label: "All Signals" },
-  { value: "ads30", label: "30d+ Active Ads" },
-  { value: "sponsored", label: "YT Sponsored" },
+  { value: "ads30", label: "Ads Seen 30+ Days" },
+  { value: "sponsored", label: "Sponsored Creators" },
   { value: "blueprint", label: "Has MCP Blueprint" },
   { value: "changed", label: "Changed This Week" },
 ];
@@ -26,36 +27,28 @@ const COVERAGE = [
   { value: "signals", label: "Signals Only" },
 ];
 const PRESETS = [
-  { value: "", label: "All", sort: "growth", test: () => true },
-  { value: "trending", label: "Trending", sort: "growth", test: (p: Product) => p.growth >= 25 },
-  { value: "rising", label: "Rising", sort: "growth", test: (p: Product) => p.firstSeen <= 120 && p.growth > 0 },
-  { value: "new", label: "New", sort: "first", test: (p: Product) => p.firstSeen <= 30 },
+  { value: "", label: "All", sort: "", firstSeenDays: 0 },
+  { value: "trending", label: "Trending", sort: "activity", firstSeenDays: 0 },
+  { value: "rising", label: "Rising", sort: "activity", firstSeenDays: 120 },
+  { value: "new", label: "New", sort: "first", firstSeenDays: 30 },
 ];
-const SORT: Record<string, { value: (p: Product) => number; asc?: boolean }> = {
-  revenue: { value: (p) => p.revenue[1] },
-  growth: { value: (p) => p.growth },
-  ads: { value: (p) => p.activeAds },
-  sponsors: { value: (p) => p.creators },
-  first: { value: (p) => p.firstSeen, asc: true },
-  seen: { value: (p) => p.lastSeen, asc: true },
+const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
+  revenue: (p) => p.revenue_high_usd,
+  activity: (p) => p.activity_change_4w,
+  ads: (p) => p.active_ads,
+  sponsors: (p) => p.sponsors,
+  first: (p) => p.first_seen,
+  seen: (p) => p.last_seen,
 };
 
-export const ago = (days: number) => (days < 30 ? `${days}d ago` : days < 365 ? `${Math.round(days / 30)}mo ago` : `${(days / 365).toFixed(1)}y ago`);
-const seenAgo = (minutes: number) => (minutes < 60 ? `${minutes}m ago` : `${Math.round(minutes / 60)}h ago`);
-
-function Delta({ n }: { n: number }) {
+function Delta({ n }: { n: number | null }) {
   if (!n) return null;
   return <span title="Change in the last 7 days" className={`hidden text-[12px] font-normal md:inline ${n > 0 ? "text-teal" : "text-t3"}`}>{n > 0 ? `+${n}` : n}</span>;
 }
 
-export function GrowthValue({ value }: { value: number }) {
-  return <span className={`num text-[13px] font-medium ${value > 0 ? "text-teal" : value < 0 ? "text-t3" : "text-t2"}`}>{value > 0 ? "+" : ""}{value}%</span>;
-}
-
 function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => void }) {
   const s = useSession();
-  const paywall = p.steps.find((x) => x.stage === "paywall");
-  const open = !s.signedIn && p.slug === SAMPLE_SLUG;
+  const open = !s.signedIn && p.open_sample && p.coverage === "full";
   return (
     <button data-radar-row data-slug={p.slug} onClick={onOpen} className="radar-grid w-full rounded-lg px-4 py-[13px] text-left transition-colors hover:bg-s2 focus-visible:bg-s2">
       <span className="flex min-w-0 items-center gap-3">
@@ -66,27 +59,24 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
             {fresh && <span title="Changed since your last visit" className="size-1.5 shrink-0 rounded-full bg-teal" />}
             {open && <span className="shrink-0 rounded bg-teal-dim px-1.5 text-[11px] font-medium leading-[18px] text-teal">No sign-in</span>}
           </span>
-          <span className="line-clamp-2 text-[13px] leading-[18px] text-t2">{p.what} <span className="text-t1">{verdict(p)}</span></span>
+          <span className="line-clamp-2 text-[13px] leading-[18px] text-t2">{p.description}</span>
         </span>
       </span>
       <span className="col-thumb">
-        {paywall ? (
-          <span className="relative block w-[72px] overflow-hidden rounded-md border border-line-strong">
-            <ScaledScreen product={p} step={paywall} />
-            <span title={`${postLoginCount(p)} screens inside`} className="num absolute bottom-0.5 right-0.5 flex items-center gap-0.5 rounded bg-black/80 px-1 text-[10px] leading-[14px] text-t1">{!open && !s.signedIn && <Lock className="size-2.5" />}{p.steps.length}</span>
-          </span>
+        {p.coverage === "full" ? (
+          <span title={`${p.step_count} screens captured`} className="num flex aspect-[1280/800] w-[72px] items-center justify-center gap-1 rounded-md border border-line-strong bg-s2 text-[12px] text-t1">{s.signedIn || open ? <Layers className="size-3" /> : <Lock className="size-3" />}{p.step_count}</span>
         ) : (
           <span title="We track this app's public signals. Its screens aren't captured yet." className="flex aspect-[1280/800] w-[72px] items-center justify-center rounded-md border border-dashed border-line-strong text-[10px] text-t3">Signals</span>
         )}
       </span>
       <span className="col-cat"><span className="pill">{CATEGORY_LABEL[p.category]}</span></span>
-      <span className="col-rev"><span className="num block text-[13px] font-medium">{formatRevenue(p.revenue)}</span><span className="flex items-center gap-1.5 text-[11px] text-t3">Est. <Confidence level={p.confidence} /></span></span>
-      <span className="flex items-center gap-2"><GrowthValue value={p.growth} /><span className="hidden md:block"><Sparkline data={p.spark} /></span></span>
-      <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.activeAds ? "text-teal" : "text-t3"}`} />{p.activeAds}<Delta n={p.adsDelta} /></span>
-      <span className="col-yt num flex items-center gap-1.5 font-medium"><VideoCountIcon className="size-4 text-t2" />{p.creators}<Delta n={p.creatorsDelta} /></span>
-      <span className="col-mon min-w-0"><span className="pill"><span className="truncate">{p.mechanic}</span></span></span>
-      <span className="col-first num whitespace-nowrap text-[13px] text-t2">{ago(p.firstSeen)}</span>
-      <span className="col-seen num whitespace-nowrap text-[13px] text-t2">{seenAgo(p.lastSeen)}</span>
+      <span className="col-rev"><span className="num block text-[13px] font-medium">{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <span className="flex items-center gap-1.5 text-[11px] text-t3">Range <Confidence level={p.revenue_confidence} /></span>}</span>
+      <span className="flex items-center gap-2"><GrowthValue value={p.activity_change_4w} /><span className="hidden md:block"><Sparkline data={p.activity_weekly} /></span></span>
+      <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.active_ads ? "text-teal" : "text-t3"}`} />{p.active_ads ?? DASH}<Delta n={p.ads_delta_7d} /></span>
+      <span className="col-yt"><span className="num flex items-center gap-1.5 font-medium"><VideoCountIcon className="size-4 text-t2" />{p.sponsors ?? DASH}</span></span>
+      <span className="col-mon min-w-0"><span className="pill"><span className="truncate">{MODEL_LABEL[p.monetization]}</span></span></span>
+      <span className="col-first num whitespace-nowrap text-[13px] text-t2">{ago(p.first_seen)}</span>
+      <span className="col-seen num whitespace-nowrap text-[13px] text-t2">{ago(p.last_seen)}</span>
       <ChevronRight className="size-4 text-t2" />
     </button>
   );
@@ -112,7 +102,7 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   );
 }
 
-function FirstRunSteps({ onFirstApp }: { onFirstApp: () => void }) {
+function FirstRunSteps({ onFirstApp }: { onFirstApp?: () => void }) {
   const s = useSession();
   const steps = [
     { label: "Open your first app", done: s.history.length > 0, go: onFirstApp },
@@ -123,7 +113,7 @@ function FirstRunSteps({ onFirstApp }: { onFirstApp: () => void }) {
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       <span className="font-medium">Get started</span>
       {steps.map((x) => (
-        <button key={x.label} onClick={x.go} disabled={x.done} className={`flex items-center gap-1.5 text-[13px] ${x.done ? "text-t3 line-through" : "text-t2 hover:text-t1"}`}>
+        <button key={x.label} onClick={x.go} disabled={x.done || !x.go} className={`flex items-center gap-1.5 text-[13px] ${x.done ? "text-t3 line-through" : "text-t2 hover:text-t1"}`}>
           {x.done ? <Check className="size-3.5 text-teal" /> : <Circle className="size-3.5" />}{x.label}
         </button>
       ))}
@@ -133,9 +123,9 @@ function FirstRunSteps({ onFirstApp }: { onFirstApp: () => void }) {
 }
 
 const SCOPE = {
-  radar: { title: "AI Product Radar", sub: "Discover emerging AI products, track their distribution, and reverse-engineer what's working.", empty: "No products match those filters." },
+  radar: { title: "AI Product Radar", sub: "Discover emerging AI products, track their distribution, and reverse-engineer what's working.", empty: "No products are published yet. We're reviewing the first batch, and only products with approved evidence appear here." },
   saved: { title: "Saved", sub: "Products you're keeping an eye on.", empty: "Nothing saved yet. Press S on any row, or use the Save button on an app's page." },
-  history: { title: "History", sub: "The apps you've opened, most recent first.", empty: "Nothing here yet. Open an app and it will show up here." },
+  history: { title: "History", sub: "The apps you've opened on this browser, most recent first.", empty: "Nothing here yet. Open an app and it will show up here." },
 };
 
 export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
@@ -153,9 +143,9 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const q = sp.get("q") ?? "";
   const presetId = scope === "radar" ? sp.get("preset") ?? "" : "";
   const preset = PRESETS.find((x) => x.value === presetId) ?? PRESETS[0];
-  const sort = SORT[sp.get("sort") ?? ""] ? sp.get("sort")! : preset.sort;
-  const dir: "asc" | "desc" = (sp.get("dir") as "asc" | "desc") || (SORT[sort].asc ? "asc" : "desc");
-  const page = Math.max(1, Number(sp.get("page")) || 1);
+  const sort = SORT_VALUE[sp.get("sort") ?? ""] ? sp.get("sort")! : preset.sort;
+  const dir: "asc" | "desc" = sp.get("dir") === "asc" ? "asc" : "desc";
+  const page = Math.max(1, Math.floor(Number(sp.get("page"))) || 1);
   const update = (changes: Record<string, string | null>, keepPage = false) => {
     const n = new URLSearchParams(sp);
     for (const [k, v] of Object.entries(changes)) {
@@ -164,50 +154,77 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
     if (!keepPage) n.delete("page");
     setSp(n, { replace: true, preventScrollReset: true });
   };
-  const onSort = (id: string) => {
-    const natural = SORT[id].asc ? "asc" : "desc";
-    if (sort !== id) update({ sort: id, dir: null });
-    else update({ sort: id, dir: dir === natural ? (natural === "asc" ? "desc" : "asc") : null });
-  };
+  const onSort = (id: string) => update(sort !== id ? { sort: id, dir: null } : { sort: id, dir: dir === "desc" ? "asc" : null });
 
-  const rows = useMemo(() => {
-    const pool = scope === "saved" ? s.saved.flatMap((x) => bySlug(x) ?? [])
-      : scope === "history" ? s.history.flatMap((x) => bySlug(x) ?? []) : products;
+  // Filtering and sorting run on the server. Search waits for a pause in typing.
+  const query = useDebounced(q.trim());
+  const params = useMemo(() => {
+    const firstSeen = Number(added) || preset.firstSeenDays;
+    return {
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE,
+      ...(query && { q: query }),
+      ...(cat && { category: cat }),
+      ...(model && { monetization: model }),
+      ...(coverage && { coverage }),
+      ...(firstSeen && { firstSeenDays: firstSeen }),
+      ...(signal === "ads30" && { minObservedAdDays: 30 }),
+      ...(signal === "sponsored" && { sponsored: "true" }),
+      ...(signal === "blueprint" && { hasBlueprint: "true" }),
+      ...(signal === "changed" && { changedDays: 7 }),
+      ...(sort && { sort, dir }),
+    };
+  }, [query, cat, model, coverage, added, preset, signal, sort, dir, page]);
+  const remote = useQuery((abort) => fetchRadar(params, abort), [JSON.stringify(params)], scope === "radar");
+
+  // Saved and history are short lists the session already holds.
+  const local = useMemo(() => {
+    if (scope === "radar") return [];
     const needle = q.trim().toLowerCase();
+    const pool = scope === "saved" ? s.saved : s.history;
     const out = pool.filter((p) =>
-      preset.test(p) && (!cat || p.category === cat) && (!model || p.model === model) && (!coverage || p.coverage === coverage) &&
-      (!added || p.firstSeen <= Number(added)) &&
-      (signal !== "ads30" || (p.activeAds > 0 && p.longestAd >= 30)) &&
-      (signal !== "sponsored" || p.creatorItems.some((c) => c.kind === "Sponsored")) &&
-      (signal !== "blueprint" || hasBlueprint(p)) &&
-      (signal !== "changed" || CHANGES.some((c) => c.slug === p.slug && c.daysAgo < 7)) &&
-      (!needle || `${p.name} ${p.what} ${p.tagline} ${p.mechanic} ${p.stack.join(" ")}`.toLowerCase().includes(needle)));
-    if (scope === "history" && !sp.get("sort")) return out;
-    const value = SORT[sort].value;
+      (!cat || p.category === cat) && (!model || p.monetization === model) && (!coverage || p.coverage === coverage) &&
+      (!added || (!!p.first_seen && Date.now() - Date.parse(p.first_seen) <= Number(added) * DAY)) &&
+      (signal !== "ads30" || (p.longest_ad_days ?? 0) >= 30) &&
+      (signal !== "sponsored" || (p.sponsors ?? 0) > 0) &&
+      (signal !== "blueprint" || p.has_blueprint) &&
+      (signal !== "changed" || s.changes.some((c) => c.slug === p.slug && Date.now() - Date.parse(c.observed_at) < 7 * DAY)) &&
+      (!needle || `${p.name} ${p.description}`.toLowerCase().includes(needle)));
+    const value = SORT_VALUE[sort];
+    if (!value) return out;
     const sign = dir === "asc" ? 1 : -1;
-    return [...out].sort((a, b) => (value(a) - value(b)) * sign);
-  }, [scope, s.saved, s.history, cat, model, signal, added, coverage, q, preset, sort, dir, sp]);
+    return [...out].sort((a, b) => {
+      const x = value(a), y = value(b);
+      // Unknown values stay at the bottom in both directions.
+      if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+      return (x < y ? -1 : x > y ? 1 : 0) * sign;
+    });
+  }, [scope, s.saved, s.history, s.changes, cat, model, signal, added, coverage, q, sort, dir]);
 
-  const fullCount = rows.filter((p) => p.coverage === "full").length;
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
-  const current = Math.min(page, pages);
-  const visible = rows.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+  const total = scope === "radar" ? remote.data?.total ?? 0 : local.length;
+  const rows = useMemo(() => (scope === "radar" ? remote.data?.items ?? [] : local.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)), [scope, remote.data, local, page]);
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const firstLoad = scope === "radar" ? remote.loading && !remote.data : s.status === "loading";
+  const failed = scope === "radar" && !!remote.error;
   const unseenSlugs = useMemo(() => new Set(s.unseen.map((c) => c.slug)), [s.unseen]);
   const open = (p: Product) => {
     sessionStorage.setItem("arcex.radarList", JSON.stringify(rows.map((r) => r.slug)));
     sessionStorage.setItem("arcex.radarScroll", String(wide ? tableRef.current?.scrollTop ?? 0 : window.scrollY));
-    openProduct(p);
+    openProduct(p.slug);
   };
 
-  // Coming back from an app's page returns you to the same spot in the table.
+  // Coming back from an app's page returns you to the same spot, once the rows are back.
+  const pendingScroll = useRef(Number(sessionStorage.getItem("arcex.radarScroll")) || 0);
   useLayoutEffect(() => {
-    const saved = Number(sessionStorage.getItem("arcex.radarScroll"));
-    if (!saved) return;
+    if (!rows.length) return;
     sessionStorage.removeItem("arcex.radarScroll");
+    const saved = pendingScroll.current;
+    if (!saved) return;
+    pendingScroll.current = 0;
     if (wide && tableRef.current) tableRef.current.scrollTop = saved;
     // The shell resets the window's scroll after this runs, so wait for that.
     else window.setTimeout(() => window.scrollTo(0, saved));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rows.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -221,7 +238,8 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
         items[Math.min(items.length - 1, Math.max(0, at + delta))]?.focus();
       } else if (e.key === "s" && s.signedIn) {
         const slug = el.closest<HTMLElement>("[data-radar-row]")?.dataset.slug;
-        if (slug) s.toggleSave(slug);
+        const product = rows.find((p) => p.slug === slug);
+        if (product) s.toggleSave(product);
       }
     };
     window.addEventListener("keydown", f);
@@ -230,16 +248,17 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
 
   const chips = [
     q && { label: `Search: ${q}`, key: "q" },
-    cat && { label: `Category: ${CATEGORY_LABEL[cat as Category]}`, key: "cat" },
-    model && { label: `Monetization: ${MODEL_LABEL[model as Model]}`, key: "model" },
+    cat && { label: `Category: ${CATEGORY_LABEL[cat as Category] ?? cat}`, key: "cat" },
+    model && { label: `Monetization: ${MODEL_LABEL[model as Model] ?? model}`, key: "model" },
     signal && { label: SIGNALS.find((x) => x.value === signal)?.label ?? signal, key: "signal" },
     added && { label: ADDED.find((x) => x.value === added)?.label ?? added, key: "added" },
     coverage && { label: COVERAGE.find((x) => x.value === coverage)?.label ?? coverage, key: "coverage" },
   ].filter(Boolean) as { label: string; key: string }[];
   const clearFilters = () => update(Object.fromEntries(chips.map((c) => [c.key, null])));
-  const sampleProduct = bySlug(SAMPLE_SLUG)!;
+  const sampleProduct = rows.find((p) => p.open_sample && p.coverage === "full");
+  const firstApp = rows.find((p) => p.coverage === "full") ?? rows[0];
   const onboardingDone = !!s.firstRun.dismissed || (s.history.length > 0 && !!s.firstRun.blueprint && !!s.firstRun.mcp);
-  const lockedList = !s.signedIn && scope !== "radar";
+  const lockedList = s.status === "out" && scope === "saved";
 
   return (
     <div className="px-4 py-5 lg:px-6 lg:py-6 xl:h-[calc(100dvh-68px)]">
@@ -252,14 +271,14 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
                 <button key={x.value} aria-pressed={x.value === presetId} onClick={() => update({ preset: x.value || null, sort: null, dir: null })} className={`flex h-9 items-center rounded-xl px-3.5 font-medium transition-colors ${x.value === presetId ? "bg-s3 text-t1" : "text-t2 hover:text-t1"}`}>{x.label}</button>
               ))}
             </div>
-            {!s.signedIn ? (
+            {s.status === "out" ? sampleProduct && (
               <button onClick={() => open(sampleProduct)} className="group flex min-w-0 items-center gap-2 text-left">
                 <span className="shrink-0 rounded bg-teal-dim px-1.5 text-[12px] font-medium leading-[20px] text-teal">No sign-in</span>
                 <span className="text-t2 group-hover:text-t1">See everything about {sampleProduct.name}</span>
                 <ArrowRight className="size-3.5 shrink-0 text-t2" />
               </button>
-            ) : !onboardingDone ? (
-              <FirstRunSteps onFirstApp={() => open(rows.find((p) => p.coverage === "full") ?? sampleProduct)} />
+            ) : s.signedIn && !onboardingDone ? (
+              <FirstRunSteps onFirstApp={firstApp ? () => open(firstApp) : undefined} />
             ) : s.unseen.length > 0 ? (
               <Link to="/updates" className="group flex min-w-0 items-center gap-2">
                 <span className="live-dot shrink-0" />
@@ -272,7 +291,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
         <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
           <label className="flex h-11 min-w-[160px] flex-1 items-center gap-2 rounded-xl border border-line-strong px-3 transition-colors focus-within:border-teal">
             <Search className="size-4 shrink-0 text-t2" />
-            <input id="radar-search" aria-label="Search products" value={q} onChange={(e) => update({ q: e.target.value || null })} placeholder="Search products..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
+            <input id="radar-search" aria-label="Search products" maxLength={120} value={q} onChange={(e) => update({ q: e.target.value || null })} placeholder="Search products..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             <kbd className="hidden min-[1400px]:block">/</kbd>
           </label>
           <FilterMenu label="Category" value={cat} onChange={(v) => update({ cat: v || null })} options={[{ value: "", label: "All Categories" }, ...(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))]} />
@@ -283,15 +302,15 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
         </div>
         <div className="mt-3 flex min-h-7 flex-wrap items-center gap-2">
           <span className="num mr-1 text-[13px] text-t2" role="status">
-            {rows.length ? <>Showing {(current - 1) * PAGE_SIZE + 1}–{Math.min(current * PAGE_SIZE, rows.length)} of {rows.length} products · {fullCount} with full screens</> : "0 products"}
+            {firstLoad ? "Loading products..." : total ? <>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()} {total === 1 ? "product" : "products"}</> : "0 products"}
           </span>
           {chips.map((c) => <Chip key={c.key} label={c.label} onClear={() => update({ [c.key]: null })} />)}
           {chips.length > 1 && <button onClick={clearFilters} className="text-[12px] text-t2 underline underline-offset-2 hover:text-t1">Clear all</button>}
           {pages > 1 && (
             <span className="ml-auto flex items-center gap-2">
-              <button disabled={current <= 1} onClick={() => { update({ page: String(current - 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40"><ChevronLeft className="size-3.5" />Prev</button>
-              <span className="num text-[12px] text-t2">Page {current} of {pages}</span>
-              <button disabled={current >= pages} onClick={() => { update({ page: String(current + 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40">Next<ChevronRight className="size-3.5" /></button>
+              <button disabled={page <= 1} onClick={() => { update({ page: String(page - 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40"><ChevronLeft className="size-3.5" />Prev</button>
+              <span className="num text-[12px] text-t2">Page {page} of {pages}</span>
+              <button disabled={page >= pages} onClick={() => { update({ page: String(page + 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40">Next<ChevronRight className="size-3.5" /></button>
             </span>
           )}
         </div>
@@ -299,34 +318,40 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
         <div ref={tableRef} className="panel mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
           {lockedList ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
-              <div className="text-t2">Sign in to keep your {scope === "saved" ? "saved products" : "history"} here.</div>
+              <div className="text-t2">Sign in to keep your saved products here.</div>
               <button className="btn btn-primary" onClick={s.openSignIn}>Sign in</button>
+            </div>
+          ) : failed ? (
+            <ErrorPanel message={errorMessage(remote.error)} onRetry={remote.reload} />
+          ) : firstLoad ? (
+            <div aria-hidden className="flex flex-col gap-1.5 p-2">
+              {Array.from({ length: 8 }, (_, i) => <div key={i} className="h-[62px] animate-pulse rounded-lg bg-s2" />)}
             </div>
           ) : rows.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
-              <div className="text-t2">{chips.length || presetId ? SCOPE.radar.empty : SCOPE[scope].empty}</div>
+              <div className="max-w-[460px] text-t2">{chips.length || presetId ? "No products match those filters." : SCOPE[scope].empty}</div>
               {chips.length || presetId ? <button className="btn btn-ghost" onClick={() => nav(scope === "radar" ? "/" : "/" + scope, { replace: true })}>Clear filters</button>
                 : scope !== "radar" && <Link to="/" className="btn btn-ghost">Go to Radar</Link>}
             </div>
           ) : (
-            <>
+            <div className={remote.loading ? "opacity-60 transition-opacity" : ""}>
               <div className="radar-grid radar-head eyebrow sticky top-0 z-10 bg-s1 px-4 pb-3 pt-3">
                 <span>Product</span>
                 <span className="col-thumb">Screens</span>
                 <span className="col-cat">Category</span>
-                <SortHead id="revenue" sort={sort} dir={dir} onSort={onSort} className="col-rev">Est. rev/mo</SortHead>
-                <SortHead id="growth" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">4w</span><span className="hidden md:inline" title="Change in ads and creators we observed. Not product or business growth.">Activity 4w</span></SortHead>
+                <SortHead id="revenue" sort={sort} dir={dir} onSort={onSort} className="col-rev"><span title="A manually entered range from listed sources. Not reported revenue.">Rev. range/mo</span></SortHead>
+                <SortHead id="activity" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">4w</span><span className="hidden md:inline" title="Change in ads and creators we observed. Not product or business growth.">Activity 4w</span></SortHead>
                 <SortHead id="ads" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">Ads</span><span className="hidden md:inline">Active ads</span></SortHead>
-                <SortHead id="sponsors" sort={sort} dir={dir} onSort={onSort} className="col-yt">YT sponsors</SortHead>
+                <SortHead id="sponsors" sort={sort} dir={dir} onSort={onSort} className="col-yt">Sponsors</SortHead>
                 <span className="col-mon">Monetization</span>
                 <SortHead id="first" sort={sort} dir={dir} onSort={onSort} className="col-first">First seen</SortHead>
                 <SortHead id="seen" sort={sort} dir={dir} onSort={onSort} className="col-seen">Last seen</SortHead>
                 <span />
               </div>
               <div className="flex flex-col gap-0.5">
-                {visible.map((p) => <Row key={p.slug} p={p} fresh={unseenSlugs.has(p.slug)} onOpen={() => open(p)} />)}
+                {rows.map((p) => <Row key={p.slug} p={p} fresh={unseenSlugs.has(p.slug)} onOpen={() => open(p)} />)}
               </div>
-            </>
+            </div>
           )}
         </div>
       </main>
