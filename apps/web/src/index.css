@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@font-face { font-family: "Geist"; src: url("/fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Serif"; src: url("/fonts/GeistSerif-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-serif: "Geist Serif", Georgia, serif;
+  /* Page and modal headings. Point this at the serif to try it. */
+  --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: #000000;
+  --color-s1: #0a0b0d;
+  --color-s2: #131519;
+  --color-s3: #1b1e23;
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.14);
+  --color-t1: #f4f5f6;
+  --color-t2: #a3a7ae;
+  --color-t3: #767a82;
+  --color-teal: #2dd4bf;
+  --color-teal-dim: rgba(45, 212, 191, 0.07);
+  --color-ads: #2dd4bf;
+  --color-creator: #a3a7ae;
+
+  /* shadcn tokens mapped to Arcex surfaces */
+  --color-background: #000000;
+  --color-foreground: #f4f5f6;
+  --color-popover: #131519;
+  --color-popover-foreground: #f4f5f6;
+  --color-muted: #131519;
+  --color-muted-foreground: #a3a7ae;
+  --color-accent: #1b1e23;
+  --color-accent-foreground: #f4f5f6;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-input: rgba(255, 255, 255, 0.14);
+  --color-ring: #2dd4bf;
+  --color-primary: #f4f5f6;
+  --color-primary-foreground: #000000;
+  --color-secondary: #131519;
+  --color-secondary-foreground: #f4f5f6;
+}
+
+html, body, #root { min-height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-t1);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+@layer base {
+  *, ::before, ::after { border-color: var(--color-line); }
+  button { cursor: pointer; }
+  kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-radius: 5px; background: var(--color-s3); color: var(--color-t2); }
+}
+:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
+::selection { background: var(--color-teal); color: #000; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--color-s3); border-radius: 8px; border: 2px solid var(--color-canvas); }
+
+@layer components {
+.num { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.eyebrow { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-t2); }
+.panel { background: var(--color-s1); border: 1px solid var(--color-line); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; font-weight: 500; transition: background .1s, border-color .1s, color .1s; white-space: nowrap; }
+.btn-primary { background: var(--color-t1); color: #000; }
+.btn-primary:hover { background: #fff; }
+.btn-ghost { border: 1px solid var(--color-line-strong); color: var(--color-t1); }
+.btn-ghost:hover { background: var(--color-s2); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--color-line); color: var(--color-t2); font-size: 13px; white-space: nowrap; transition: background .1s, color .1s, border-color .1s; }
+.chip:hover { color: var(--color-t1); background: var(--color-s2); }
+.chip[data-on="true"] { color: var(--color-t1); background: var(--color-s3); border-color: var(--color-line-strong); }
+.pill { display: inline-flex; align-items: center; max-width: 100%; height: 28px; padding: 0 10px; border-radius: 7px; background: var(--color-s2); font-size: 12px; color: var(--color-t1); }
+
+/* Radar table columns. More appear as the screen gets wider. */
+.radar-grid { display: grid; align-items: center; column-gap: 12px; grid-template-columns: minmax(0, 1fr) 56px 44px 16px; }
+.radar-grid > .col-thumb { grid-column: 1 / -1; grid-row: 2; margin: 10px 0 0 48px; }
+.radar-head > .col-thumb { display: none; }
+.radar-grid > .col-cat, .radar-grid > .col-rev, .radar-grid > .col-yt, .radar-grid > .col-mon, .radar-grid > .col-first, .radar-grid > .col-seen { display: none; }
+@media (min-width: 768px) {
+  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 110px 84px 150px 16px; }
+  .radar-grid > .col-thumb, .radar-head > .col-thumb { display: block; grid-column: auto; grid-row: auto; margin: 0; }
+  .radar-grid > .col-mon { display: block; }
+}
+@media (min-width: 1280px) {
+  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 96px 110px 84px 84px 150px 72px 16px; }
+  .radar-grid > .col-rev, .radar-grid > .col-yt, .radar-grid > .col-first { display: block; }
+}
+@media (min-width: 1536px) {
+  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 76px 96px 110px 84px 84px 150px 72px 64px 16px; }
+  .radar-grid > .col-cat, .radar-grid > .col-seen { display: block; }
+}
+}
+
+.live-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--color-teal); box-shadow: 0 0 10px var(--color-teal); animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
+.fade-in { animation: fadeIn .18s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.step-next { animation: slideNext .12s ease-out; }
+.step-prev { animation: slidePrev .12s ease-out; }
+@keyframes slideNext { from { opacity: .3; transform: translateX(6px); } to { opacity: 1; transform: none; } }
+@keyframes slidePrev { from { opacity: .3; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.drawer { animation: drawerIn .18s ease-out; }
+@keyframes drawerIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

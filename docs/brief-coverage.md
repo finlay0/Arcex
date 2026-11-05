@@ -22,7 +22,7 @@ Backend scope only. This distinguishes working code, provider setup and observed
 | GitHub sign-in | Dedicated app/secrets, state/PKCE/session code; collector owner OAuth verified | Full customer sign-in with future same-site frontend |
 | X sign-in | Provider/session code and account handling | Dedicated X developer app/secrets and provider test |
 | Free signed-in actions | Blueprint export, saves, own submissions and voting | Customer-facing UI excluded |
-| Insider tier | Entitlement checks, API keys, collections, badge data and review priority | Launch price/currency approval and real customer launch |
+| Insider tier | Entitlement checks, collections, badge data and review priority. API keys are free for blueprint export | Launch price/currency approval and real customer launch |
 | Stripe | Dedicated sandbox, test price, Portal, 12 webhooks; provider readiness and fixture tests | Hosted test checkout and actual signed webhook delivery; live billing/tax activation |
 | Affiliate/native sponsors | Disclosed partner records and blueprint associations | Actual partner relationships/codes and commercial agreements |
 | Public/Insider stdio MCP | Installable GitHub release tarball; fresh packed install, real stdio handshake and live public read passed | npm registry publication is separate; original scoped name belongs to another publisher |
