@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppEnv, Bindings } from "./types";
 import { now } from "./types";
 import { requireAdmin } from "./auth";
+import { audit, fail, parse } from "./lib";
 import { signedLinkParameters, signedLinkValid } from "./signed-links";
 
 // Conservative application reservations, below the separately verified Resend Free quotas.
@@ -51,6 +52,49 @@ async function sendResendRequest(env: Bindings, id: string, envelope: string) {
     signal: AbortSignal.timeout(10000),
   });
 }
+/** Claim and charge the current UTC periods atomically, including retries of older jobs. */
+async function reserveSendLease(db: D1Database, id: string) {
+  const time = now(),
+    day = "day:" + time.slice(0, 10),
+    month = "month:" + time.slice(0, 7),
+    lease = crypto.randomUUID();
+  const result = await db.batch([
+    db
+      .prepare(
+        "INSERT INTO email_send_usage(period_key) VALUES (?) ON CONFLICT DO NOTHING",
+      )
+      .bind(day),
+    db
+      .prepare(
+        "INSERT INTO email_send_usage(period_key) VALUES (?) ON CONFLICT DO NOTHING",
+      )
+      .bind(month),
+    db
+      .prepare(
+        `UPDATE email_outbox SET status='sending',attempts=attempts+1,first_attempt_at=COALESCE(first_attempt_at,?),lease_token=?,lease_until=? WHERE id=? AND attempts<3
+      AND ((status='pending' AND available_at<=?) OR (status='sending' AND lease_until<=?))
+      AND (SELECT attempts FROM email_send_usage WHERE period_key=?)<? AND (SELECT attempts FROM email_send_usage WHERE period_key=?)<? RETURNING *`,
+      )
+      .bind(
+        time,
+        lease,
+        new Date(Date.now() + 120000).toISOString(),
+        id,
+        time,
+        time,
+        day,
+        EMAIL_DAILY_LIMIT,
+        month,
+        EMAIL_MONTHLY_LIMIT,
+      ),
+    db
+      .prepare(
+        "UPDATE email_send_usage SET attempts=attempts+1 WHERE period_key IN (?,?) AND EXISTS(SELECT 1 FROM email_outbox WHERE id=? AND lease_token=? AND status='sending')",
+      )
+      .bind(day, month, id, lease),
+  ]);
+  return result[2].results[0] as Outbox | undefined;
+}
 
 /** One bounded digest per invocation; retries reuse the exact immutable provider request. */
 export async function deliverOneDigest(
@@ -67,7 +111,7 @@ export async function deliverOneDigest(
   // Never retry after the provider's24h idempotency window. Unknown delivery needs review.
   await db
     .prepare(
-      "UPDATE email_outbox SET status='uncertain',last_error='idempotency_window_expired',lease_token=NULL WHERE status IN ('pending','sending') AND created_at<?",
+      "UPDATE email_outbox SET status='uncertain',last_error='idempotency_window_expired',lease_token=NULL WHERE status IN ('pending','sending') AND first_attempt_at<?",
     )
     .bind(new Date(Date.now() - 23 * 3600000).toISOString())
     .run();
@@ -81,12 +125,12 @@ export async function deliverOneDigest(
     const user = await db
       .prepare(
         `SELECT u.id,u.email,a.last_change_at,a.last_change_id,a.updated_at FROM users u JOIN alert_settings a ON a.user_id=u.id
-      WHERE ${ELIGIBLE} AND NOT EXISTS(SELECT 1 FROM email_outbox o WHERE o.user_id=u.id AND o.day=?)
+      WHERE ${ELIGIBLE} AND COALESCE(a.last_sent_at,'')<? AND NOT EXISTS(SELECT 1 FROM email_outbox o WHERE o.user_id=u.id AND (o.day=? OR o.status IN ('pending','sending','uncertain')))
       AND EXISTS(SELECT 1 FROM product_watches w JOIN product_changes c ON c.product_id=w.product_id JOIN products p ON p.id=c.product_id JOIN evidence e ON e.id=c.evidence_id
         WHERE w.user_id=u.id AND ${APPROVED_CHANGE} AND c.published_at>=a.updated_at AND (c.published_at, c.id)>(COALESCE(a.last_change_at,a.updated_at),COALESCE(a.last_change_id,'')))
       ORDER BY COALESCE(a.last_sent_at,a.updated_at),u.id LIMIT 1`,
       )
-      .bind(time, day)
+      .bind(time, day + "T00:00:00.000Z", day)
       .first<{
         id: string;
         email: string;
@@ -145,7 +189,7 @@ export async function deliverOneDigest(
     pending = await db
       .prepare(
         `INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,created_at,available_at)
-      SELECT ?,?,?,?,?,?,?,?,?,? WHERE (SELECT count(*) FROM email_outbox WHERE day=?)<? AND (SELECT count(*) FROM email_outbox WHERE month=?)<? ON CONFLICT DO NOTHING RETURNING id`,
+      SELECT ?,?,?,?,?,?,?,?,?,? WHERE COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0)<? AND COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0)<? ON CONFLICT DO NOTHING RETURNING id`,
       )
       .bind(
         id,
@@ -158,29 +202,17 @@ export async function deliverOneDigest(
         last.id,
         time,
         time,
-        day,
+        "day:" + day,
         EMAIL_DAILY_LIMIT,
-        month,
+        "month:" + month,
         EMAIL_MONTHLY_LIMIT,
       )
       .first<{ id: string }>();
     if (!pending) return { ...readiness, sent: 0, reason: "reservation_limit" };
   }
-  const lease = crypto.randomUUID();
-  const job = await db
-    .prepare(
-      `UPDATE email_outbox SET status='sending',attempts=attempts+1,lease_token=?,lease_until=? WHERE id=? AND attempts<3
-    AND ((status='pending' AND available_at<=?) OR (status='sending' AND lease_until<=?)) RETURNING *`,
-    )
-    .bind(
-      lease,
-      new Date(Date.now() + 120000).toISOString(),
-      pending.id,
-      time,
-      time,
-    )
-    .first<Outbox>();
-  if (!job) return { ...readiness, sent: 0, reason: "already_claimed" };
+  const job = await reserveSendLease(db, pending.id);
+  if (!job) return { ...readiness, sent: 0, reason: "reservation_limit" };
+  const lease = job.lease_token;
   // Opt-out, expiry, risk holds, watch removal and evidence retraction take effect before retries.
   const recipient = JSON.parse(job.envelope).to[0] as string;
   const eligible = await db
@@ -210,7 +242,7 @@ export async function deliverOneDigest(
           "UPDATE email_outbox SET status=?,available_at=?,last_error=?,lease_token=NULL WHERE id=? AND lease_token=?",
         )
         .bind(
-          retry ? "pending" : "failed",
+          retry ? "pending" : response.status >= 500 ? "uncertain" : "failed",
           new Date(Date.now() + 3600000).toISOString(),
           `provider_http_${response.status}`,
           job.id,
@@ -220,7 +252,11 @@ export async function deliverOneDigest(
       return {
         ...readiness,
         sent: 0,
-        reason: retry ? "provider_retry_pending" : "provider_rejected",
+        reason: retry
+          ? "provider_retry_pending"
+          : response.status >= 500
+            ? "delivery_unknown"
+            : "provider_rejected",
       };
     }
     const result = z
@@ -231,7 +267,7 @@ export async function deliverOneDigest(
         .prepare(
           "UPDATE alert_settings SET last_change_at=?,last_change_id=?,last_sent_at=? WHERE user_id=? AND EXISTS(SELECT 1 FROM email_outbox WHERE id=? AND lease_token=?)",
         )
-        .bind(job.cursor_at, job.cursor_id, time, job.user_id, job.id, lease),
+        .bind(job.cursor_at, job.cursor_id, now(), job.user_id, job.id, lease),
       db
         .prepare(
           "UPDATE email_outbox SET status='sent',provider_id=?,last_error=NULL,lease_token=NULL WHERE id=? AND lease_token=?",
@@ -279,6 +315,48 @@ adminEmailAlerts.use("*", requireAdmin);
 adminEmailAlerts.post("/alerts/deliver", async (c) =>
   c.json(await deliverOneDigest(c.env)),
 );
+adminEmailAlerts.post("/alerts/:id/resolve", async (c) => {
+  const { outcome, reason } = await parse(
+    c,
+    z
+      .object({
+        outcome: z.enum(["accepted", "not_accepted"]),
+        reason: z.string().min(20).max(1000),
+      })
+      .strict(),
+  );
+  const row = await c.env.DB.prepare(
+    "SELECT user_id,cursor_at,cursor_id FROM email_outbox WHERE id=? AND status='uncertain'",
+  )
+    .bind(c.req.param("id"))
+    .first<{ user_id: string | null; cursor_at: string; cursor_id: string }>();
+  if (!row) fail(409, "Only an uncertain delivery can be resolved");
+  const statements = [
+    c.env.DB.prepare(
+      "UPDATE email_outbox SET status=?,last_error=NULL WHERE id=? AND status='uncertain'",
+    ).bind(outcome === "accepted" ? "sent" : "failed", c.req.param("id")),
+  ];
+  if (outcome === "accepted")
+    statements.unshift(
+      c.env.DB.prepare(
+        "UPDATE alert_settings SET last_change_at=?,last_change_id=?,last_sent_at=? WHERE user_id=? AND EXISTS(SELECT 1 FROM email_outbox WHERE id=? AND status='uncertain')",
+      ).bind(
+        row.cursor_at,
+        row.cursor_id,
+        now(),
+        row.user_id,
+        c.req.param("id"),
+      ),
+    );
+  const resolved = await c.env.DB.batch(statements);
+  if (resolved.at(-1)?.meta.changes !== 1)
+    fail(409, "Delivery was already resolved");
+  await audit(c.env.DB, "admin", "alert.resolve", c.req.param("id"), {
+    outcome,
+    reason,
+  });
+  return c.json({ ok: true, quotaRefunded: false });
+});
 // The only diagnostic recipient is Resend's own simulator; no customer data or arbitrary addresses.
 adminEmailAlerts.post("/alerts/simulator", async (c) => {
   if (emailDeliveryStatus(c.env).deliveryStatus === "not_configured")
@@ -294,7 +372,7 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
     text: "Sending-path verification for arcex.dev, addressed only to the Resend simulator. No customer data.",
   });
   const reserved = await c.env.DB.prepare(
-    `INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,status,attempts,created_at,available_at) SELECT ?,NULL,?,?,?,'[]',?,'simulator','sending',1,?,? WHERE (SELECT count(*) FROM email_outbox WHERE day=?)<? AND (SELECT count(*) FROM email_outbox WHERE month=?)<? ON CONFLICT DO NOTHING RETURNING id`,
+    `INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,status,attempts,created_at,available_at) SELECT ?,NULL,?,?,?,'[]',?,'simulator','pending',0,?,? WHERE COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0)<? AND COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0)<? ON CONFLICT DO NOTHING RETURNING id`,
   )
     .bind(
       id,
@@ -304,9 +382,9 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
       time,
       time,
       time,
-      day,
+      "day:" + day,
       EMAIL_DAILY_LIMIT,
-      month,
+      "month:" + month,
       EMAIL_MONTHLY_LIMIT,
     )
     .first();
@@ -318,6 +396,8 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
       },
       409,
     );
+  if (!(await reserveSendLease(c.env.DB, id)))
+    return c.json({ error: "Sending allowance exhausted" }, 409);
   try {
     const response = await sendResendRequest(c.env, id, envelope);
     if (!response.ok) {
@@ -355,9 +435,9 @@ adminEmailAlerts.post("/alerts/simulator", async (c) => {
 adminEmailAlerts.get("/alerts/status", async (c) => {
   const time = now();
   const usage = await c.env.DB.prepare(
-    "SELECT sum(day=?) daily_reservations,sum(month=?) monthly_reservations,sum(status='pending') pending,sum(status='uncertain') needs_review FROM email_outbox",
+    "SELECT COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0) daily_attempts,COALESCE((SELECT attempts FROM email_send_usage WHERE period_key=?),0) monthly_attempts,sum(status='pending') pending,sum(status='uncertain') needs_review FROM email_outbox",
   )
-    .bind(time.slice(0, 10), time.slice(0, 7))
+    .bind("day:" + time.slice(0, 10), "month:" + time.slice(0, 7))
     .first();
   return c.json({
     ...emailDeliveryStatus(c.env),

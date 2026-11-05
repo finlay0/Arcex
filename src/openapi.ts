@@ -432,6 +432,12 @@ export const openapi = {
         "admin",
       ),
     },
+    "/api/v1/admin/alerts/{id}/resolve": {
+      post: operation(
+        "Resolve an uncertain provider result after operator review; JSONoutcome accepted/not_accepted and reason. Never refunds quota.",
+        "admin",
+      ),
+    },
     "/api/v1/me/ship": {
       get: operation("Own submissions including pending", "user"),
     },

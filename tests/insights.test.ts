@@ -11,14 +11,18 @@ import {
 } from "../src/insights";
 import { sha256 } from "../src/lib";
 import type { Bindings } from "../src/types";
-import { deliverOneDigest, EMAIL_DAILY_LIMIT } from "../src/email-alerts";
+import {
+  deliverOneDigest,
+  EMAIL_DAILY_LIMIT,
+  EMAIL_MONTHLY_LIMIT,
+} from "../src/email-alerts";
 
 const ORIGIN = "http://localhost:8791";
 const ADMIN = "admin-test-only";
 const daysAgo = (days: number) =>
   new Date(Date.now() - days * 86_400_000).toISOString();
 
-test("coverage, gating, limits, metrics, tracking and publication", async () => {
+test("coverage, gating, limits, metrics, tracking and publication", async (t) => {
   const mf = new Miniflare(
     convertV4MiniflareOptions({
       modules: true,
@@ -954,6 +958,13 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
     assert.equal(ranked.items[0].requests, 2);
 
     // Delivery uses opt-in/entitlement checks, one immutable retry, and atomic quota reservations.
+    t.mock.timers.enable({
+      apis: ["Date"],
+      now: Date.UTC(2026, 10, 30, 23, 30),
+    });
+    await DB.prepare("UPDATE product_changes SET published_at=? WHERE id=?")
+      .bind(new Date().toISOString(), created.id)
+      .run();
     await setInsider("u1", true);
     await DB.prepare(
       "UPDATE users SET email='recipient@example.com' WHERE id='u1'",
@@ -969,6 +980,7 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
       .run();
     const enabledEnv = {
       ...env,
+      DB: counted,
       RESEND_API_KEY: "fixture-key",
       RESEND_SENDER_VERIFIED: "true",
       EMAIL_ALERTS_ENABLED: "true",
@@ -991,12 +1003,28 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
         (await deliverOneDigest(enabledEnv)).reason,
         "provider_retry_pending",
       );
-      await DB.prepare(
-        "UPDATE email_outbox SET available_at=? WHERE status='pending'",
-      )
-        .bind(daysAgo(0.01))
-        .run();
+      t.mock.timers.setTime(Date.UTC(2026, 11, 1, 0, 31));
       assert.equal((await deliverOneDigest(enabledEnv)).sent, 1);
+      const attempts = async (period: string) =>
+        (
+          await DB.prepare(
+            "SELECT attempts FROM email_send_usage WHERE period_key=?",
+          )
+            .bind(period)
+            .first<{ attempts: number }>()
+        )?.attempts;
+      assert.equal(await attempts("day:2026-11-30"), 1);
+      assert.equal(
+        await attempts("day:2026-12-01"),
+        1,
+        "Retry charges its actual current day",
+      );
+      assert.equal(await attempts("month:2026-11"), 1);
+      assert.equal(
+        await attempts("month:2026-12"),
+        1,
+        "Retry charges its actual current month",
+      );
       assert.deepEqual(
         sends[0],
         sends[1],
@@ -1044,57 +1072,12 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
       await json(
         await request("PUT", "/api/v1/me/alerts", { emailAlerts: false }, u1),
       );
-
-      await setInsider("u2", true);
-      await DB.prepare(
-        "UPDATE users SET email='other@example.com' WHERE id='u2'",
-      ).run();
-      await json(
-        await request("PUT", "/api/v1/me/alerts", { emailAlerts: true }, u2),
-      );
-      await DB.prepare(
-        "UPDATE alert_settings SET updated_at=? WHERE user_id='u2'",
-      )
-        .bind(daysAgo(1))
-        .run();
-      // A full day of valid reserved jobs leaves no capacity, regardless of their delivery status.
-      await DB.prepare(
-        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO users(id,handle,name) SELECT 'quota'||i,'quota'||i,'Quota fixture' FROM n",
-      )
-        .bind(EMAIL_DAILY_LIMIT - 1)
-        .run();
-      await DB.prepare(
-        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,status,created_at,available_at) SELECT 'quota'||i,'quota'||i,?,?,'{}','[]',?,'x','sent',?,? FROM n",
-      )
-        .bind(EMAIL_DAILY_LIMIT - 1, day, day.slice(0, 7), stamp, stamp, stamp)
-        .run();
+      await DB.prepare("DELETE FROM users WHERE id='u1'").run();
       assert.equal(
-        (await deliverOneDigest(enabledEnv)).reason,
-        "reservation_limit",
+        await attempts("day:2026-12-01"),
+        1,
+        "Account deletion does not reopen quota",
       );
-      assert.equal(
-        sends.length,
-        2,
-        "Quota exhaustion never calls the provider",
-      );
-      for (const minute of [0, 10]) {
-        const tick = new Date();
-        tick.setUTCMinutes(minute);
-        queries = 0;
-        await backend.scheduled(
-          {
-            cron: METRICS_CRON,
-            scheduledTime: tick.getTime(),
-          } as ScheduledController,
-          { ...enabledEnv, DB: counted, COLLECTION_ENABLED: "true" },
-          {} as ExecutionContext,
-        );
-        assert.ok(
-          queries <= 50,
-          `Combined scheduled path used${queries}queries`,
-        );
-      }
-      await DB.prepare("DELETE FROM email_outbox WHERE id LIKE 'quota%'").run();
       const probe = () =>
         app.request(
           ORIGIN + "/api/v1/admin/alerts/simulator",
@@ -1116,8 +1099,97 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
         409,
         "Repeated simulator calls do not send twice",
       );
+
+      await setInsider("u2", true);
+      await DB.prepare(
+        "UPDATE users SET email='other@example.com' WHERE id='u2'",
+      ).run();
+      await json(
+        await request("PUT", "/api/v1/me/alerts", { emailAlerts: true }, u2),
+      );
+      await DB.prepare(
+        "UPDATE alert_settings SET updated_at=? WHERE user_id='u2'",
+      )
+        .bind(daysAgo(1))
+        .run();
+      await DB.prepare(
+        "INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,status,attempts,created_at,available_at,first_attempt_at) VALUES ('unknown-fixture','u2','2026-11-30','2026-11','{}','[]',?,'unknown','uncertain',3,?,?,?)",
+      )
+        .bind(stamp, stamp, stamp, stamp)
+        .run();
+      assert.equal(
+        (await deliverOneDigest(enabledEnv)).reason,
+        "no_due_changes",
+        "Uncertain delivery blocks automatic recreation with a new key",
+      );
+      await json(
+        await request(
+          "POST",
+          "/api/v1/admin/alerts/unknown-fixture/resolve",
+          {
+            outcome: "not_accepted",
+            reason:
+              "Provider review confirms the fixture request was not accepted.",
+          },
+          ADMIN,
+        ),
+      );
+      assert.equal(
+        await attempts("day:2026-12-01"),
+        2,
+        "Resolution never refunds attempt allowance",
+      );
+      await DB.prepare(
+        "UPDATE email_send_usage SET attempts=? WHERE period_key='day:2026-12-01'",
+      )
+        .bind(EMAIL_DAILY_LIMIT)
+        .run();
+      assert.equal(
+        (await deliverOneDigest(enabledEnv)).reason,
+        "reservation_limit",
+      );
+      assert.equal(
+        sends.length,
+        3,
+        "Quota exhaustion never calls the provider",
+      );
+      await DB.prepare(
+        "UPDATE email_send_usage SET attempts=0 WHERE period_key='day:2026-12-01'",
+      ).run();
+      await DB.prepare(
+        "UPDATE email_send_usage SET attempts=? WHERE period_key='month:2026-12'",
+      )
+        .bind(EMAIL_MONTHLY_LIMIT)
+        .run();
+      assert.equal(
+        (await deliverOneDigest(enabledEnv)).reason,
+        "reservation_limit",
+      );
+      assert.equal(
+        sends.length,
+        3,
+        "Monthly exhaustion also stops before the provider",
+      );
+      for (const minute of [0, 10]) {
+        const tick = new Date();
+        tick.setUTCMinutes(minute);
+        queries = 0;
+        await backend.scheduled(
+          {
+            cron: METRICS_CRON,
+            scheduledTime: tick.getTime(),
+          } as ScheduledController,
+          { ...enabledEnv, DB: counted, COLLECTION_ENABLED: "true" },
+          {} as ExecutionContext,
+        );
+        assert.ok(
+          queries <= 50,
+          `Combined scheduled path used${queries}queries`,
+        );
+      }
     } finally {
       globalThis.fetch = originalFetch;
+      t.mock.timers.reset();
     }
   } finally {
     await mf.dispose();

@@ -134,7 +134,7 @@ export default {
     _ctx: ExecutionContext,
   ) {
     // Share one timer within the account's Free cron limit. Metrics run with collection off.
-    // At most34 metrics +4 auth cleanup +10 enqueue, or9 delivery statements.
+    // At most34 metrics +4 auth cleanup +10 enqueue, or12 delivery statements.
     // Collection and delivery alternate when both are enabled, staying below D1 Free's50 queries.
     await expireAuthState(env.DB);
     if (event.cron === METRICS_CRON) {
