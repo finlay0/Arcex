@@ -389,6 +389,29 @@ export const openapi = {
     "/api/v1/me": {
       get: operation("Private profile and Insider entitlement", "user"),
     },
+    "/api/v1/email/unsubscribe/{userId}": {
+      post: operation(
+        "One-click opt-out using the signed capability in the email header; GET never changes preferences",
+      ),
+    },
+    "/api/v1/admin/alerts/status": {
+      get: operation(
+        "Delivery readiness and aggregate reservations, with no recipient addresses",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/alerts/deliver": {
+      post: operation(
+        "Process at most one opted-in Insider digest when delivery is explicitly enabled; hard50/day and1500/month reservations",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/alerts/simulator": {
+      post: operation(
+        "One budgeted provider-path test perUTCday, fixed Resend simulator recipient and noncustomer content; no arbitrary recipients",
+        "admin",
+      ),
+    },
     "/api/v1/me/ship": {
       get: operation("Own submissions including pending", "user"),
     },

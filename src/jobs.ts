@@ -52,12 +52,6 @@ export async function enqueueDue(env: Bindings) {
     env.DB.prepare("DELETE FROM collection_usage WHERE day<?").bind(
       later(-35 * 86400).slice(0, 10),
     ),
-    env.DB.prepare("DELETE FROM rate_limits WHERE expires_at<?").bind(time),
-    env.DB.prepare("DELETE FROM sessions WHERE expires_at<?").bind(time),
-    env.DB.prepare("DELETE FROM oauth_states WHERE expires_at<?").bind(time),
-    env.DB.prepare("DELETE FROM checkout_attempts WHERE bucket<?").bind(
-      Math.floor(Date.now() / 1800000) - 336,
-    ),
   ]);
   return {
     enqueued: [0, 2, 4].reduce((n, i) => n + results[i].meta.changes, 0),
@@ -66,6 +60,17 @@ export async function enqueueDue(env: Bindings) {
   };
 }
 export const jobAdmin = new Hono<AppEnv>();
+export async function expireAuthState(db: D1Database) {
+  const time = now();
+  await db.batch([
+    db.prepare("DELETE FROM rate_limits WHERE expires_at<?").bind(time),
+    db.prepare("DELETE FROM sessions WHERE expires_at<?").bind(time),
+    db.prepare("DELETE FROM oauth_states WHERE expires_at<?").bind(time),
+    db
+      .prepare("DELETE FROM checkout_attempts WHERE bucket<?")
+      .bind(Math.floor(Date.now() / 1800000) - 336),
+  ]);
+}
 jobAdmin.use("*", requireAdmin);
 jobAdmin.post("/sources", async (c) => {
   const input = await parse(c, sourceInput);

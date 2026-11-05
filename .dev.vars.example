@@ -8,6 +8,10 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 # Optional same-site Google sign-in origin; the private MCP origin can stay unchanged.
 GOOGLE_AUTH_ORIGIN=
+RESEND_API_KEY=
+# Enable only after the sending domain and Free/no-overages account are verified.
+RESEND_SENDER_VERIFIED=false
+EMAIL_ALERTS_ENABLED=false
 X_CLIENT_ID=
 X_CLIENT_SECRET=
 STRIPE_SECRET_KEY=

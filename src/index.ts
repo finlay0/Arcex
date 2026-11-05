@@ -8,7 +8,7 @@ import { auth } from "./auth";
 import { catalog, adminCatalog } from "./catalog";
 import { community, adminCommunity } from "./community";
 import { billing, adminBilling } from "./billing";
-import { collector, jobAdmin, enqueueDue } from "./jobs";
+import { collector, jobAdmin, enqueueDue, expireAuthState } from "./jobs";
 import { media } from "./media";
 import {
   adminInsights,
@@ -20,6 +20,11 @@ import { openapi } from "./openapi";
 import { researchAdmin } from "./research";
 import { distributionAdmin, distributionStatus } from "./distribution";
 import { externalSignalsAdmin } from "./external-signals";
+import {
+  emailAlerts,
+  adminEmailAlerts,
+  deliverOneDigest,
+} from "./email-alerts";
 
 export const app = new Hono<AppEnv>();
 app.use("*", async (c, next) => {
@@ -68,6 +73,7 @@ app.route("/auth", auth);
 app.route("/api/v1", catalog);
 app.route("/api/v1", community);
 app.route("/api/v1", insights);
+app.route("/api/v1", emailAlerts);
 app.route("/api/v1/admin", adminCatalog);
 app.route("/api/v1/admin", adminCommunity);
 app.route("/api/v1/admin", adminBilling);
@@ -76,6 +82,7 @@ app.route("/api/v1/admin", researchAdmin);
 app.route("/api/v1/admin", distributionAdmin);
 app.route("/api/v1/admin", externalSignalsAdmin);
 app.route("/api/v1/admin", adminInsights);
+app.route("/api/v1/admin", adminEmailAlerts);
 app.get("/api/v1/distribution/:slug", async (c) => {
   const product = await c.env.DB.prepare(
     "SELECT id FROM products WHERE slug=? AND status='published'",
@@ -124,13 +131,22 @@ export default {
     _ctx: ExecutionContext,
   ) {
     // Share one timer within the account's Free cron limit. Metrics run with collection off.
-    // At most 34 metrics + 14 enqueue/cleanup statements, below D1 Free's 50-query limit.
+    // At most34 metrics +4 auth cleanup +10 enqueue, or9 delivery statements.
+    // Collection and delivery alternate when both are enabled, staying below D1 Free's50 queries.
+    await expireAuthState(env.DB);
     if (event.cron === METRICS_CRON) {
       const metrics = await refreshMetrics(env.DB);
       console.log(JSON.stringify({ event: "metrics.refreshed", ...metrics }));
     }
-    if (env.COLLECTION_ENABLED !== "true") return;
-    const result = await enqueueDue(env);
-    console.log(JSON.stringify({ event: "collection.enqueued", ...result }));
+    if (
+      env.COLLECTION_ENABLED === "true" &&
+      new Date(event.scheduledTime).getUTCMinutes() % 20 === 0
+    ) {
+      const result = await enqueueDue(env);
+      console.log(JSON.stringify({ event: "collection.enqueued", ...result }));
+    } else if (env.EMAIL_ALERTS_ENABLED === "true") {
+      const result = await deliverOneDigest(env);
+      console.log(JSON.stringify({ event: "alerts.dispatched", ...result }));
+    }
   },
 } satisfies ExportedHandler<Bindings>;

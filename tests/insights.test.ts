@@ -2,14 +2,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import { Miniflare, convertV4MiniflareOptions } from "miniflare";
-import { app } from "../src/index";
+import backend, { app } from "../src/index";
 import {
   METRICS_PAGE_SIZE,
+  METRICS_CRON,
   refreshMetrics,
   signedMediaUrl,
 } from "../src/insights";
 import { sha256 } from "../src/lib";
 import type { Bindings } from "../src/types";
+import { deliverOneDigest, EMAIL_DAILY_LIMIT } from "../src/email-alerts";
 
 const ORIGIN = "http://localhost:8791";
 const ADMIN = "admin-test-only";
@@ -856,6 +858,173 @@ test("coverage, gating, limits, metrics, tracking and publication", async () => 
     );
     assert.equal(ranked.items[0].slug, "signals");
     assert.equal(ranked.items[0].requests, 2);
+
+    // Delivery uses opt-in/entitlement checks, one immutable retry, and atomic quota reservations.
+    await setInsider("u1", true);
+    await DB.prepare(
+      "UPDATE users SET email='recipient@example.com' WHERE id='u1'",
+    ).run();
+    await json(await request("PUT", "/api/v1/me/watches/signals", {}, u1));
+    await json(
+      await request("PUT", "/api/v1/me/alerts", { emailAlerts: true }, u1),
+    );
+    await DB.prepare(
+      "UPDATE alert_settings SET updated_at=? WHERE user_id='u1'",
+    )
+      .bind(daysAgo(1))
+      .run();
+    const enabledEnv = {
+      ...env,
+      RESEND_API_KEY: "fixture-key",
+      RESEND_SENDER_VERIFIED: "true",
+      EMAIL_ALERTS_ENABLED: "true",
+    };
+    const originalFetch = globalThis.fetch;
+    const sends: { key: string | null; body: string }[] = [];
+    try {
+      globalThis.fetch = async (url, init) => {
+        assert.equal(String(url), "https://api.resend.com/emails");
+        sends.push({
+          key: new Headers(init?.headers).get("Idempotency-Key"),
+          body: String(init?.body),
+        });
+        return sends.length === 1
+          ? new Response("", { status: 503 })
+          : Response.json({ id: "fixture-provider-id" });
+      };
+      assert.equal((await deliverOneDigest(env)).sent, 0);
+      assert.equal(
+        (await deliverOneDigest(enabledEnv)).reason,
+        "provider_retry_pending",
+      );
+      await DB.prepare(
+        "UPDATE email_outbox SET available_at=? WHERE status='pending'",
+      )
+        .bind(daysAgo(0.01))
+        .run();
+      assert.equal((await deliverOneDigest(enabledEnv)).sent, 1);
+      assert.deepEqual(
+        sends[0],
+        sends[1],
+        "Retry must reuse body and provider idempotency key",
+      );
+      assert.equal((await deliverOneDigest(enabledEnv)).sent, 0);
+      assert.equal(
+        sends.length,
+        2,
+        "An already delivered daily digest is not sent again",
+      );
+      const envelope = JSON.parse(sends[1].body);
+      const unsubscribe = envelope.headers["List-Unsubscribe"].slice(1, -1);
+      assert.equal(
+        (
+          await request(
+            "GET",
+            new URL(unsubscribe).pathname + new URL(unsubscribe).search,
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await request(
+            "POST",
+            new URL(unsubscribe).pathname + "?expires=1&signature=wrong",
+          )
+        ).status,
+        403,
+      );
+      await json(
+        await request(
+          "POST",
+          new URL(unsubscribe).pathname + new URL(unsubscribe).search,
+        ),
+      );
+      assert.equal(
+        (await DB.prepare(
+          "SELECT email_alerts FROM alert_settings WHERE user_id='u1'",
+        ).first())!.email_alerts,
+        0,
+      );
+      await setInsider("u1", false);
+      await json(
+        await request("PUT", "/api/v1/me/alerts", { emailAlerts: false }, u1),
+      );
+
+      await setInsider("u2", true);
+      await DB.prepare(
+        "UPDATE users SET email='other@example.com' WHERE id='u2'",
+      ).run();
+      await json(
+        await request("PUT", "/api/v1/me/alerts", { emailAlerts: true }, u2),
+      );
+      await DB.prepare(
+        "UPDATE alert_settings SET updated_at=? WHERE user_id='u2'",
+      )
+        .bind(daysAgo(1))
+        .run();
+      // A full day of valid reserved jobs leaves no capacity, regardless of their delivery status.
+      await DB.prepare(
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO users(id,handle,name) SELECT 'quota'||i,'quota'||i,'Quota fixture' FROM n",
+      )
+        .bind(EMAIL_DAILY_LIMIT - 1)
+        .run();
+      await DB.prepare(
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?) INSERT INTO email_outbox(id,user_id,day,month,envelope,change_ids,cursor_at,cursor_id,status,created_at,available_at) SELECT 'quota'||i,'quota'||i,?,?,'{}','[]',?,'x','sent',?,? FROM n",
+      )
+        .bind(EMAIL_DAILY_LIMIT - 1, day, day.slice(0, 7), stamp, stamp, stamp)
+        .run();
+      assert.equal(
+        (await deliverOneDigest(enabledEnv)).reason,
+        "reservation_limit",
+      );
+      assert.equal(
+        sends.length,
+        2,
+        "Quota exhaustion never calls the provider",
+      );
+      for (const minute of [0, 10]) {
+        const tick = new Date();
+        tick.setUTCMinutes(minute);
+        queries = 0;
+        await backend.scheduled(
+          {
+            cron: METRICS_CRON,
+            scheduledTime: tick.getTime(),
+          } as ScheduledController,
+          { ...enabledEnv, DB: counted, COLLECTION_ENABLED: "true" },
+          {} as ExecutionContext,
+        );
+        assert.ok(
+          queries <= 50,
+          `Combined scheduled path used${queries}queries`,
+        );
+      }
+      await DB.prepare("DELETE FROM email_outbox WHERE id LIKE 'quota%'").run();
+      const probe = () =>
+        app.request(
+          ORIGIN + "/api/v1/admin/alerts/simulator",
+          {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + ADMIN,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ to: "ignored@example.com" }),
+          },
+          enabledEnv,
+        );
+      await json(await probe());
+      assert.equal(sends.length, 3);
+      assert.deepEqual(JSON.parse(sends[2].body).to, ["delivered@resend.dev"]);
+      assert.equal(
+        (await probe()).status,
+        409,
+        "Repeated simulator calls do not send twice",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   } finally {
     await mf.dispose();
   }

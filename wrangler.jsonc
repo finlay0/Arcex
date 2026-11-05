@@ -17,6 +17,8 @@
     "API_ORIGIN": "http://localhost:8791",
     "ENABLE_DEV_AUTH": "false",
     "COLLECTION_ENABLED": "false",
+    "EMAIL_ALERTS_ENABLED": "false",
+    "RESEND_SENDER_VERIFIED": "false",
     "MCP_OWNER_GITHUB_ID": "207296386",
   },
   "d1_databases": [
@@ -43,6 +45,8 @@
         "GOOGLE_AUTH_ORIGIN": "https://api.arcex.dev",
         "ENABLE_DEV_AUTH": "false",
         "COLLECTION_ENABLED": "false",
+        "EMAIL_ALERTS_ENABLED": "false",
+        "RESEND_SENDER_VERIFIED": "false",
         "MCP_OWNER_GITHUB_ID": "207296386",
         "SUPABASE_STORAGE_URL": "https://xieyxgwdfczyorfkrmbe.supabase.co",
       },

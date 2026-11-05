@@ -5,11 +5,18 @@ import { now } from "./types";
 import { audit, decode, fail, page, parse } from "./lib";
 import { requireAdmin, requirePro, requireSession, requireUser } from "./auth";
 import { id, publicUrl } from "./contracts";
+import { emailDeliveryStatus } from "./email-alerts";
+export {
+  signedMediaUrl,
+  mediaLinkValid,
+  signedLinkParameters,
+  signedLinkValid,
+} from "./signed-links";
 
 export const DAILY_APP_LIMIT = 10;
 export const FREE_WATCH_LIMIT = 3;
 const OWN_PRODUCT_LIMIT = 10;
-const MEDIA_LINK_SECONDS = 900;
+
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
 const WEEKS_TRACKED = 12;
@@ -56,77 +63,6 @@ export async function unlockApp(
     )
     .bind(userId, day, productId)
     .first());
-}
-
-async function mediaKey(secret: string) {
-  return crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
-
-/** A short-lived link to an approved image. Only issued to viewers allowed to see it. */
-export async function signedLinkParameters(
-  env: Bindings,
-  scope: string,
-  seconds = MEDIA_LINK_SECONDS,
-) {
-  if (!env.MEDIA_SIGNING_SECRET) return null;
-  const expires = Math.floor(Date.now() / 1000) + seconds;
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    await mediaKey(env.MEDIA_SIGNING_SECRET),
-    new TextEncoder().encode(`${scope}.${expires}`),
-  );
-  const hex = [...new Uint8Array(signature)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return `expires=${expires}&signature=${hex}`;
-}
-
-export async function signedMediaUrl(env: Bindings, assetId: string) {
-  const parameters = await signedLinkParameters(env, `media:${assetId}`);
-  return parameters
-    ? `/api/v1/media/${encodeURIComponent(assetId)}?${parameters}`
-    : null;
-}
-
-export async function signedLinkValid(
-  env: Bindings,
-  scope: string,
-  expires?: string,
-  signature?: string,
-) {
-  if (
-    !env.MEDIA_SIGNING_SECRET ||
-    !expires ||
-    !/^\d{1,12}$/.test(expires) ||
-    !signature ||
-    !/^[0-9a-f]{64}$/.test(signature) ||
-    Number(expires) < Date.now() / 1000
-  )
-    return false;
-  const bytes = Uint8Array.from(signature.match(/../g)!, (h) =>
-    parseInt(h, 16),
-  );
-  return crypto.subtle.verify(
-    "HMAC",
-    await mediaKey(env.MEDIA_SIGNING_SECRET),
-    bytes,
-    new TextEncoder().encode(`${scope}.${expires}`),
-  );
-}
-
-export async function mediaLinkValid(
-  env: Bindings,
-  assetId: string,
-  expires?: string,
-  signature?: string,
-) {
-  return signedLinkValid(env, `media:${assetId}`, expires, signature);
 }
 
 type SightingRow = {
@@ -531,8 +467,7 @@ insights.get("/me/alerts", requireUser, requireSession, async (c) => {
     .first<{ email_alerts: number }>();
   return c.json({
     emailAlerts: !!row?.email_alerts,
-    deliveryEnabled: false,
-    deliveryStatus: "not_configured",
+    ...emailDeliveryStatus(c.env),
   });
 });
 insights.put("/me/alerts", requireUser, requireSession, async (c) => {
@@ -541,7 +476,7 @@ insights.put("/me/alerts", requireUser, requireSession, async (c) => {
     z.object({ emailAlerts: z.boolean() }).strict(),
   );
   if (emailAlerts && !c.get("actor").pro)
-      fail(403, "Insider is required for email alerts");
+    fail(403, "Insider is required for email alerts");
   await c.env.DB.prepare(
     "INSERT INTO alert_settings(user_id,email_alerts,updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET email_alerts=excluded.email_alerts,updated_at=excluded.updated_at",
   )
@@ -549,8 +484,7 @@ insights.put("/me/alerts", requireUser, requireSession, async (c) => {
     .run();
   return c.json({
     ok: true,
-    deliveryEnabled: false,
-    deliveryStatus: "not_configured",
+    ...emailDeliveryStatus(c.env),
   });
 });
 
@@ -777,8 +711,10 @@ adminInsights.put("/changes/:id/status", async (c) => {
   if (!change) fail(404, "Change not found");
   if (status === "published" && change.status !== "approved")
     fail(409, "Approve the evidence before publishing this change");
-  await c.env.DB.prepare("UPDATE product_changes SET status=? WHERE id=?")
-    .bind(status, c.req.param("id"))
+  await c.env.DB.prepare(
+    "UPDATE product_changes SET status=?,published_at=CASE WHEN ?='published' THEN COALESCE(published_at,?) ELSE NULL END WHERE id=?",
+  )
+    .bind(status, status, now(), c.req.param("id"))
     .run();
   await audit(c.env.DB, "admin", "change.status", c.req.param("id"), {
     status,
