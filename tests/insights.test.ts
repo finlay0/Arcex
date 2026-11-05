@@ -466,6 +466,7 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
       "/api/v1/me/saves",
       "/api/v1/me/usage",
       "/api/v1/me/history",
+      "/api/v1/me/product-requests",
     ])
       assert.equal(
         (await request("GET", path, undefined, "arcex_free")).status,
@@ -1051,6 +1052,106 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
     );
     assert.equal(ranked.items[0].slug, "signals");
     assert.equal(ranked.items[0].requests, 2);
+
+    const requested = await json<{ id: string; url: string }>(
+      await request(
+        "POST",
+        "/api/v1/me/product-requests",
+        { url: "https://www.new-fixture-tool.com/path?token=fixture#section" },
+        u2,
+      ),
+      201,
+    );
+    assert.equal(requested.url, "https://www.new-fixture-tool.com/path");
+    assert.equal(
+      (
+        await json<{ id: string }>(
+          await request(
+            "POST",
+            "/api/v1/me/product-requests",
+            { url: "https://new-fixture-tool.com/other" },
+            u2,
+          ),
+        )
+      ).id,
+      requested.id,
+    );
+    await json(
+      await request(
+        "POST",
+        "/api/v1/me/product-requests",
+        { url: "https://new-fixture-tool.com/" },
+        u1,
+      ),
+      201,
+    );
+    await json(
+      await request(
+        "DELETE",
+        "/api/v1/me/product-requests/" + requested.id,
+        undefined,
+        u1,
+      ),
+    );
+    const ownRequests = async () =>
+      await json<{ items: unknown[] }>(
+        await request("GET", "/api/v1/me/product-requests", undefined, u2),
+      );
+    assert.equal((await ownRequests()).items.length, 1);
+    const requestQueue = await json<{
+      items: { domain: string; requests: number }[];
+    }>(
+      await request("GET", "/api/v1/admin/product-requests", undefined, ADMIN),
+    );
+    assert.equal(
+      requestQueue.items.find((r) => r.domain === "new-fixture-tool.com")!
+        .requests,
+      2,
+    );
+    await DB.prepare(
+      "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<9) INSERT INTO product_requests SELECT 'request-'||i,'u2','https://request-fixture'||i||'.com/','request-fixture'||i||'.com','pending','2026-01-01','2026-01-01' FROM n",
+    ).run();
+    assert.equal(
+      (
+        await request(
+          "POST",
+          "/api/v1/me/product-requests",
+          { url: "https://over-limit-fixture.com/" },
+          u2,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(
+      (
+        await request(
+          "POST",
+          "/api/v1/me/product-requests",
+          { url: "https://new-fixture-tool.com/" },
+          u2,
+        )
+      ).status,
+      200,
+    );
+    await json(
+      await request(
+        "PATCH",
+        "/api/v1/admin/product-requests/new-fixture-tool.com",
+        { status: "reviewed" },
+        ADMIN,
+      ),
+    );
+    assert.equal(
+      (
+        await request(
+          "POST",
+          "/api/v1/me/product-requests",
+          { url: "https://over-limit-fixture.com/" },
+          u2,
+        )
+      ).status,
+      201,
+    );
 
     // Delivery uses opt-in/entitlement checks, one immutable retry, and atomic quota reservations.
     t.mock.timers.enable({

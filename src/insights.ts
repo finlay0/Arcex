@@ -18,6 +18,7 @@ export const DAILY_APP_LIMIT = 10;
 export const FREE_WATCH_LIMIT = 3;
 export const HISTORY_LIMIT = 100;
 const OWN_PRODUCT_LIMIT = 10;
+const PENDING_PRODUCT_REQUEST_LIMIT = 10;
 
 const DAY_MS = 86_400_000;
 const WEEK_MS = 7 * DAY_MS;
@@ -575,6 +576,83 @@ insights.put(
   },
 );
 
+insights.get("/me/product-requests", requireUser, requireSession, async (c) => {
+  const { limit, offset } = page(c);
+  const result = await c.env.DB.prepare(
+    `SELECT r.id,r.url,r.domain,r.status,r.created_at,r.updated_at,p.slug published_product_slug
+     FROM product_requests r LEFT JOIN products p ON p.domain=r.domain AND p.status='published'
+     WHERE r.user_id=? ORDER BY r.created_at DESC,r.id LIMIT ? OFFSET ?`,
+  )
+    .bind(c.get("actor").userId, limit, offset)
+    .all();
+  return c.json({
+    items: result.results,
+    limit,
+    offset,
+    pendingLimit: PENDING_PRODUCT_REQUEST_LIMIT,
+  });
+});
+insights.post(
+  "/me/product-requests",
+  requireUser,
+  requireSession,
+  async (c) => {
+    const input = await parse(c, z.object({ url: publicUrl }).strict());
+    const url = new URL(input.url);
+    url.search = "";
+    url.hash = "";
+    const domain = url.hostname.replace(/^www\./, ""),
+      userId = c.get("actor").userId,
+      requestId = crypto.randomUUID(),
+      time = now();
+    const result = await c.env.DB.prepare(
+      "INSERT INTO product_requests(id,user_id,url,domain,created_at,updated_at) SELECT ?,?,?,?,?,? WHERE (SELECT count(*) FROM product_requests WHERE user_id=? AND status='pending')<? ON CONFLICT(user_id,domain) DO NOTHING",
+    )
+      .bind(
+        requestId,
+        userId,
+        url.toString(),
+        domain,
+        time,
+        time,
+        userId,
+        PENDING_PRODUCT_REQUEST_LIMIT,
+      )
+      .run();
+    const saved = await c.env.DB.prepare(
+      "SELECT id,url,domain,status,created_at,updated_at FROM product_requests WHERE user_id=? AND domain=?",
+    )
+      .bind(userId, domain)
+      .first();
+    if (!saved)
+      return c.json(
+        {
+          error: "Pending product request limit reached",
+          code: "product_request_limit",
+          pendingLimit: PENDING_PRODUCT_REQUEST_LIMIT,
+        },
+        409,
+      );
+    return c.json(
+      { ...saved, created: result.meta.changes > 0 },
+      result.meta.changes ? 201 : 200,
+    );
+  },
+);
+insights.delete(
+  "/me/product-requests/:id",
+  requireUser,
+  requireSession,
+  async (c) => {
+    await c.env.DB.prepare(
+      "DELETE FROM product_requests WHERE id=? AND user_id=?",
+    )
+      .bind(c.req.param("id"), c.get("actor").userId)
+      .run();
+    return c.json({ ok: true });
+  },
+);
+
 export const adminInsights = new Hono<AppEnv>();
 adminInsights.use("*", requireAdmin);
 
@@ -829,4 +907,44 @@ adminInsights.get("/breakdown-requests", async (c) => {
     .bind(now(), limit, offset)
     .all();
   return c.json({ items: result.results, limit, offset });
+});
+
+adminInsights.get("/product-requests", async (c) => {
+  const { limit, offset } = page(c),
+    status = z
+      .enum(["pending", "reviewed", "declined"])
+      .default("pending")
+      .parse(c.req.query("status"));
+  const result = await c.env.DB.prepare(
+    `SELECT r.domain,min(r.url) example_url,count(*) requests,min(r.created_at) first_requested_at,max(r.created_at) last_requested_at,
+     sum(EXISTS(SELECT 1 FROM subscriptions s WHERE s.user_id=r.user_id AND s.status IN ('active','trialing') AND s.period_end>? AND NOT EXISTS(SELECT 1 FROM billing_holds b WHERE b.user_id=r.user_id))) insider_requests
+     FROM product_requests r WHERE r.status=? GROUP BY r.domain ORDER BY insider_requests DESC,requests DESC,first_requested_at,r.domain LIMIT ? OFFSET ?`,
+  )
+    .bind(now(), status, limit, offset)
+    .all();
+  return c.json({ items: result.results, status, limit, offset });
+});
+adminInsights.patch("/product-requests/:domain", async (c) => {
+  const { status } = await parse(
+    c,
+    z.object({ status: z.enum(["reviewed", "declined"]) }).strict(),
+  );
+  const domain = z
+    .string()
+    .min(1)
+    .max(253)
+    .parse(c.req.param("domain"))
+    .toLowerCase()
+    .replace(/^www\./, "");
+  const result = await c.env.DB.prepare(
+    "UPDATE product_requests SET status=?,updated_at=? WHERE domain=? AND status='pending'",
+  )
+    .bind(status, now(), domain)
+    .run();
+  if (!result.meta.changes) fail(404, "No pending requests for this domain");
+  await audit(c.env.DB, "admin", "product_request.review", domain, {
+    status,
+    requests: result.meta.changes,
+  });
+  return c.json({ ok: true, requests: result.meta.changes, status });
 });

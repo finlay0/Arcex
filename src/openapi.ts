@@ -328,6 +328,31 @@ export const openapi = {
     "/api/v1/me/requests/{productId}": {
       put: operation("Request a full breakdown; session only", "user"),
     },
+    "/api/v1/me/product-requests": {
+      get: operation(
+        "Your submitted product URLs and review status; session only",
+        "user",
+      ),
+      post: operation(
+        "Request an unlisted product by public HTTPS URL; 10 pending per account. Does not create, research or publish a product.",
+        "user",
+      ),
+    },
+    "/api/v1/me/product-requests/{id}": {
+      delete: operation("Withdraw your product request; session only", "user"),
+    },
+    "/api/v1/admin/product-requests": {
+      get: operation(
+        "Domain-grouped product request review queue, Insider first; optional status",
+        "admin",
+      ),
+    },
+    "/api/v1/admin/product-requests/{domain}": {
+      patch: operation(
+        "Mark pending requests reviewed or declined; does not create or publish a product",
+        "admin",
+      ),
+    },
     "/api/v1/admin/metrics/refresh": {
       post: operation("Refresh the next page of table metrics", "admin"),
     },
