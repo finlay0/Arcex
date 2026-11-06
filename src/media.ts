@@ -105,7 +105,8 @@ media.post("/uploads", requireCollector, async (c) => {
       })
       .strict(),
   );
-  await rateLimit(c.env.DB, "capture-upload-links", 200, 86400);
+  // Seed phase: about 10 screens per product. The 900 MB storage cap is the real bound.
+  await rateLimit(c.env.DB, "capture-upload-links", 3000, 86400);
   if (
     !(await c.env.DB.prepare("SELECT id FROM evidence WHERE id=?")
       .bind(input.evidenceId)
