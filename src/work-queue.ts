@@ -117,6 +117,14 @@ export async function finishWork(
       409,
       "No current lease for this product; lease it with next_research_work first",
     );
+  // Review needs a recent homepage check, so bring that free HTTP check forward.
+  if (input.task === "deep")
+    await db
+      .prepare(
+        "UPDATE sources SET next_run_at=?1 WHERE product_id=?2 AND lane='http' AND enabled=1 AND next_run_at>?1 AND (last_checked_at IS NULL OR last_checked_at<?3)",
+      )
+      .bind(time, input.productId, later(-HOMEPAGE_MAX_AGE_DAYS * 86400))
+      .run();
   await audit(
     db,
     "collector:worker",
