@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { productInput, publicUrl, timestamp } from "./contracts";
+import {
+  productInput,
+  productKey,
+  publicUrl,
+  siteOf,
+  timestamp,
+} from "./contracts";
 import { fail, audit } from "./lib";
 import { now } from "./types";
 import { Hono } from "hono";
@@ -48,7 +54,16 @@ export async function lookupDiscoveryLeads(
     ),
   ];
   const domains = [
-    ...new Set(urls.map((url) => new URL(url).hostname.replace(/^www\./, ""))),
+    ...new Set(
+      urls.flatMap((url) => {
+        const host = new URL(url).hostname.replace(/^www\./, "");
+        try {
+          return [host, productKey(url)];
+        } catch {
+          return [host];
+        }
+      }),
+    ),
   ];
   const placeholders = (items: string[]) => items.map(() => "?").join(",");
   const [leads, products] = await db.batch([
@@ -119,6 +134,8 @@ export const candidateInput = z
       })
       .strict()
       .optional(),
+    // IDs of similar existing products the worker checked and confirmed are different.
+    distinctFrom: z.array(z.string().min(1).max(100)).max(5).optional(),
   })
   .strict();
 
@@ -194,7 +211,7 @@ export async function registerCandidate(
 ) {
   const p = input.product,
     m = input.maker,
-    domain = new URL(p.url).hostname.replace(/^www\./, "");
+    domain = productKey(p.url);
   const existing = await db
     .prepare("SELECT id,status,domain FROM products WHERE domain=? OR slug=?")
     .bind(domain, p.slug)
@@ -204,6 +221,27 @@ export async function registerCandidate(
       fail(409, "Candidate slug belongs to a different domain");
     return { id: existing.id, status: existing.status, existing: true };
   }
+  // Same name, or the same site under another subdomain or store listing, is usually
+  // the same product. The worker must read it and confirm it is distinct to continue.
+  const site = siteOf(domain);
+  const similar = await db
+    .prepare(
+      `SELECT id,name,domain,status FROM products WHERE status!='archived' AND (lower(name)=lower(?) OR domain=? OR domain LIKE ? ESCAPE '!') LIMIT 5`,
+    )
+    .bind(p.name, site, "%." + site.replace(/[!%_]/g, "!$&"))
+    .all<{ id: string; name: string; domain: string; status: string }>();
+  const unconfirmed = similar.results.filter(
+    (r) => !input.distinctFrom?.includes(r.id),
+  );
+  if (unconfirmed.length)
+    fail(
+      409,
+      "Possible duplicate of " +
+        unconfirmed
+          .map((r) => `${r.name} (${r.domain}, id ${r.id})`)
+          .join("; ") +
+        ". Reuse that product, or read it and resend with distinctFrom listing its id if it is a different product.",
+    );
   const productId = crypto.randomUUID(),
     time = now();
   await db.batch([
@@ -239,6 +277,20 @@ export async function registerCandidate(
         input.discovery ? JSON.stringify(input.discovery) : null,
       ),
   ]);
+  // Every new candidate gets a daily code-only homepage check, so its history starts now.
+  await db
+    .prepare(
+      "INSERT INTO sources(id,product_id,name,url,kind,interval_hours,enabled,next_run_at,created_at,lane,capture_mode) VALUES (?,?,?,?,'public_page',24,1,?,?,'http','metadata') ON CONFLICT(url,kind) DO NOTHING",
+    )
+    .bind(
+      crypto.randomUUID(),
+      productId,
+      p.name + " homepage",
+      p.url,
+      time,
+      time,
+    )
+    .run();
   await audit(db, actor, "research.candidate", productId, {
     sourceUrl: m.sourceUrl,
     sizeStatus: m.sizeStatus,

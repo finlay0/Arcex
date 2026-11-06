@@ -44,6 +44,7 @@ export async function publicFetch(
   raw: string,
   maximum = 1_000_000,
   validators?: { etag: string | null; lastModified: string | null },
+  accept = "text/html, application/rss+xml, application/atom+xml, application/xml, text/xml",
 ) {
   const url = new URL(publicUrl.parse(raw));
   const addresses = await lookup(url.hostname, { all: true });
@@ -53,6 +54,7 @@ export async function publicFetch(
   // Pin the checked address to this TLS connection; a second DNS lookup cannot rebind to private hosts.
   return new Promise<{
     text: string;
+    body: Buffer;
     headers: Record<string, string>;
     contentType: string;
     status: 200 | 304;
@@ -68,8 +70,7 @@ export async function publicFetch(
           ...(validators?.lastModified
             ? { "if-modified-since": validators.lastModified }
             : {}),
-          accept:
-            "text/html, application/rss+xml, application/atom+xml, application/xml, text/xml",
+          accept,
         },
         family: address.family,
         lookup: (_host, _options, cb) =>
@@ -96,6 +97,7 @@ export async function publicFetch(
           resolve({
             status: 304,
             text: "",
+            body: Buffer.alloc(0),
             headers: {},
             contentType: "",
             httpCache,
@@ -129,19 +131,21 @@ export async function publicFetch(
           chunks.push(chunk);
         });
         res.on("error", reject);
-        res.on("end", () =>
+        res.on("end", () => {
+          const body = Buffer.concat(chunks);
           resolve({
             status: 200,
             httpCache,
-            text: Buffer.concat(chunks).toString("utf8"),
+            body,
+            text: body.toString("utf8"),
             contentType: res.headers["content-type"] ?? "",
             headers: Object.fromEntries(
               ["server", "x-powered-by", "content-type"]
                 .filter((k) => typeof res.headers[k] === "string")
                 .map((k) => [k, res.headers[k] as string]),
             ),
-          }),
-        );
+          });
+        });
       },
     );
     req.setTimeout(20000, () => req.destroy(new Error("Source timed out")));

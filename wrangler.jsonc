@@ -45,7 +45,7 @@
         "GOOGLE_AUTH_ORIGIN": "https://api.arcex.dev",
         "GITHUB_AUTH_ORIGIN": "https://api.arcex.dev",
         "ENABLE_DEV_AUTH": "false",
-        "COLLECTION_ENABLED": "false",
+        "COLLECTION_ENABLED": "true",
         "EMAIL_ALERTS_ENABLED": "true",
         "RESEND_SENDER_VERIFIED": "true",
         "MCP_OWNER_GITHUB_ID": "207296386",

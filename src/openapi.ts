@@ -740,8 +740,16 @@ export const openapi = {
         "admin",
       ),
     },
+    "/api/v1/billing/price": {
+      get: operation(
+        "ArcX Pro regional monthly offer: CAD in Canada, USD elsewhere",
+      ),
+    },
     "/api/v1/billing/checkout": {
-      post: operation("Create hosted Insider checkout; session only", "user"),
+      post: operation(
+        "Create hosted ArcX Pro checkout at the server-selected regional price; session only",
+        "user",
+      ),
     },
     "/api/v1/billing/portal": {
       post: operation("Create hosted billing portal session", "user"),

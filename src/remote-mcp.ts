@@ -32,6 +32,7 @@ import {
   paywallInput,
   blueprintInput,
   id,
+  productHost,
 } from "./contracts";
 
 export const COLLECT_SCOPE = "arcex:collect";
@@ -379,7 +380,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     },
     async (input) =>
       run(async () => {
-        await rateLimit(env.DB, `candidate:${props.userId}`, 30, 86400);
+        await rateLimit(env.DB, `candidate:${props.userId}`, 150, 86400);
         return registerCandidate(env.DB, props.userId, input);
       }),
   );
@@ -530,7 +531,8 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
           .first<{ domain: string }>();
         if (!product) fail(422, "Register a research candidate first");
         const host = new URL(input.url).hostname.replace(/^www\./, "");
-        if (host !== product.domain && !host.endsWith("." + product.domain))
+        const productDomain = productHost(product.domain);
+        if (host !== productDomain && !host.endsWith("." + productDomain))
           fail(422, "Source must belong to the candidate domain");
         return internal("POST", "/api/v1/admin/sources", {
           ...input,

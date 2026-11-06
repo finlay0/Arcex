@@ -2,12 +2,15 @@
 
 Finlay's November 5, 2026 decision pauses Arcex research in ChatGPT Work for roughly the next month and requests Cursor Automations/Grok Bot onboarding. This changes the worker provider, not the database or product scope. There is no automatic switch back after a month. One-off computer use in this Codex chat still uses GPT-6.1 Terra Medium.
 
+Finlay subsequently increased the upfront target to1,000strong source-backed Radar products and requested frequent bootstrap work. This supersedes the earlier300 target and the idea of starting with one daily model run. The target is not1,000raw leads or1,000full teardowns. Browser depth remains separately scoped to the initial10breakdowns.
+
 ## Observed current state
 
 - The native Arcex daily Work schedule is paused. Both existing research chats show completed responses and idle composers. The superseded local Arcex automation is PAUSED, and GitHub's HTTP source workflow is disabled_manually. Production COLLECTION_ENABLED is false.
 - 175 candidates have completed the final text-review/import pass: 164 in scope, eight held, three references. These are private Signals Only drafts, not tested apps or full breakdowns. None is accepted or published.
 - Batch08's original result and two corrected rows are saved privately but not imported. Source/roster review caught a repeated-row error before any batch08 writes. Remaining09-14 inputs use batch-unique keys. Do not rerun finished batches or restore the old ChatGPT tasks to finish this.
-- The inspected Grok unified account shows Premium, 1% weekly included usage, zero prepaid balance, no credit usage, auto top-up apparently off, and no configured monthly additional-usage limit. Payment methods exist. Cursor eligibility/account linkage and the automation editor still need direct confirmation; do not merge accounts or change subscriptions.
+- The inspected unified account shows Premium,1%weeklyincludedusage andzero prepaid/credit usage. The additional-usage limit has now been saved at0; the dashboard says Additional usage disabled, and auto top-up remains off. No account merge, purchase or subscription change was performed.
+- Both Cursor automations are saved and Inactive, with no repository, memories removed and the authenticated Collector attached. Source Review is Composer2.5/Fastoff; Browser Research is Grok4.7Medium/Fastoff. Disabled09:00AST schedules are placeholders, not active maintenance and not verified DST-aware schedules. The first source pilot completed in24seconds with actual policy/product-read tool steps and two reported identity matches. Exact output export and browser-to-draft persistence still need verification.
 - Customer GitHub sign-in and an authenticated /api/v1/me succeeded after the approved callback save and Worker2dfb839d-e622-4cb7-8d3b-55d09ffaa65a deployment. The existing private Collector connection also read the cohort after deployment.
 
 ## Recommended first configuration
@@ -31,7 +34,7 @@ Grok Bot is the fallback for browser work if a bounded pilot shows persistent au
 2. Prepare the existing Collector's HTTP OAuth connection in Cursor. Obtain any runtime-required specific access-grant confirmation immediately before authorizing. This grants private research/draft tools, never publication or billing. Stop if authentication fails; no token-in-prompt or unrelated server fallback.
 3. Prepare two disabled/draft automations from the adjacent prompt files, with no repository and memories off. Do not create duplicate schedules, activate them, merge accounts or buy an upgrade. Verify models in the real picker; do not infer availability from documentation.
 4. Run one operator-assigned read-only source pilot and one bounded browser pilot using existing products. Verify actual database/source membership, screenshot bytes where relevant, checkpoints and included-only usage. Do not add a benchmark suite or restart broad discovery.
-5. Resume the existing300-product/10-breakdown finish plan on the chosen platform. Batch08 correction must be merged/validated before import. Review remains required before acceptance/publication. Existing job budgets, source freshness and deduplication remain authoritative.
+5. Resume the amended1,000-product/10-breakdown finish plan on the chosen platform. Initial candidate breadth should use bounded code/HTTP and text batches; browser effort goes to flows and ambiguous records. Batch08 correction must be merged/validated before import. Review remains required before acceptance/publication. Raise the old bootstrap attempt limits only deliberately after pilots, retain one browser claim at a time, and stop at included provider usage. Frequent scheduled model wakeups without an assigned batch or eligible job are not useful work.
 6. Only after upfront review, set the selected replacement schedule to09:00America/Halifax. Confirm native timezone support and DST behavior; do not silently substitute fixed UTC or launch extra model runs to compensate. Keep old schedules paused. If the editor cannot meet the schedule/budget requirement, leave it disabled and report the exact blocker.
 
 ## Preserved pending work

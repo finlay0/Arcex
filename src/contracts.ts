@@ -51,7 +51,14 @@ export const productInput = z
   .object({
     slug,
     name: z.string().min(1).max(120),
-    url: publicUrl,
+    url: publicUrl.refine((u) => {
+      try {
+        productKey(u);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Store and code-host URLs must point to one listing"),
     description: z.string().min(1).max(2000),
     category,
     monetization: monetization.default("unknown"),
@@ -211,3 +218,55 @@ export const sourceInput = z
   });
 export type ProductInput = z.infer<typeof productInput>;
 export type EvidenceInput = z.infer<typeof evidenceInput>;
+
+// Stores and code hosts list many unrelated products on one hostname. Their identity
+// includes the listing path, so a second extension is never merged into the first.
+const LISTING_HOSTS: Record<string, (u: URL) => string | null> = {
+  "chromewebstore.google.com": (u) =>
+    u.pathname.match(/^\/detail\/(?:[^/]+\/)?([a-p]{32})/)?.[1] ?? null,
+  "chrome.google.com": (u) =>
+    u.pathname.match(/^\/webstore\/detail\/(?:[^/]+\/)?([a-p]{32})/)?.[1] ??
+    null,
+  "marketplace.visualstudio.com": (u) => u.searchParams.get("itemName"),
+  "addons.mozilla.org": (u) =>
+    u.pathname.match(/\/addon\/([^/]+)/)?.[1] ?? null,
+  "apps.apple.com": (u) => u.pathname.match(/\/(id\d+)/)?.[1] ?? null,
+  "play.google.com": (u) => u.searchParams.get("id"),
+  "github.com": (u) =>
+    u.pathname.match(/^\/([^/]+\/[^/]+)/)?.[1]?.replace(/\.git$/, "") ?? null,
+  "huggingface.co": (u) =>
+    u.pathname.match(/^\/(spaces\/[^/]+\/[^/]+)/)?.[1] ?? null,
+  "www.npmjs.com": (u) =>
+    u.pathname.match(/^\/package\/((?:@[^/]+\/)?[^/]+)/)?.[1] ?? null,
+  "pypi.org": (u) => u.pathname.match(/^\/project\/([^/]+)/)?.[1] ?? null,
+};
+
+/** The unique product key stored in products.domain: host without www, plus the listing id on store hosts. */
+export function productKey(raw: string) {
+  const url = new URL(raw);
+  const host = url.hostname.toLowerCase();
+  const listing = LISTING_HOSTS[host];
+  const bare = host.replace(/^www\./, "");
+  if (!listing) return bare;
+  const item = listing(url);
+  if (!item)
+    throw new Error("Store and code-host URLs must point to one listing");
+  return `${bare}/${item.toLowerCase()}`;
+}
+const SHARED_HOSTING =
+  /\.(vercel\.app|netlify\.app|pages\.dev|workers\.dev|web\.app|firebaseapp\.com|github\.io|herokuapp\.com|onrender\.com|fly\.dev|replit\.app|lovable\.app|bolt\.host|framer\.website|webflow\.io|carrd\.co|notion\.site|super\.site)$/;
+/** The registrable site a product key sits under, used only to flag possible duplicates. */
+export function siteOf(key: string) {
+  const host = productHost(key);
+  if (SHARED_HOSTING.test(host) || key.includes("/")) return host;
+  const labels = host.split(".");
+  const take =
+    labels.length > 2 &&
+    labels.at(-1)!.length === 2 &&
+    labels.at(-2)!.length <= 3
+      ? 3
+      : 2;
+  return labels.slice(-take).join(".");
+}
+/** Hostname part of a product key. */
+export const productHost = (key: string) => key.split("/")[0];

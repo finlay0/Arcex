@@ -32,10 +32,36 @@ async function customer(env: Bindings, userId: string, stripe: Stripe) {
 }
 const objectId = (v: string | { id: string } | null | undefined) =>
   typeof v === "string" ? v : v?.id;
+const PRO_NAME = "ArcX Pro";
+const PRO_AMOUNT = 1199;
+function regionalOffer(request: Request) {
+  return {
+    planName: PRO_NAME,
+    currency: request.cf?.country === "CA" ? "cad" : "usd",
+    unitAmount: PRO_AMOUNT,
+    interval: "month" as const,
+  };
+}
+function regionalPriceReady(price: Stripe.Price) {
+  const product = price.product;
+  return (
+    price.active &&
+    price.currency === "usd" &&
+    price.unit_amount === PRO_AMOUNT &&
+    price.currency_options?.cad?.unit_amount === PRO_AMOUNT &&
+    price.recurring?.interval === "month" &&
+    price.recurring.interval_count === 1 &&
+    typeof product !== "string" &&
+    !product.deleted &&
+    product.active &&
+    product.name === PRO_NAME
+  );
+}
 export const billing = new Hono<AppEnv>();
+billing.get("/price", (c) => c.json(regionalOffer(c.req.raw)));
 billing.post("/checkout", requireUser, requireSession, async (c) => {
-  if (!c.env.STRIPE_PRICE_ID) fail(503, "Insider price is not configured");
-  if (c.get("actor").pro) fail(409, "Insider is already active");
+  if (!c.env.STRIPE_PRICE_ID) fail(503, "ArcX Pro price is not configured");
+  if (c.get("actor").pro) fail(409, "ArcX Pro is already active");
   const userId = c.get("actor").userId;
   if (
     await c.env.DB.prepare("SELECT user_id FROM billing_holds WHERE user_id=?")
@@ -45,7 +71,13 @@ billing.post("/checkout", requireUser, requireSession, async (c) => {
     fail(403, "Billing account requires review");
   await rateLimit(c.env.DB, "checkout:" + userId, 5, 3600);
   const stripe = stripeClient(c.env),
-    customerId = await customer(c.env, userId, stripe);
+    offer = regionalOffer(c.req.raw);
+  const price = await stripe.prices.retrieve(c.env.STRIPE_PRICE_ID, {
+    expand: ["currency_options", "product"],
+  });
+  if (!regionalPriceReady(price))
+    fail(503, "ArcX Pro regional pricing is not configured");
+  const customerId = await customer(c.env, userId, stripe);
   // Reconcile remote state before offering a new subscription when webhook delivery is delayed.
   const existing = await stripe.subscriptions.list({
     customer: customerId,
@@ -77,6 +109,8 @@ billing.post("/checkout", requireUser, requireSession, async (c) => {
   const session = await stripe.checkout.sessions.create(
     {
       mode: "subscription",
+      currency: offer.currency,
+      adaptive_pricing: { enabled: false },
       customer: customerId,
       line_items: [{ price: c.env.STRIPE_PRICE_ID, quantity: 1 }],
       client_reference_id: userId,
@@ -85,7 +119,9 @@ billing.post("/checkout", requireUser, requireSession, async (c) => {
       cancel_url: c.env.APP_ORIGIN + "/?checkout=canceled",
       integration_identifier: "arcex_" + attempt!.suffix,
     },
-    { idempotencyKey: `arcex-checkout-${userId}-${bucket}` },
+    {
+      idempotencyKey: `arcex-checkout-${userId}-${c.env.STRIPE_PRICE_ID}-${offer.currency}-${bucket}`,
+    },
   );
   return c.json({ url: session.url });
 });
@@ -262,7 +298,9 @@ adminBilling.get("/billing/readiness", async (c) => {
     fail(503, "Billing secrets are incomplete");
   const stripe = stripeClient(c.env);
   const [price, webhooks, portals] = await Promise.all([
-    stripe.prices.retrieve(c.env.STRIPE_PRICE_ID),
+    stripe.prices.retrieve(c.env.STRIPE_PRICE_ID, {
+      expand: ["currency_options", "product"],
+    }),
     stripe.webhookEndpoints.list({ limit: 100 }),
     stripe.billingPortal.configurations.list({ limit: 100 }),
   ]);
@@ -275,6 +313,12 @@ adminBilling.get("/billing/readiness", async (c) => {
       currency: price.currency,
       unitAmount: price.unit_amount,
       interval: price.recurring?.interval ?? null,
+      cadUnitAmount: price.currency_options?.cad?.unit_amount ?? null,
+      planName:
+        typeof price.product !== "string" && !price.product.deleted
+          ? price.product.name
+          : null,
+      regionalPricingReady: regionalPriceReady(price),
     },
     webhook: {
       exists: !!endpoint,

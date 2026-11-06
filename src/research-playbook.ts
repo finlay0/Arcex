@@ -1,4 +1,4 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-05.3";
+export const RESEARCH_POLICY_VERSION = "2026-11-06.1";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
@@ -14,6 +14,7 @@ For each existing product, call read_product_research before collecting or makin
 Keep one product's working context in focus. Normally handle at most 3 products in a run; this is a bound, not a target. Checkpoint after each product, before switching chats, and on failures. A fresh chat must be able to resume using research_context(resumeRunId=...) and database records alone.
 Use the existing product ID and domain; do not recreate a product because a chat forgot it. Repeated observations add sightings; changed source content adds a new evidence record. Read old captures with read_capture when comparison matters.
 Before investigating a prospective lead, call lookup_discovery_leads with its known URLs. Prior rejected, duplicate and unclear leads persist alongside the product directory, with their actual source timestamp and next check. Reuse existing product IDs, and do not repeatedly inspect an unchanged rejected lead without a concrete reason. Missing lookup results do not establish eligibility. Discovery write/import is operator-controlled; collector lookup is read-only.
+Use the product's own homepage as its URL. For store or code-host listings (Chrome Web Store, VS Code Marketplace, App Store, Google Play, GitHub, Hugging Face Spaces), use the exact listing URL; a store root is refused. register_candidate refuses a possible duplicate (same name, or the same site under another subdomain or listing) with the matching product IDs. Read those products: reuse the existing one when it is the same product, and resend with distinctFrom only after confirming it is genuinely different. Registration also starts a free daily code-only homepage check and brand-icon fetch; do not create a duplicate HTTP source for the homepage.
 
 COST AND ASSIGNMENT
 Do not revisit the first directory page or browse every product daily. The cohort page is a directory with nextProductCursor/afterProductId, not a work queue. Existing sources have stable IDs, unique URLs, schedules, validators and content fingerprints.

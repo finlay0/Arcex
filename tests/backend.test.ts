@@ -1356,6 +1356,101 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           cookie,
         );
         assert.equal(me.insider, false);
+        // Check the displayed offer against actual Checkout parameters, with no provider network.
+        const originalFetch = globalThis.fetch;
+        const checkoutRequests: {
+          currency: string | null;
+          adaptive: string | null;
+          key: string | null;
+        }[] = [];
+        let amount = 1199;
+        globalThis.fetch = (async (url, options) => {
+          const path = new URL(String(url)).pathname;
+          if (path.startsWith("/v1/prices/"))
+            return Response.json({
+              id: "price_insider",
+              active: true,
+              currency: "usd",
+              unit_amount: amount,
+              currency_options: { cad: { unit_amount: 1199 } },
+              recurring: { interval: "month", interval_count: 1 },
+              product: { id: "prod_pro", active: true, name: "ArcX Pro" },
+            });
+          if (path === "/v1/customers")
+            return Response.json({ id: "cus_regional" });
+          if (path === "/v1/subscriptions") return Response.json({ data: [] });
+          if (path === "/v1/checkout/sessions") {
+            const body = new URLSearchParams(String(options?.body));
+            checkoutRequests.push({
+              currency: body.get("currency"),
+              adaptive: body.get("adaptive_pricing[enabled]"),
+              key: new Headers(options?.headers).get("idempotency-key"),
+            });
+            return Response.json({
+              url: "https://checkout.stripe.com/test_fixture",
+            });
+          }
+          throw new Error("Unexpected provider request: " + path);
+        }) as typeof fetch;
+        try {
+          for (const country of ["CA", "US", undefined]) {
+            const request = new Request(
+              "http://localhost:8791/api/v1/billing/price",
+              { headers: { "cf-ipcountry": "CA" } },
+            );
+            if (country)
+              Object.defineProperty(request, "cf", { value: { country } });
+            const response = await app.fetch(request, env);
+            assert.equal(response.headers.get("cache-control"), "no-store");
+            assert.deepEqual(await response.json(), {
+              planName: "ArcX Pro",
+              currency: country === "CA" ? "cad" : "usd",
+              unitAmount: 1199,
+              interval: "month",
+            });
+          }
+          for (const country of ["CA", "US"]) {
+            const request = new Request(
+              "http://localhost:8791/api/v1/billing/checkout",
+              {
+                method: "POST",
+                headers: {
+                  cookie: otherCookie.slice(7),
+                  origin: env.APP_ORIGIN,
+                },
+              },
+            );
+            Object.defineProperty(request, "cf", { value: { country } });
+            const response = await app.fetch(request, env);
+            assert.equal(response.status, 200, await response.text());
+          }
+          assert.deepEqual(
+            checkoutRequests.map(({ currency, adaptive }) => ({
+              currency,
+              adaptive,
+            })),
+            [
+              { currency: "cad", adaptive: "false" },
+              { currency: "usd", adaptive: "false" },
+            ],
+          );
+          assert.notEqual(checkoutRequests[0].key, checkoutRequests[1].key);
+          amount = 1200;
+          assert.equal(
+            (
+              await req(
+                "POST",
+                "/api/v1/billing/checkout",
+                undefined,
+                otherCookie,
+              )
+            ).status,
+            503,
+          );
+          assert.equal(checkoutRequests.length, 2);
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
       },
     );
     await t.test(
@@ -1394,6 +1489,150 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
             )
           ).status,
           413,
+        );
+      },
+    );
+    await t.test(
+      "product icons are collector-written, bounded and public only once published",
+      async () => {
+        const { id } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/products",
+          { ...input, slug: "icon-app", url: "https://icon-app.com" },
+          admin,
+          201,
+        );
+        const icon = await sharp({
+          create: { width: 64, height: 64, channels: 4, background: "#5a7ba3" },
+        })
+          .webp()
+          .toBuffer();
+        const body = {
+          status: "ok",
+          sourceUrl: "https://icon-app.com/apple-touch-icon.png",
+          data: icon.toString("base64"),
+        };
+        assert.equal(
+          (await req("POST", `/api/v1/collector/icons/${id}`, body, admin))
+            .status,
+          401,
+        );
+        const big = await sharp({
+          create: { width: 128, height: 128, channels: 3, background: "#000" },
+        })
+          .webp()
+          .toBuffer();
+        await json(
+          "POST",
+          `/api/v1/collector/icons/${id}`,
+          { ...body, data: big.toString("base64") },
+          collector,
+          422,
+        );
+        await json("POST", `/api/v1/collector/icons/${id}`, body, collector);
+        // A later failed check keeps the good icon.
+        await json(
+          "POST",
+          `/api/v1/collector/icons/${id}`,
+          { status: "missing", reason: "HTTP 503" },
+          collector,
+        );
+        assert.equal((await req("GET", `/api/v1/icons/${id}`)).status, 404);
+        assert.equal(
+          (
+            await req(
+              "GET",
+              `/api/v1/admin/products/${id}/icon`,
+              undefined,
+              admin,
+            )
+          ).status,
+          200,
+        );
+        await env.DB.prepare(
+          "UPDATE products SET status='published' WHERE id=?",
+        )
+          .bind(id)
+          .run();
+        const served = await req("GET", `/api/v1/icons/${id}`);
+        assert.equal(served.status, 200);
+        assert.deepEqual(Buffer.from(await served.arrayBuffer()), icon);
+        const row = (
+          await json<{ items: { id: string; icon_url: string | null }[] }>(
+            "GET",
+            "/api/v1/radar?q=Fixture",
+          )
+        ).items.find((p) => p.id === id);
+        assert.match(row!.icon_url!, /\/api\/v1\/icons\/.+\?v=[0-9a-f]{16}$/);
+      },
+    );
+    await t.test(
+      "store listings stay separate and near-duplicate candidates need confirmation",
+      async () => {
+        const candidate = (
+          name: string,
+          url: string,
+          distinctFrom?: string[],
+        ) => ({
+          product: {
+            slug: url
+              .replace(/^https:\/\//, "")
+              .replace(/\W+/g, "-")
+              .slice(0, 60)
+              .replace(/-$/, ""),
+            name,
+            url,
+            description: "A browser extension",
+            category: "coding_dev",
+          },
+          maker: {
+            name: "Unknown operator",
+            sourceUrl: url,
+            evidence: "Listing names no operator beyond the publisher label.",
+            sizeStatus: "unverified",
+            currentSizeEvidence: "No current size source.",
+          },
+          ...(distinctFrom ? { distinctFrom } : {}),
+        });
+        const store = "https://chromewebstore.google.com/detail/";
+        const first = await json<{ id: string; existing: boolean }>(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          candidate("Tab Pilot", store + "tab-pilot/" + "a".repeat(32)),
+          admin,
+          201,
+        );
+        const second = await json<{ id: string; existing: boolean }>(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          candidate("Clip Lens", store + "clip-lens/" + "b".repeat(32)),
+          admin,
+          201,
+        );
+        assert.notEqual(first.id, second.id);
+        assert.equal(second.existing, false);
+        // A bare store URL cannot identify one product.
+        await json(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          candidate("Store Root", "https://chromewebstore.google.com/"),
+          admin,
+          422,
+        );
+        // The same name on the maker's own site is flagged until confirmed distinct.
+        await json(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          candidate("Tab Pilot", "https://tabpilot.dev"),
+          admin,
+          409,
+        );
+        await json(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          candidate("Tab Pilot", "https://tabpilot.dev", [first.id]),
+          admin,
+          201,
         );
       },
     );

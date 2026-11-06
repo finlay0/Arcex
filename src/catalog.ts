@@ -9,6 +9,7 @@ import {
   flowVersion,
 } from "./flow-history";
 import { PUBLIC_PRICING_SELECT, pricingResponse } from "./public-pricing";
+import { iconUrl } from "./icons";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
 import {
   optionalUser,
@@ -38,6 +39,7 @@ import {
   status,
   category,
   monetization,
+  productKey,
 } from "./contracts";
 
 export async function productExists(db: D1Database, productId: string) {
@@ -194,6 +196,7 @@ catalog.get("/radar", async (c) => {
         m.active_ads,m.ads_delta_7d,m.longest_ad_days,m.creators,m.sponsors,m.creators_delta_7d,m.activity_change_4w,m.activity_weekly,m.first_seen,m.last_seen,
         r.low_usd AS revenue_low_usd,r.high_usd AS revenue_high_usd,r.confidence AS revenue_confidence,r.method_version AS revenue_method_version,
         (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint,
+        (SELECT pi.sha256 FROM product_icons pi WHERE pi.product_id=p.id AND pi.status='ok') AS icon_sha256,
         (SELECT a.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id JOIN assets a ON a.id=f.asset_id AND a.evidence_id=e.id WHERE f.product_id=p.id AND p.coverage_level='full' AND e.status='approved' AND a.approved=1 AND a.thumbnail_key IS NOT NULL ORDER BY (f.stage='paywall') DESC,f.position DESC LIMIT 1) AS thumbnail_asset_id
        ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
     ).bind(...values, limit, offset),
@@ -208,6 +211,11 @@ catalog.get("/radar", async (c) => {
       ),
       has_blueprint: !!row.has_blueprint,
       open_sample: !!row.open_sample,
+      icon_url: iconUrl(
+        c.env.API_ORIGIN,
+        String(row.id),
+        row.icon_sha256 as string | null,
+      ),
       thumbnail_url: row.thumbnail_asset_id
         ? `${c.env.API_ORIGIN}/api/v1/media/${row.thumbnail_asset_id}/thumbnail`
         : null,
@@ -312,7 +320,22 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
   ]);
   const metricsRow = results[5].results[0];
   const shared = {
-    product: { ...product, open_sample: !!product.open_sample },
+    product: {
+      ...product,
+      open_sample: !!product.open_sample,
+      icon_url: iconUrl(
+        c.env.API_ORIGIN,
+        product.id,
+        (
+          await db
+            .prepare(
+              "SELECT sha256 FROM product_icons WHERE product_id=? AND status='ok'",
+            )
+            .bind(product.id)
+            .first<{ sha256: string }>()
+        )?.sha256,
+      ),
+    },
     coverage,
     access,
     usage: usage ?? null,
@@ -541,7 +564,7 @@ adminCatalog.post("/products", async (c) => {
   const input = await parse(c, productInput);
   const productId = crypto.randomUUID(),
     time = now();
-  const domain = new URL(input.url).hostname.replace(/^www\./, "");
+  const domain = productKey(input.url);
   if (
     await c.env.DB.prepare("SELECT id FROM products WHERE slug=? OR domain=?")
       .bind(input.slug, domain)
@@ -577,7 +600,7 @@ adminCatalog.patch("/products/:id", async (c) => {
       input.slug,
       input.name,
       input.url,
-      new URL(input.url).hostname.replace(/^www\./, ""),
+      productKey(input.url),
       input.description,
       input.category,
       input.monetization,

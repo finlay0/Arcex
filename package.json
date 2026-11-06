@@ -28,6 +28,7 @@
     "mcp": "tsx scripts/mcp.ts",
     "smoke": "tsx scripts/smoke.ts",
     "thumbnails": "tsx scripts/thumbnails.ts",
+    "icons": "tsx scripts/icons.ts",
     "deploy:production": "wrangler deploy --env production"
   },
   "dependencies": {

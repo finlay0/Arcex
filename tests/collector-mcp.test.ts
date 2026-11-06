@@ -187,7 +187,12 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
         name: "register_candidate",
         arguments: {
           ...candidate,
-          product: { ...candidate.product, slug: "v0", url: "https://v0.app" },
+          product: {
+            ...candidate.product,
+            slug: "v0",
+            name: "v0",
+            url: "https://v0.app",
+          },
         },
       });
       assert.notEqual(reference.isError, true);
@@ -353,7 +358,15 @@ test("private collector MCP restricts owner, scope and draft writes", async () =
           name: "Fixture recurring source",
         },
       });
-      assert.equal((await enqueueDue(env)).enqueued, 0);
+      // Pending candidates get free HTTP homepage checks, never browser/model jobs.
+      await enqueueDue(env);
+      const queuedLanes = await bindings.DB.prepare(
+        "SELECT s.lane,count(*) n FROM jobs j JOIN sources s ON s.id=j.source_id GROUP BY s.lane",
+      ).all<{ lane: string; n: number }>();
+      assert.deepEqual(
+        queuedLanes.results.map((r) => r.lane),
+        ["http"],
+      );
       const accept = () =>
         app.request(
           env.API_ORIGIN +

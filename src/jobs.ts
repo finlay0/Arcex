@@ -12,9 +12,11 @@ export async function enqueueDue(env: Bindings) {
   const time = now();
   // Selection and schedule advancement share one transaction. Sources
   // with an unfinished job keep their place without creating a second backlog.
+  // Code-only HTTP checks also build history for pending candidates (not excluded ones);
+  // model and browser monitoring stays limited to owner-accepted products.
   const due = `SELECT s.id FROM sources s
     WHERE s.enabled=1 AND s.next_run_at<=? AND s.lane=?
-      AND (s.lane='discovery' OR NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status!='accepted'))
+      AND (s.lane='discovery' OR NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status!='accepted') OR (s.lane='http' AND NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status='excluded')))
       AND NOT EXISTS(SELECT 1 FROM products p WHERE p.id=s.product_id AND p.status='archived')
       AND NOT EXISTS(SELECT 1 FROM jobs j WHERE j.source_id=s.id AND j.status IN ('queued','running'))
     ORDER BY s.next_run_at,s.id LIMIT min(?,max(0,?-(SELECT COUNT(*) FROM jobs j JOIN sources q ON q.id=j.source_id WHERE j.status IN ('queued','running') AND q.lane=?)))`;
@@ -261,7 +263,7 @@ collector.post("/claim", async (c) => {
       `UPDATE jobs SET status='running',attempts=attempts+1,claimed_lane=?,lease_token=?,lease_expires_at=?,updated_at=?
       WHERE id=(SELECT j.id FROM jobs j JOIN sources s ON s.id=j.source_id
         WHERE s.enabled=1 AND s.lane=? AND s.kind IN (${input.kinds.map(() => "?").join(",")})
-          AND (s.lane='discovery' OR NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status!='accepted'))
+          AND (s.lane='discovery' OR NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status!='accepted') OR (s.lane='http' AND NOT EXISTS(SELECT 1 FROM research_profiles r WHERE r.product_id=s.product_id AND r.status='excluded')))
           AND NOT EXISTS(SELECT 1 FROM products p WHERE p.id=s.product_id AND p.status='archived')
           AND j.attempts<j.max_attempts AND ((j.status='queued' AND j.available_at<=?) OR (j.status='running' AND j.lease_expires_at<=?))
           AND (SELECT claims FROM collection_usage WHERE lane=? AND day=?) < (SELECT daily_limit FROM collection_policy WHERE lane=?)

@@ -22,6 +22,7 @@ import { distributionAdmin, distributionStatus } from "./distribution";
 import { externalSignalsAdmin } from "./external-signals";
 import { publicPricing, adminPublicPricing } from "./public-pricing";
 import { libraries } from "./libraries";
+import { collectorIcons, publicIcons, adminIcons } from "./icons";
 import {
   emailAlerts,
   adminEmailAlerts,
@@ -98,6 +99,9 @@ app.get("/api/v1/distribution/:slug", async (c) => {
   return c.json(await distributionStatus(c.env.DB, product.id, true));
 });
 app.route("/api/v1/collector/jobs", collector);
+app.route("/api/v1/collector/icons", collectorIcons);
+app.route("/api/v1/icons", publicIcons);
+app.route("/api/v1/admin", adminIcons);
 app.route("/api/v1/media", media);
 app.route("/api/v1/billing", billing);
 app.notFound((c) => c.json({ error: "Not found" }, 404));

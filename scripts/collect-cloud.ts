@@ -1,5 +1,6 @@
 import { api, collectorToken } from "./client";
 import { collect } from "./collector";
+import { collectIcons } from "./icons";
 
 const mode = process.env.COLLECTION_MODE ?? "status";
 const limit = Number(process.env.COLLECTION_LIMIT ?? 50);
@@ -25,6 +26,8 @@ if (mode === "status" || (mode === "scheduled" && !status.collectionEnabled)) {
 } else {
   // Only an explicit manual upfront run may collect while recurring collection is paused.
   const result = await collect(limit);
-  console.log(JSON.stringify({ mode, ...status, ...result }));
+  // Brand icons ride on the same code-only run: at most 25 sites per run, no model.
+  const icons = await collectIcons(Math.min(limit, 25));
+  console.log(JSON.stringify({ mode, ...status, ...result, ...icons }));
   if (result.failed) process.exitCode = 1;
 }
