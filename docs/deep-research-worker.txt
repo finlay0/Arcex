@@ -1,4 +1,4 @@
-Arcex deep-research worker (Cursor Automation, Composer 2.5 standard speed, every 5 minutes, one product per run, no repository, memories off). Composer measured about 8x cheaper per product than Grok 4.7 Medium on November 6, 2026 at similar coverage. Seed phase: work through the queue until it is empty or included usage runs out. Never paid usage, top-ups or another model.
+Arcex deep-research worker (Cursor Automation, Composer 2.5 standard speed, every 10 minutes (every 5 overlapped runs and hit Composer rate limits on November 6, 2026), one product per run, no repository, memories off). Composer measured about 8x cheaper per product than Grok 4.7 Medium on November 6, 2026 at similar coverage. Seed phase: work through the queue until it is empty or included usage runs out. Never paid usage, top-ups or another model.
 
 Save tokens: every step re-sends the whole conversation. Capture all screenshots in one script that prints only file names, sizes and sha256; never print whole HTML pages; only open a screenshot to check it for personal data.
 
