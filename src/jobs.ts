@@ -427,6 +427,43 @@ collector.post("/:id/complete", async (c) => {
        WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?) ON CONFLICT DO NOTHING`,
     ).bind(jobId, rows, job.product_id, jobId, input.leaseToken, time),
   ];
+  const page = input.evidence.find(
+    (e) =>
+      e.kind === "page" &&
+      e.sourceUrl === job.url &&
+      Array.isArray(e.payload.stack),
+  );
+  if (
+    job.kind === "public_page" &&
+    input.outcome === "observed" &&
+    job.product_id &&
+    page
+  ) {
+    // Homepage technologies: upsert what this observation shows, then mark the rest removed.
+    const leased =
+      "EXISTS(SELECT 1 FROM jobs WHERE id=? AND status='running' AND lease_token=? AND lease_expires_at>?)";
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO product_stack(product_id,technology,category,first_seen,last_seen)
+         SELECT ?,json_extract(value,'$.technology'),json_extract(value,'$.category'),?,? FROM json_each(?)
+         WHERE typeof(json_extract(value,'$.technology'))='text' AND length(json_extract(value,'$.technology')) BETWEEN 1 AND 40
+           AND json_extract(value,'$.category') IN ('framework','site_builder','payments','analytics','ad_pixel','support','auth','backend','marketing')
+           AND ${leased}
+         ON CONFLICT(product_id,technology) DO UPDATE SET last_seen=excluded.last_seen,removed_at=NULL`,
+      ).bind(
+        job.product_id,
+        time,
+        time,
+        JSON.stringify((page.payload.stack as unknown[]).slice(0, 40)),
+        jobId,
+        input.leaseToken,
+        time,
+      ),
+      c.env.DB.prepare(
+        `UPDATE product_stack SET removed_at=? WHERE product_id=? AND removed_at IS NULL AND last_seen<? AND ${leased}`,
+      ).bind(time, job.product_id, time, jobId, input.leaseToken, time),
+    );
+  }
   if (job.kind === "public_page" && input.outcome === "observed") {
     // A first check establishes a baseline. Only a later, different observation creates a private comparison.
     statements.push(

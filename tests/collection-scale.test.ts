@@ -159,7 +159,7 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
     );
     const evidence = pageEvidence(
       job.source.url,
-      "<title>Fixture</title><h1>Pricing</h1>",
+      `<title>Fixture</title><h1>Pricing</h1><script src="https://js.stripe.com/v3/"></script>`,
       { server: "one" },
     );
     assert.equal(
@@ -167,6 +167,7 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
       pageEvidence(job.source.url, "<title>Fixture</title><h1>Pricing</h1>", {
         server: "two",
       }).contentHash,
+      "A new script tag is not a page content change",
     );
     const fingerprint = "a".repeat(64);
     await req(`/${job.id}/complete`, {
@@ -264,6 +265,21 @@ test("10,000 sources: bounded fair scheduling, atomic budgets, conditional compl
       evidence: [changed],
       fingerprint: "b".repeat(64),
     });
+    // Stripe was seen on the first check and is gone from the changed page.
+    const stack = await db
+      .prepare(
+        "SELECT technology,category,removed_at FROM product_stack WHERE product_id=?",
+      )
+      .bind("tracked")
+      .all<{
+        technology: string;
+        category: string;
+        removed_at: string | null;
+      }>();
+    assert.equal(stack.results.length, 1);
+    assert.equal(stack.results[0].technology, "Stripe");
+    assert.equal(stack.results[0].category, "payments");
+    assert.ok(stack.results[0].removed_at);
     const comparison = await db.prepare("SELECT * FROM product_changes").first<{
       id: string;
       evidence_id: string;

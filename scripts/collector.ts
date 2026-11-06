@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { htmlStack } from "../src/stack-signatures";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { api, collectorToken } from "./client";
@@ -96,6 +97,8 @@ export function pageEvidence(
     description,
     headings,
     headers,
+    // Outside the content hash: a new analytics tag is not a page content change.
+    stack: htmlStack(text, url),
     captureMode: mode,
     ...(characters
       ? {

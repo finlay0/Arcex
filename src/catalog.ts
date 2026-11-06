@@ -352,6 +352,18 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
     usage: usage ?? null,
     publicPricing: pricingResponse(results[7].results[0]),
     traffic: await productTraffic(db, product.id),
+    stack: {
+      meaning:
+        "Technologies whose scripts or assets appear in the public homepage HTML, from the daily check. Presence of a tag is an observation, not proof of how the product is built or how much it spends.",
+      items: (
+        await db
+          .prepare(
+            "SELECT technology,category,first_seen,removed_at FROM product_stack WHERE product_id=? ORDER BY removed_at IS NOT NULL,category,technology LIMIT 60",
+          )
+          .bind(product.id)
+          .all()
+      ).results,
+    },
     metrics: metricsRow
       ? {
           ...metricsRow,
