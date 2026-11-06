@@ -1,34 +1,12 @@
 import sharp from "sharp";
 import { api, collectorToken } from "./client";
-import { publicFetch, SourceHttpError } from "./public-fetch";
+import { fetchFollow, SourceHttpError } from "./public-fetch";
 import { publicUrl } from "../src/contracts";
 import { ICON_MAX_BYTES, ICON_SIZE, validIcon } from "../src/icon-format";
 
 const HTML_LIMIT = 3_000_000,
   IMAGE_LIMIT = 300_000,
   MIN_SOURCE_PIXELS = 32;
-
-/** Follow at most three redirects, re-validating every hop as a public HTTPS URL. */
-async function fetchFollow(raw: string, maximum: number, accept: string) {
-  let url = raw;
-  for (let hop = 0; ; hop++) {
-    try {
-      const result = await publicFetch(url, maximum, undefined, accept);
-      return { ...result, url };
-    } catch (error) {
-      if (
-        hop < 3 &&
-        error instanceof SourceHttpError &&
-        [301, 302, 303, 307, 308].includes(error.status) &&
-        error.location
-      ) {
-        url = publicUrl.parse(new URL(error.location, url).href);
-        continue;
-      }
-      throw error;
-    }
-  }
-}
 
 const attr = (tag: string, name: string) =>
   tag
@@ -159,7 +137,9 @@ export async function iconFor(productUrl: string) {
   let candidates: string[],
     pageError: unknown = null;
   try {
-    const page = await fetchFollow(productUrl, HTML_LIMIT, "text/html");
+    const page = await fetchFollow(productUrl, HTML_LIMIT, {
+      accept: "text/html",
+    });
     candidates = iconCandidates(page.text, page.url);
   } catch (error) {
     pageError = error;
@@ -167,11 +147,9 @@ export async function iconFor(productUrl: string) {
   }
   for (const candidate of candidates) {
     try {
-      const image = await fetchFollow(
-        candidate,
-        IMAGE_LIMIT,
-        "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8",
-      );
+      const image = await fetchFollow(candidate, IMAGE_LIMIT, {
+        accept: "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8",
+      });
       if (!/image\/|octet-stream|^$/.test(image.contentType)) continue;
       const icon = await makeIcon(image.body, image.contentType);
       if (icon) return { icon, sourceUrl: image.url };

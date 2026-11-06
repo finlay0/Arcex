@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
 import { api, collectorToken } from "./client";
-import { publicFetch, SourceHttpError } from "./public-fetch";
+import { fetchFollow, SourceHttpError } from "./public-fetch";
 import { publicUrl, evidenceInput } from "../src/contracts";
 
 type Job = {
@@ -211,7 +211,11 @@ export async function collect(limit = 5) {
             lastModified: job.source.http_last_modified,
           }
         : undefined;
-      const result = await publicFetch(job.source.url, 1_000_000, validators);
+      // Same-site redirects (apex to www, a locale path) are followed; a move to another site still fails for review.
+      const result = await fetchFollow(job.source.url, 1_000_000, {
+        validators,
+        sameSite: true,
+      });
       if (result.status === 304 && job.source.last_fingerprint) {
         await api(`/api/v1/collector/jobs/${job.id}/complete`, {
           method: "POST",

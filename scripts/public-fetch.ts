@@ -1,7 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { request } from "node:https";
 import { isIP } from "node:net";
-import { publicUrl } from "../src/contracts";
+import { publicUrl, siteOf } from "../src/contracts";
 
 export function publicAddress(ip: string) {
   if (isIP(ip) === 4) {
@@ -40,6 +40,50 @@ export class SourceHttpError extends Error {
     );
   }
 }
+/**
+ * Follow at most three redirects, re-validating every hop as a public HTTPS URL.
+ * With sameSite, a redirect to another site still fails: a moved domain needs review.
+ */
+export async function fetchFollow(
+  raw: string,
+  maximum: number,
+  options: {
+    accept?: string;
+    validators?: { etag: string | null; lastModified: string | null };
+    sameSite?: boolean;
+  } = {},
+) {
+  let url = raw;
+  for (let hop = 0; ; hop++) {
+    try {
+      const result = await publicFetch(
+        url,
+        maximum,
+        options.validators,
+        options.accept,
+      );
+      return { ...result, url };
+    } catch (error) {
+      if (
+        hop < 3 &&
+        error instanceof SourceHttpError &&
+        [301, 302, 303, 307, 308].includes(error.status) &&
+        error.location
+      ) {
+        const next = publicUrl.parse(new URL(error.location, url).href);
+        if (
+          options.sameSite &&
+          siteOf(new URL(next).hostname) !== siteOf(new URL(raw).hostname)
+        )
+          throw error;
+        url = next;
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
 export async function publicFetch(
   raw: string,
   maximum = 1_000_000,
