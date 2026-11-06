@@ -2,6 +2,7 @@ import { api, collectorToken } from "./client";
 import { collect } from "./collector";
 import { collectIcons } from "./icons";
 import { collectTraffic } from "./traffic";
+import { collectStoreStats } from "./store-stats";
 
 const mode = process.env.COLLECTION_MODE ?? "status";
 const limit = Number(process.env.COLLECTION_LIMIT ?? 50);
@@ -31,8 +32,16 @@ if (mode === "status" || (mode === "scheduled" && !status.collectionEnabled)) {
   const icons = await collectIcons(Math.min(limit, 25));
   // Daily Tranco rank for every tracked site; a no-op once today is recorded.
   const traffic = await collectTraffic();
+  const stores = await collectStoreStats(Math.min(limit, 50));
   console.log(
-    JSON.stringify({ mode, ...status, ...result, ...icons, ...traffic }),
+    JSON.stringify({
+      mode,
+      ...status,
+      ...result,
+      ...icons,
+      ...traffic,
+      ...stores,
+    }),
   );
   if (result.failed) process.exitCode = 1;
 }

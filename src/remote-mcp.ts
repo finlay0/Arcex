@@ -15,6 +15,7 @@ import {
 } from "./research";
 import { researchContextInput, checkpointInput } from "./research-context";
 import { publicPricingInput } from "./public-pricing";
+import { registerStoreListingInput } from "./store-stats";
 import { fileStore } from "./file-store";
 import {
   watchInput,
@@ -578,6 +579,22 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
           "POST",
           `/api/v1/admin/products/${encodeURIComponent(productId)}/blueprints`,
           blueprint,
+        ),
+      ),
+  );
+  server.registerTool(
+    "register_store_listing",
+    {
+      description:
+        "Attach one public App Store, Play, Chrome, Firefox or VS Code listing to an existing product for free code-only counter tracking. Refuses duplicate listings. Public counters are observations, not revenue or verified downloads.",
+      inputSchema: registerStoreListingInput,
+    },
+    async ({ productId, listingUrl }) =>
+      run(() =>
+        internal(
+          "POST",
+          `/api/v1/admin/products/${encodeURIComponent(productId)}/store-listings`,
+          { listingUrl },
         ),
       ),
   );
