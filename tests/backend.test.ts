@@ -1558,6 +1558,49 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       },
     );
     await t.test(
+      "daily traffic ranks are collector-only and dated today",
+      async () => {
+        const { id } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/products",
+          { ...input, slug: "ranked-app", url: "https://ranked-app.com" },
+          admin,
+          201,
+        );
+        const pending = await json<{
+          observedOn: string;
+          items: { productId: string; site: string }[];
+        }>("GET", "/api/v1/collector/traffic/pending", undefined, collector);
+        const item = pending.items.find((i) => i.productId === id);
+        assert.equal(item?.site, "ranked-app.com");
+        const body = {
+          listId: "K9YYW",
+          observedOn: pending.observedOn,
+          ranks: [{ productId: id, site: "ranked-app.com", rank: 4200 }],
+        };
+        assert.equal(
+          (await req("POST", "/api/v1/collector/traffic/ranks", body, admin))
+            .status,
+          401,
+        );
+        await json(
+          "POST",
+          "/api/v1/collector/traffic/ranks",
+          { ...body, observedOn: "2020-01-01" },
+          collector,
+          409,
+        );
+        await json("POST", "/api/v1/collector/traffic/ranks", body, collector);
+        const again = await json<{ items: { productId: string }[] }>(
+          "GET",
+          "/api/v1/collector/traffic/pending",
+          undefined,
+          collector,
+        );
+        assert.ok(!again.items.some((i) => i.productId === id));
+      },
+    );
+    await t.test(
       "product icons are collector-written, bounded and public only once published",
       async () => {
         const { id } = await json<{ id: string }>(

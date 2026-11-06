@@ -1,6 +1,7 @@
 import { api, collectorToken } from "./client";
 import { collect } from "./collector";
 import { collectIcons } from "./icons";
+import { collectTraffic } from "./traffic";
 
 const mode = process.env.COLLECTION_MODE ?? "status";
 const limit = Number(process.env.COLLECTION_LIMIT ?? 50);
@@ -28,6 +29,10 @@ if (mode === "status" || (mode === "scheduled" && !status.collectionEnabled)) {
   const result = await collect(limit);
   // Brand icons ride on the same code-only run: at most 25 sites per run, no model.
   const icons = await collectIcons(Math.min(limit, 25));
-  console.log(JSON.stringify({ mode, ...status, ...result, ...icons }));
+  // Daily Tranco rank for every tracked site; a no-op once today is recorded.
+  const traffic = await collectTraffic();
+  console.log(
+    JSON.stringify({ mode, ...status, ...result, ...icons, ...traffic }),
+  );
   if (result.failed) process.exitCode = 1;
 }

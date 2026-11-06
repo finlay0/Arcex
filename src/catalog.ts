@@ -10,6 +10,7 @@ import {
 } from "./flow-history";
 import { PUBLIC_PRICING_SELECT, pricingResponse } from "./public-pricing";
 import { iconUrl } from "./icons";
+import { productTraffic, trafficTier } from "./traffic";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
 import {
   optionalUser,
@@ -197,6 +198,7 @@ catalog.get("/radar", async (c) => {
         r.low_usd AS revenue_low_usd,r.high_usd AS revenue_high_usd,r.confidence AS revenue_confidence,r.method_version AS revenue_method_version,
         (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint,
         (SELECT pi.sha256 FROM product_icons pi WHERE pi.product_id=p.id AND pi.status='ok') AS icon_sha256,
+        (SELECT json_object('rank',t.rank,'on',t.observed_on) FROM traffic_ranks t WHERE t.product_id=p.id AND t.source='tranco' ORDER BY t.observed_on DESC LIMIT 1) AS traffic_latest,
         (SELECT a.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id JOIN assets a ON a.id=f.asset_id AND a.evidence_id=e.id WHERE f.product_id=p.id AND p.coverage_level='full' AND e.status='approved' AND a.approved=1 AND a.thumbnail_key IS NOT NULL ORDER BY (f.stage='paywall') DESC,f.position DESC LIMIT 1) AS thumbnail_asset_id
        ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
     ).bind(...values, limit, offset),
@@ -211,6 +213,15 @@ catalog.get("/radar", async (c) => {
       ),
       has_blueprint: !!row.has_blueprint,
       open_sample: !!row.open_sample,
+      traffic_rank: row.traffic_latest
+        ? decode<{ rank: number | null }>(row.traffic_latest as string).rank
+        : null,
+      traffic_tier: row.traffic_latest
+        ? trafficTier(
+            decode<{ rank: number | null }>(row.traffic_latest as string).rank,
+          )
+        : null,
+      traffic_latest: undefined,
       icon_url: iconUrl(
         c.env.API_ORIGIN,
         String(row.id),
@@ -340,6 +351,7 @@ catalog.get("/vault/:slug", optionalUser, async (c) => {
     access,
     usage: usage ?? null,
     publicPricing: pricingResponse(results[7].results[0]),
+    traffic: await productTraffic(db, product.id),
     metrics: metricsRow
       ? {
           ...metricsRow,

@@ -253,7 +253,7 @@ export function productKey(raw: string) {
     throw new Error("Store and code-host URLs must point to one listing");
   return `${bare}/${item.toLowerCase()}`;
 }
-const SHARED_HOSTING =
+export const SHARED_HOSTING =
   /\.(vercel\.app|netlify\.app|pages\.dev|workers\.dev|web\.app|firebaseapp\.com|github\.io|herokuapp\.com|onrender\.com|fly\.dev|replit\.app|lovable\.app|bolt\.host|framer\.website|webflow\.io|carrd\.co|notion\.site|super\.site)$/;
 /** The registrable site a product key sits under, used only to flag possible duplicates. */
 export function siteOf(key: string) {
