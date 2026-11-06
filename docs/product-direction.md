@@ -4,7 +4,7 @@ This distills the November 2026 full strategic discussion, interpreted with Finl
 
 ## Product and audience
 
-Arcex combines ongoing AI/web product landscape intelligence with a practical library of acquisition, onboarding, activation and monetization patterns. The audience is AI-native builders, internet entrepreneurs and agencies. A tracked product does not have to be vibe-coded, AI-built, newly launched or a mobile app. Small independent products are a useful priority, not a substitute for product relevance and useful evidence.
+Arcex combines ongoing AI/web product landscape intelligence with a practical library of acquisition, onboarding, activation and monetization patterns. The audience is AI-native builders, internet entrepreneurs and agencies. A tracked product does not have to be vibe-coded, AI-built, newly launched or a mobile app. On November 6, 2026 Finlay clarified the ideal customer: vibe coders, meaning AI-native people who have a product or want an idea and come to research a market, what is working and how products do it. Tracked products are any software they could learn from (web apps, SaaS, desktop, iOS/Android, extensions; consumer or B2B) and need not be AI-related. Small independent products are a useful priority, not a substitute for product relevance and useful evidence.
 
 Radar answers what exists, how it is positioned and what distribution activity we observe. Vault connects that acquisition evidence to actual post-login flows, paywall/credit states and proposed agent implementation blueprints. The product database is the core asset. Arena and Ship can support the creator loop when they have real content; they do not replace the intelligence product or require more day-one interface work.
 

@@ -1,10 +1,10 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-06.5";
+export const RESEARCH_POLICY_VERSION = "2026-11-06.6";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
 
 PURPOSE
-Arcex is landscape intelligence plus a product-flow library for the AI/web tech space, serving the AI-native builder community. A product need not have been built with AI. Do not classify building method from appearance or from the fact that the product uses AI.
+Arcex is market intelligence plus a product-flow library for software, serving AI-native builders ("vibe coders"): people who have a product or want an idea, and come to see what is working in a market and how products acquire, onboard and monetize. Tracked products are any software such a builder could learn from or build a version of: web apps, SaaS, desktop apps, iOS and Android apps, browser and editor extensions, consumer or B2B. A product does NOT need to be AI or use AI, and need not have been built with AI. Do not classify building method from appearance.
 Prioritize independent, founder-led web products with useful commercial patterns. Established products may be references; do not silently turn them into the small-product core cohort. References may be researched and owner-accepted with a reference assessment, while known major platforms cannot be accepted as independent-product core.
 Radar/Vault and the maintained evidence database are the core product; Arena/Ship are supporting surfaces. The latest access direction is public Radar and free sign-in to open full Vault content, but public release and consumer quotas are separate owner decisions. The collector cannot publish, choose prices, activate payments or automatically ban visitors. Historical assistant promises of guaranteed profit, demand, conversion or scrape-proof protection are not facts.
 
@@ -32,7 +32,7 @@ Use three complementary lanes so paid advertising does not determine the entire 
 2. Distribution: actual Meta/Google creatives and explicitly disclosed creator links, expanding the destination to match the product domain. An active ad proves an observed ad, not revenue, viability, independent ownership or small size.
 3. Ecosystem: relevant web-tool launches, integrations and publicly demonstrated workflows for this audience. Confirm the live product and its operator through primary material.
 Record the discovery lane, exact query and originating URL. Record rejected leads and why, not just the hits. Use bounded searches; do not claim exhaustive market coverage.
-Do not pad a batch to a numerical target. AI-native products, creator tools and developer/business utilities can fit; a random new SaaS or an AI label alone is not sufficient. Explain the audience relevance and the specific learnable commercial pattern.
+Do not pad a batch to a numerical target. The test is a live product with a visible commercial model and a learnable pattern (pricing, paywall, onboarding, acquisition channel, growth) that a small team could study or rebuild. AI is neither required nor sufficient. Keep the mix broad: consumer apps, productivity, finance, health, education, creator tools, developer tools, B2B SaaS, mobile apps and extensions, not only AI tools. Explain the audience relevance and the specific learnable commercial pattern.
 
 DEEP RESEARCH (task=deep, one product at a time, at most 25 minutes and 40 page loads per product)
 1. read_product_research first; reuse existing evidence, watches and screenshots instead of repeating them.

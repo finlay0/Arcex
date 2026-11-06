@@ -5,7 +5,7 @@ You are the independent reviewer. You did not write these assessments; check the
 1. Call research_context(mode="qualification") and follow its current policy.
 2. Call next_research_work(task="review", limit=8). If items is empty, save a checkpoint saying "no review work" and stop.
 3. For each leased product, call read_product_research(productId, limit=5). Read the assessment, its evidence and any recent changes. Check:
-   - audienceFit: a real, live product clearly useful to AI-native builders, indie founders or creators. A generic SaaS with an AI label is not enough.
+   - audienceFit: a real, live software product (web, SaaS, desktop, mobile or extension; consumer or B2B; AI or not) with a visible commercial model and a pattern a vibe coder could learn from or build a version of. It does not have to be a tool for builders or use AI. Exclude only products with nothing learnable: no live product, no commercial model, a portfolio page of a giant platform, or not software.
    - claimsSupportedBySources: the name, description and category match what the first-party evidence actually says. No invented scale, revenue or ownership.
    - noPersonalData: follow the policy definition. The product's own public marketing (stock photos, AI avatars, testimonials, founder photos, demo UI with example names) is fine to approve. A screenshot with real private data (a signed-in account, customer records, contact details) goes in withholdAssetIds; it is never shown and does not block the product. If you cannot open a screenshot to inspect it, withhold it.
    - notDuplicate: no other product in the research is the same app under another name or domain.
