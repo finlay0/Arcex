@@ -27,6 +27,12 @@ import {
 } from "./distribution";
 import { youtubeCollectionInput, sponsorBlockInput } from "./external-signals";
 import {
+  nextWork,
+  nextWorkInput,
+  recordReviewDecision,
+  reviewDecisionInput,
+} from "./work-queue";
+import {
   evidenceInput,
   funnelInput,
   paywallInput,
@@ -398,7 +404,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "attach_capture",
     {
       description:
-        "Attach an actual captured image to existing evidence as a private, unapproved asset. Send image bytes as base64, at most 700 KB decoded. Do not send secrets or personal information. No publication permission.",
+        "Fallback for small images only: attach an actual captured image to existing evidence as a private, unapproved asset by base64, at most 700 KB decoded. Prefer create_capture_upload, which never routes bytes through model output. Do not send secrets or personal information. No publication permission.",
       inputSchema: z
         .object({
           evidenceId: id,
@@ -440,6 +446,39 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
           throw new Error(data.error ?? "Capture upload failed");
         return data;
       }),
+  );
+  server.registerTool(
+    "next_research_work",
+    {
+      description:
+        "Lease the next products for one task so frequent runs never collide. task=qualify returns products without an assessment: research them, save primary-source evidence, then save_research_assessment. task=review returns positively assessed drafts: check each independently and call record_review_decision once per product. Leases last two hours. Empty items means there is no work: checkpoint and stop.",
+      inputSchema: nextWorkInput,
+    },
+    async (input) => run(() => nextWork(env.DB, input)),
+  );
+  server.registerTool(
+    "record_review_decision",
+    {
+      description:
+        "Independent reviewer decision for a leased review product: publish, exclude or hold. Publishing makes the product public. The server refuses it unless all checks are true and its own gates pass (positive source-backed assessment, recent first-party evidence, a successful homepage check, no same-name duplicate, and any funnel screenshots listed in approveAssetIds after you looked for personal data). Use hold when something is missing or uncertain, exclude when it does not fit the audience.",
+      inputSchema: reviewDecisionInput,
+    },
+    async (input) => run(() => recordReviewDecision(env.DB, input)),
+  );
+  server.registerTool(
+    "create_capture_upload",
+    {
+      description:
+        "Preferred way to attach a screenshot. Returns a single-use URL valid for 15 minutes. From the worker machine, PUT the exact captured file to it, for example: curl --fail -X PUT -H 'content-type: image/jpeg' --data-binary @shot.jpg URL. Do not paste image bytes into chat or tool arguments. Screenshot evidence must be saved first with contentHash equal to the file's sha256; mismatched bytes are rejected. The asset stays private and unapproved.",
+      inputSchema: z
+        .object({
+          evidenceId: id,
+          contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+        })
+        .strict(),
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/media/uploads", input, true)),
   );
   server.registerTool(
     "save_funnel",

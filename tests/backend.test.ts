@@ -1022,6 +1022,70 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       },
     );
     await t.test(
+      "screenshot uploads use single-use links and must match the evidence hash",
+      async () => {
+        const shot = await sharp({
+          create: { width: 40, height: 30, channels: 3, background: "#fff" },
+        })
+          .jpeg()
+          .toBuffer();
+        const { id: shotEvidence } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/evidence",
+          {
+            productId,
+            sourceUrl: input.url,
+            observedAt: "2026-01-02T12:00:00.000Z",
+            kind: "screenshot",
+            contentHash: await sha256(shot.buffer as ArrayBuffer),
+            summary: "Homepage viewport",
+            payload: {},
+          },
+          admin,
+          201,
+        );
+        const link = () =>
+          json<{ uploadUrl: string }>(
+            "POST",
+            "/api/v1/media/uploads",
+            { evidenceId: shotEvidence, contentType: "image/jpeg" },
+            collector,
+            201,
+          );
+        const put = (url: string, body: Buffer) =>
+          app.request(
+            url.replace(env.API_ORIGIN, "http://localhost:8791"),
+            {
+              method: "PUT",
+              headers: { "content-type": "image/jpeg" },
+              body: new Uint8Array(body),
+            },
+            env,
+          );
+        const placeholder = await sharp({
+          create: { width: 8, height: 8, channels: 3, background: "#888" },
+        })
+          .jpeg()
+          .toBuffer();
+        assert.equal(
+          (await put((await link()).uploadUrl, placeholder)).status,
+          422,
+        );
+        const { uploadUrl } = await link();
+        assert.equal((await put(uploadUrl, shot)).status, 201);
+        assert.equal((await put(uploadUrl, shot)).status, 404);
+        assert.equal(
+          (
+            await req("POST", "/api/v1/media/uploads", {
+              evidenceId: shotEvidence,
+              contentType: "image/jpeg",
+            })
+          ).status,
+          401,
+        );
+      },
+    );
+    await t.test(
       "media requires evidence approval and stays private until reviewed",
       async () => {
         const png = Buffer.from("89504e470d0a1a0a00000000", "hex");
@@ -1633,6 +1697,114 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           candidate("Tab Pilot", "https://tabpilot.dev", [first.id]),
           admin,
           201,
+        );
+      },
+    );
+    await t.test(
+      "review leases never overlap and auto-publish enforces server gates",
+      async () => {
+        const { id } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/research/candidates",
+          {
+            product: {
+              slug: "queue-app",
+              name: "Queue App",
+              url: "https://queue-app.dev",
+              description: "Turns prompts into landing pages",
+              category: "coding_dev",
+            },
+            maker: {
+              name: "Unknown operator",
+              sourceUrl: "https://queue-app.dev",
+              evidence: "The site names no operator beyond the product.",
+              sizeStatus: "unverified",
+              currentSizeEvidence: "No current size source.",
+            },
+          },
+          admin,
+          201,
+        );
+        const { id: evidence } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/evidence",
+          {
+            productId: id,
+            sourceUrl: "https://queue-app.dev/",
+            observedAt: new Date().toISOString(),
+            kind: "page",
+            contentHash: "c".repeat(64),
+            summary: "Queue App — prompts to landing pages",
+            payload: {},
+          },
+          admin,
+          201,
+        );
+        await json(
+          "POST",
+          "/api/v1/admin/research/assessment",
+          {
+            productId: id,
+            relevance: "in_scope",
+            rationale:
+              "Landing-page builder for AI-native founders, priced monthly",
+            evidenceIds: [evidence],
+            sizeStatus: "unverified",
+            sizeBasis: "unknown",
+            sizeNotes: "No current size source is public.",
+            nextAction: "Review for publication",
+          },
+          admin,
+          201,
+        );
+        const { nextWork, recordReviewDecision } =
+          await import("../src/work-queue");
+        const first = await nextWork(env.DB, { task: "review", limit: 10 });
+        assert.ok(first.items.some((p) => p.id === id));
+        const second = await nextWork(env.DB, { task: "review", limit: 10 });
+        assert.ok(!second.items.some((p) => p.id === id));
+        const decision = {
+          productId: id,
+          decision: "publish" as const,
+          reviewerModel: "fixture",
+          reason: "Clear builder audience and first-party pricing source",
+          checks: {
+            audienceFit: true,
+            claimsSupportedBySources: true,
+            noPersonalData: true,
+            notDuplicate: true,
+          },
+          approveAssetIds: [],
+          holdDays: 7,
+        };
+        // The homepage has not been checked yet, so publishing is refused.
+        await assert.rejects(
+          recordReviewDecision(env.DB, decision),
+          /Homepage has no successful check/,
+        );
+        await env.DB.prepare(
+          "UPDATE sources SET last_checked_at=? WHERE product_id=? AND lane='http'",
+        )
+          .bind(new Date().toISOString(), id)
+          .run();
+        await assert.rejects(
+          recordReviewDecision(env.DB, {
+            ...decision,
+            checks: { ...decision.checks, noPersonalData: false },
+          }),
+          /reviewer checks must pass/,
+        );
+        await recordReviewDecision(env.DB, decision);
+        const row = (
+          await json<{ items: { id: string }[] }>(
+            "GET",
+            "/api/v1/radar?q=Queue",
+          )
+        ).items.find((p) => p.id === id);
+        assert.ok(row, "Published product appears in the public table");
+        await assert.rejects(
+          recordReviewDecision(env.DB, decision),
+          /Lease this product/,
         );
       },
     );

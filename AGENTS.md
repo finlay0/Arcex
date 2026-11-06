@@ -9,7 +9,7 @@ This repository now contains the arcex.dev platform. The retired T3 desktop fork
 - Keep source observations, inference, and editorial claims separate. Ad observations do not prove revenue or continuous ad activity.
 - Follow docs/product-direction.md for strategic context and later user decisions. Products serve the AI-native builder audience; they need not be vibe-coded. Unknown scale is allowed but must never be presented as verified small.
 - Work runs bootstrap through research_context, use bounded read_product_research/read_capture retrieval, and persist save_research_checkpoint. The versioned src/research-playbook.ts and database are authoritative; chat memory is not the run ledger.
-- New imports are drafts. Publication requires an explicit admin action and supporting evidence. Never publish raw browser captures automatically.
+- New imports are drafts. On November 6, 2026 Finlay chose automatic publication: an independent reviewer run publishes through record_review_decision, whose server gates (positive source-backed assessment, recent first-party evidence, live homepage check, no same-name duplicate, screenshots checked for personal data) must all pass. Never publish raw captures without that review; the owner can unpublish any time.
 - Any one-off browser/computer-use work in this chat must still be delegated to GPT-6.1 Terra at medium reasoning. Production cloud research uses the separately selected Cursor/Grok worker. HTTP and runtime tests need no browser.
 - Never commit secrets, browser profiles, auth state, private DOM captures, or personally identifying screenshots.
 - Preserve ownership, publication and Pro access checks across API and MCP. Use parameterized SQL and bounded input.

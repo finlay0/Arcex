@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { AppEnv } from "./types";
-import { now } from "./types";
-import { audit, fail, parse, sha256 } from "./lib";
+import { now, later } from "./types";
+import { audit, fail, parse, randomToken, rateLimit, sha256 } from "./lib";
 import { requireAdmin, requireCollector } from "./auth";
 import { mediaLinkValid } from "./insights";
 import { validThumbnail } from "./thumbnail-format";
@@ -15,20 +15,24 @@ import {
 } from "./file-store";
 
 export const media = new Hono<AppEnv>();
-media.post("/upload", requireCollector, async (c) => {
-  const store = fileStore(c.env);
-  const type = c.req.header("content-type");
-  if (!type || !["image/png", "image/jpeg", "image/webp"].includes(type))
+const CAPTURE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
+const CAPTURE_MAX_BYTES = 1_000_000;
+/** Validate and store one capture for existing evidence. Screenshot evidence must carry the image's own hash. */
+async function storeCapture(
+  env: AppEnv["Bindings"],
+  evidenceId: string,
+  type: string | undefined,
+  bytes: ArrayBuffer,
+) {
+  if (!type || !(CAPTURE_TYPES as readonly string[]).includes(type))
     fail(422, "Only PNG, JPEG and WebP captures are accepted");
-  const evidenceId = c.req.header("x-evidence-id");
-  if (
-    !evidenceId ||
-    !(await c.env.DB.prepare("SELECT id FROM evidence WHERE id=?")
-      .bind(evidenceId)
-      .first())
+  const evidence = await env.DB.prepare(
+    "SELECT kind,content_hash FROM evidence WHERE id=?",
   )
-    fail(422, "Valid evidence ID required");
-  const bytes = await c.req.arrayBuffer();
+    .bind(evidenceId)
+    .first<{ kind: string; content_hash: string }>();
+  if (!evidence) fail(422, "Valid evidence ID required");
+  if (bytes.byteLength > CAPTURE_MAX_BYTES) fail(413, "Capture exceeds 1 MB");
   const prefix = new Uint8Array(bytes.slice(0, 12));
   const valid =
     type === "image/png"
@@ -41,9 +45,17 @@ media.post("/upload", requireCollector, async (c) => {
         : new TextDecoder().decode(prefix.slice(0, 4)) === "RIFF" &&
           new TextDecoder().decode(prefix.slice(8, 12)) === "WEBP";
   if (!valid) fail(422, "Image content does not match the declared format");
+  const hash = await sha256(bytes);
+  // A placeholder or re-encoded image can never stand in for the observed capture.
+  if (evidence.kind === "screenshot" && hash !== evidence.content_hash)
+    fail(
+      422,
+      "Image bytes do not match the screenshot evidence hash; upload the exact captured file",
+    );
+  const store = fileStore(env);
   const assetId = crypto.randomUUID(),
     objectKey = "evidence/" + assetId;
-  const reservation = await c.env.DB.prepare(
+  const reservation = await env.DB.prepare(
     "INSERT INTO assets(id,evidence_id,object_key,content_type,size,sha256,created_at) SELECT ?,?,?,?,?,?,? WHERE (SELECT COALESCE(sum(size+thumbnail_size),0) FROM assets)+?<=?",
   )
     .bind(
@@ -52,7 +64,7 @@ media.post("/upload", requireCollector, async (c) => {
       objectKey,
       type,
       bytes.byteLength,
-      await sha256(bytes),
+      hash,
       now(),
       bytes.byteLength,
       MEDIA_LIMIT_BYTES,
@@ -66,10 +78,92 @@ media.post("/upload", requireCollector, async (c) => {
   try {
     await store.put(objectKey, bytes, type);
   } catch (error) {
-    await c.env.DB.prepare("DELETE FROM assets WHERE id=?").bind(assetId).run();
+    await env.DB.prepare("DELETE FROM assets WHERE id=?").bind(assetId).run();
     throw error;
   }
-  return c.json({ id: assetId, approved: false }, 201);
+  return { id: assetId, approved: false, sha256: hash, size: bytes.byteLength };
+}
+media.post("/upload", requireCollector, async (c) =>
+  c.json(
+    await storeCapture(
+      c.env,
+      c.req.header("x-evidence-id") ?? "",
+      c.req.header("content-type"),
+      await c.req.arrayBuffer(),
+    ),
+    201,
+  ),
+);
+// The collector mints a 15-minute, single-use link; the worker's machine PUTs the file to it.
+media.post("/uploads", requireCollector, async (c) => {
+  const input = await parse(
+    c,
+    z
+      .object({
+        evidenceId: z.string().min(1).max(100),
+        contentType: z.enum(CAPTURE_TYPES),
+      })
+      .strict(),
+  );
+  await rateLimit(c.env.DB, "capture-upload-links", 200, 86400);
+  if (
+    !(await c.env.DB.prepare("SELECT id FROM evidence WHERE id=?")
+      .bind(input.evidenceId)
+      .first())
+  )
+    fail(422, "Valid evidence ID required");
+  const token = randomToken(),
+    time = now(),
+    expiresAt = later(15 * 60);
+  await c.env.DB.batch([
+    c.env.DB.prepare("DELETE FROM capture_uploads WHERE expires_at<?").bind(
+      later(-86400),
+    ),
+    c.env.DB.prepare(
+      "INSERT INTO capture_uploads(token_hash,evidence_id,content_type,expires_at,created_at) VALUES (?,?,?,?,?)",
+    ).bind(
+      await sha256(token),
+      input.evidenceId,
+      input.contentType,
+      expiresAt,
+      time,
+    ),
+  ]);
+  return c.json(
+    {
+      uploadUrl: `${c.env.API_ORIGIN}/api/v1/media/direct/${token}`,
+      method: "PUT",
+      contentType: input.contentType,
+      expiresAt,
+    },
+    201,
+  );
+});
+media.put("/direct/:token", async (c) => {
+  const token = z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .safeParse(c.req.param("token"));
+  if (!token.success) fail(404, "Upload link not found");
+  const length = Number(c.req.header("content-length") ?? 0);
+  if (length > CAPTURE_MAX_BYTES) fail(413, "Capture exceeds 1 MB");
+  const claim = await c.env.DB.prepare(
+    "UPDATE capture_uploads SET used_at=? WHERE token_hash=? AND used_at IS NULL AND expires_at>? RETURNING evidence_id,content_type",
+  )
+    .bind(now(), await sha256(token.data), now())
+    .first<{ evidence_id: string; content_type: string }>();
+  if (!claim) fail(404, "Upload link not found, expired or already used");
+  if (c.req.header("content-type") !== claim.content_type)
+    fail(422, "Content type does not match the upload link");
+  return c.json(
+    await storeCapture(
+      c.env,
+      claim.evidence_id,
+      claim.content_type,
+      await c.req.arrayBuffer(),
+    ),
+    201,
+  );
 });
 media.put("/:id/approval", requireAdmin, async (c) => {
   const { approved } = await parse(
