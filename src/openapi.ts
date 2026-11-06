@@ -252,7 +252,7 @@ export const openapi = {
     },
     "/api/v1/media/storage/status": {
       get: operation(
-        "Private bucket readiness and 50 MB application quota",
+        "Private bucket readiness and 900 MB application quota (Supabase Free: 1 GB)",
         "admin",
       ),
     },
@@ -726,7 +726,7 @@ export const openapi = {
     },
     "/api/v1/media/upload": {
       post: operation(
-        "Upload private capture within 50 MB application quota",
+        "Upload private capture within 900 MB application quota (Supabase Free: 1 GB)",
         "collector",
       ),
     },

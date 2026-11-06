@@ -86,7 +86,7 @@ export async function lookupDiscoveryLeads(
       "Previous private discovery outcomes, including rejected or unclear leads. Read existing product research before revisiting. Absence does not establish a new or eligible product.",
   };
 }
-const discoveryLeadInput = z
+export const discoveryLeadInput = z
   .object({
     sourceUrl: publicUrl,
     discoverySource: publicUrl,

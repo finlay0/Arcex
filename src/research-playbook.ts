@@ -1,4 +1,4 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-06.3";
+export const RESEARCH_POLICY_VERSION = "2026-11-06.4";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
@@ -18,7 +18,7 @@ Use the product's own homepage as its URL. For store or code-host listings (Chro
 
 COST AND ASSIGNMENT
 Do not revisit the first directory page or browse every product daily. The cohort page is a directory with nextProductCursor/afterProductId, not a work queue. Existing sources have stable IDs, unique URLs, schedules, validators and content fingerprints.
-Before ANY browser research, call claim_capture_job(lane="browser") for monitoring/Vault, or lane="discovery" for a prepared discovery/qualification source. No job means stop and checkpoint; do not replace refused work with unmetered browsing. Source setup and owner-selected qualification must be prepared by the operator, not improvised to bypass limits. Pending products never enter routine monitoring.
+Seed phase (November 2026): a lease from next_research_work(task="deep") is the browser allowance for that product; follow the DEEP RESEARCH checklist and its bounds. Outside a deep lease, call claim_capture_job(lane="browser") for monitoring/Vault, or lane="discovery" for a prepared discovery/qualification source. No job means stop and checkpoint; do not replace refused work with unmetered browsing. Source setup and owner-selected qualification must be prepared by the operator, not improvised to bypass limits. Pending products never enter routine monitoring.
 Only visit the claimed source and its directly necessary evidence links. One claim is one bounded source investigation, not permission for an unlimited crawl. Use at most 5 navigations and 8 minutes, then complete/fail/checkpoint; heartbeat if needed to save results. Every retry consumes allowance, including interrupted/expired claims. If blocked by login/challenge, fail_capture_job(blocked=true); do not loop or evade it. The backend disables the source for operator review.
 HTTP collection uses code and conditional requests; unchanged material requires no model. Use source-specific schedules: public landing/pricing checks are different from paid-ad searches, creator channels and deep authenticated Vault work. Prioritize meaningful changes and selected deep investigations, not re-summarizing unchanged screenshots.
 HTTP public-page sources default to metadata. Operator-selected text mode also fingerprints normalized HTML text so a price-only edit can be detected. It is not a rendered browser state: hidden markup and both billing-toggle variants may appear. Saved text is capped at 20,000 Unicode characters; the fingerprint covers the full normalized text. Use read_source_text with an evidenceId to read bounded windows when source payloads are omitted from summaries. Honor nextOffset, capture_truncated and unavailable text; missing retained text is not proof of absent offers. Mode changes clear the old validators/baseline and cannot run while a source job is marked running. A new baseline is not a product-change claim.
@@ -33,6 +33,17 @@ Use three complementary lanes so paid advertising does not determine the entire 
 3. Ecosystem: relevant web-tool launches, integrations and publicly demonstrated workflows for this audience. Confirm the live product and its operator through primary material.
 Record the discovery lane, exact query and originating URL. Record rejected leads and why, not just the hits. Use bounded searches; do not claim exhaustive market coverage.
 Do not pad a batch to a numerical target. AI-native products, creator tools and developer/business utilities can fit; a random new SaaS or an AI label alone is not sufficient. Explain the audience relevance and the specific learnable commercial pattern.
+
+DEEP RESEARCH (task=deep, one product at a time, at most 25 minutes and 40 page loads per product)
+1. read_product_research first; reuse existing evidence, watches and screenshots instead of repeating them.
+2. Pricing: open the product's own pricing page. Save page evidence (add_observation) and save_public_pricing with every observed plan, price, currency, interval, trial and credit limit. Unknown stays unknown.
+3. Screens: capture the homepage, pricing page and every publicly reachable onboarding/sign-up step without creating an account, each at desktop 1440x900 and mobile 390x844. WebP or JPEG, at most 150 KB per image and 10 images per product. Upload each by create_capture_upload (screenshot evidence contentHash = file sha256). Never capture personal data; crop or skip it.
+4. Funnel and paywall: save_funnel with the observed steps in order, each linked to its evidence and asset. save_paywall only for a pattern actually observed (free tier, credit limit, trial, hard paywall), quoting the source.
+5. Ads: register_distribution_watch for meta and google if missing. Search the Meta Ad Library (all ads, United States) and the Google Ads Transparency Center for the brand and domain. record_meta_ad / record_google_ad for up to 10 matching ads whose destination matches the product domain, then record_distribution_scan with observed, no_results or blocked. An ad is an observation, not revenue.
+6. Creators and launches: collect_youtube_mentions for the brand (if it says not configured, record that as blocked and continue). record_launch_snapshot for a Product Hunt or Hacker News launch page if one exists. record_creator_mention only for a creator video that clearly features the product; sponsorship only with a visible disclosure.
+7. Blueprint: save_blueprint describing how an agent could rebuild the observed onboarding, pricing and paywall pattern, citing evidence IDs. It is a proposed implementation, not the product's code.
+8. finish_research_work(task="deep") with exactly what was covered and what was blocked, then move to the next leased product.
+Login walls, CAPTCHAs and bot checks are real blockers: record them and continue with the public parts. Never create accounts, enter credentials or bypass a challenge.
 
 QUALIFICATION
 Keep separate facts: (a) what the live product does, (b) who owns/operates it, (c) current scale, and (d) observable distribution.

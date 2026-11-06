@@ -14,6 +14,7 @@ import type { Bindings } from "../src/types";
 import sharp from "sharp";
 import { makeThumbnail } from "../scripts/thumbnail-image";
 import { validThumbnail } from "../src/thumbnail-format";
+import { MEDIA_LIMIT_BYTES } from "../src/file-store";
 
 test("Arcex backend: permissions, publication, community, jobs and billing", async (t) => {
   const mf = new Miniflare(
@@ -1240,7 +1241,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         ]);
         await db
           .prepare("UPDATE assets SET size=? WHERE id=?")
-          .bind(50000000 - thumbnail.byteLength, asset.id)
+          .bind(MEDIA_LIMIT_BYTES - thumbnail.byteLength, asset.id)
           .run();
         const denied = await app.request(
           "http://localhost:8791/api/v1/media/upload",
@@ -1757,8 +1758,21 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           admin,
           201,
         );
-        const { nextWork, recordReviewDecision } =
+        const { nextWork, finishWork, recordReviewDecision } =
           await import("../src/work-queue");
+        // Nothing is reviewed before its deep-research pass.
+        assert.ok(
+          !(await nextWork(env.DB, { task: "review", limit: 10 })).items.some(
+            (p) => p.id === id,
+          ),
+        );
+        const deep = await nextWork(env.DB, { task: "deep", limit: 10 });
+        assert.ok(deep.items.some((p) => p.id === id));
+        await finishWork(env.DB, {
+          productId: id,
+          task: "deep",
+          summary: "Pricing page and homepage covered; no ads found.",
+        });
         const first = await nextWork(env.DB, { task: "review", limit: 10 });
         assert.ok(first.items.some((p) => p.id === id));
         const second = await nextWork(env.DB, { task: "review", limit: 10 });

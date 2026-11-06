@@ -7,6 +7,7 @@ import { app } from "./index";
 import { audit, fail, rateLimit } from "./lib";
 import {
   candidateInput,
+  discoveryLeadInput,
   registerCandidate,
   assessmentInput,
   discoveryLookupInput,
@@ -27,6 +28,8 @@ import {
 } from "./distribution";
 import { youtubeCollectionInput, sponsorBlockInput } from "./external-signals";
 import {
+  finishWork,
+  finishWorkInput,
   nextWork,
   nextWorkInput,
   recordReviewDecision,
@@ -451,10 +454,40 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "next_research_work",
     {
       description:
-        "Lease the next products for one task so frequent runs never collide. task=qualify returns products without an assessment: research them, save primary-source evidence, then save_research_assessment. task=review returns positively assessed drafts: check each independently and call record_review_decision once per product. Leases last two hours. Empty items means there is no work: checkpoint and stop.",
+        "Lease the next products for one pipeline step so parallel runs never collide. task=qualify: products without an assessment; research them, save primary-source evidence, save_research_assessment, then finish_research_work. task=deep: positively assessed products without a deep pass; run the deep checklist, then finish_research_work. task=review: deep-researched drafts, or published products with new findings; check each and call record_review_decision. Leases last two hours. Empty items means no work: checkpoint and stop.",
       inputSchema: nextWorkInput,
     },
     async (input) => run(() => nextWork(env.DB, input)),
+  );
+  server.registerTool(
+    "finish_research_work",
+    {
+      description:
+        "Finish a leased qualify or deep task and release the lease. For deep, the summary must say what was covered (pricing, desktop and mobile screens, paywall, Meta/Google ads, creators, launches) and what was blocked or not found. A finished deep pass sends the product to review.",
+      inputSchema: finishWorkInput,
+    },
+    async (input) => run(() => finishWork(env.DB, input)),
+  );
+  server.registerTool(
+    "record_discovery_leads",
+    {
+      description:
+        "Record leads you checked and rejected (out_of_scope, duplicate_or_feature, unclear) so later runs skip them. Up to 10 per call. Accepted leads go through register_candidate instead.",
+      inputSchema: z
+        .object({
+          records: z
+            .array(
+              discoveryLeadInput.refine((r) => r.outcome !== "candidate", {
+                message: "Register candidates with register_candidate",
+              }),
+            )
+            .min(1)
+            .max(10),
+        })
+        .strict(),
+    },
+    async (input) =>
+      run(() => internal("POST", "/api/v1/admin/research/leads", input)),
   );
   server.registerTool(
     "record_review_decision",

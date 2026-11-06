@@ -3,7 +3,8 @@ import type { Bindings } from "./types";
 import { fail } from "./lib";
 
 export const EVIDENCE_BUCKET = "arcex-evidence";
-export const MEDIA_LIMIT_BYTES = 50_000_000;
+// Supabase Free allows 1 GB of storage; stay well under it.
+export const MEDIA_LIMIT_BYTES = 900_000_000;
 export function storageClient(env: Bindings) {
   if (!env.SUPABASE_STORAGE_URL || !env.SUPABASE_STORAGE_KEY)
     fail(503, "Private evidence storage is not configured");

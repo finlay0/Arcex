@@ -11,53 +11,66 @@ const LEASE_SECONDS = 2 * 3600,
 
 export const nextWorkInput = z
   .object({
-    task: z.enum(["qualify", "review"]),
+    task: z.enum(["qualify", "deep", "review"]),
     limit: z.number().int().min(1).max(10).default(5),
   })
   .strict();
 
+const RELEVANCE = "json_extract(r.assessment_json,'$.relevance')";
+// Draft evidence behind anything a public product page shows: funnels, paywalls,
+// ads/creators, pricing and distribution scans.
+const UNREVIEWED_DEEP_EVIDENCE = `EXISTS(SELECT 1 FROM evidence e WHERE e.product_id=p.id AND e.status='draft' AND (
+  e.id IN (SELECT evidence_id FROM funnel_steps WHERE product_id=p.id)
+  OR e.id IN (SELECT evidence_id FROM paywall_mechanics WHERE product_id=p.id)
+  OR e.id IN (SELECT evidence_id FROM distribution_signals WHERE product_id=p.id)
+  OR e.id IN (SELECT j.value FROM pricing_snapshots ps, json_each(ps.evidence_ids) j WHERE ps.product_id=p.id)
+  OR e.id IN (SELECT ds.evidence_id FROM distribution_scans ds JOIN distribution_watches w ON w.id=ds.watch_id WHERE w.product_id=p.id)))`;
+
 /**
- * Lease the next products for one task. qualify: no assessment yet (or an old
- * "unclear" one). review: a positive assessment waiting for the publish decision.
+ * Lease the next products for one pipeline step:
+ * qualify (no assessment yet) -> deep (positively assessed, no deep pass yet)
+ * -> review (deep pass done and unpublished, or new deep findings on a published product).
  */
 export async function nextWork(
   db: D1Database,
   input: z.infer<typeof nextWorkInput>,
 ) {
   const time = now();
-  const relevance = "json_extract(r.assessment_json,'$.relevance')";
-  const eligible =
-    input.task === "qualify"
-      ? `(r.assessment_json IS NULL OR (${relevance}='unclear' AND r.updated_at<?))`
-      : `${relevance} IN ('in_scope','reference') AND p.status='draft' AND (r.review_hold_until IS NULL OR r.review_hold_until<?)`;
+  const eligible = {
+    qualify: `r.status='pending' AND (r.assessment_json IS NULL OR (${RELEVANCE}='unclear' AND r.updated_at<?1))`,
+    deep: `r.status IN ('pending','accepted') AND ${RELEVANCE} IN ('in_scope','reference') AND r.deep_checked_at IS NULL AND ?1=?1`,
+    review: `r.status IN ('pending','accepted') AND ${RELEVANCE} IN ('in_scope','reference') AND (r.review_hold_until IS NULL OR r.review_hold_until<?1)
+      AND ((p.status='draft' AND r.deep_checked_at IS NOT NULL) OR (p.status='published' AND ${UNREVIEWED_DEEP_EVIDENCE}))`,
+  }[input.task];
   const leased = await db
     .prepare(
-      `UPDATE research_profiles SET work_lease_until=? WHERE product_id IN (
+      `UPDATE research_profiles SET work_lease_until=?2 WHERE product_id IN (
         SELECT r.product_id FROM research_profiles r JOIN products p ON p.id=r.product_id
-        WHERE r.status='pending' AND p.status!='archived' AND ${eligible}
-          AND (r.work_lease_until IS NULL OR r.work_lease_until<?)
-        ORDER BY r.updated_at,r.product_id LIMIT ?)
-      AND (work_lease_until IS NULL OR work_lease_until<?) RETURNING product_id`,
+        WHERE p.status!='archived' AND ${eligible}
+          AND (r.work_lease_until IS NULL OR r.work_lease_until<?3)
+        ORDER BY r.updated_at,r.product_id LIMIT ?4)
+      AND (work_lease_until IS NULL OR work_lease_until<?3) RETURNING product_id`,
     )
     .bind(
-      later(LEASE_SECONDS),
       input.task === "qualify" ? later(-UNCLEAR_RETRY_DAYS * 86400) : time,
+      later(LEASE_SECONDS),
       time,
       input.limit,
-      time,
     )
     .all<{ product_id: string }>();
   const ids = leased.results.map((r) => r.product_id);
   if (!ids.length) return { task: input.task, items: [], leaseExpiresAt: null };
   const rows = await db
     .prepare(
-      `SELECT p.id,p.name,p.url,p.domain,p.category,p.description,r.assessment_json,
+      `SELECT p.id,p.name,p.url,p.domain,p.category,p.description,p.status,r.assessment_json,r.deep_checked_at,
         (SELECT max(s.last_checked_at) FROM sources s WHERE s.product_id=p.id AND s.lane='http' AND s.failure_streak=0) homepage_checked_at
        FROM products p JOIN research_profiles r ON r.product_id=p.id
        WHERE p.id IN (${ids.map(() => "?").join(",")}) ORDER BY r.updated_at,p.id`,
     )
     .bind(...ids)
-    .all<Record<string, unknown> & { id: string; assessment_json: string | null }>();
+    .all<
+      Record<string, unknown> & { id: string; assessment_json: string | null }
+    >();
   return {
     task: input.task,
     leaseExpiresAt: later(LEASE_SECONDS),
@@ -65,11 +78,53 @@ export async function nextWork(
       ...row,
       assessment: assessment_json ? JSON.parse(assessment_json) : null,
     })),
-    scope:
-      input.task === "qualify"
-        ? "Research each product, save primary-source evidence and a save_research_assessment. Leases expire after two hours."
-        : "Check each product independently, then call record_review_decision once per product. Leases expire after two hours.",
+    scope: {
+      qualify:
+        "Research each product, save primary-source evidence and save_research_assessment, then finish_research_work.",
+      deep: "Run the full deep-research checklist for each product, then finish_research_work saying what was and was not covered.",
+      review:
+        "Check each product independently, then call record_review_decision once per product.",
+    }[input.task],
   };
+}
+
+export const finishWorkInput = z
+  .object({
+    productId: id,
+    task: z.enum(["qualify", "deep"]),
+    summary: z.string().min(20).max(3000),
+  })
+  .strict();
+
+/** Release a lease. A finished deep pass makes the product ready for review. */
+export async function finishWork(
+  db: D1Database,
+  input: z.infer<typeof finishWorkInput>,
+) {
+  const time = now();
+  const r = await db
+    .prepare(
+      `UPDATE research_profiles SET work_lease_until=NULL,updated_at=?1${
+        input.task === "deep"
+          ? ",deep_checked_at=?1,review_hold_until=NULL"
+          : ""
+      } WHERE product_id=?2 AND work_lease_until>=?1`,
+    )
+    .bind(time, input.productId)
+    .run();
+  if (!r.meta.changes)
+    fail(
+      409,
+      "No current lease for this product; lease it with next_research_work first",
+    );
+  await audit(
+    db,
+    "collector:worker",
+    `work.${input.task}.finish`,
+    input.productId,
+    { summary: input.summary },
+  );
+  return { finished: input.task, productId: input.productId };
 }
 
 export const reviewDecisionInput = z
@@ -135,6 +190,13 @@ export async function recordReviewDecision(
       )
       .bind(time, input.productId)
       .run();
+    // An excluded product never stays public.
+    await db
+      .prepare(
+        "UPDATE products SET status='draft',updated_at=? WHERE id=? AND status='published'",
+      )
+      .bind(time, input.productId)
+      .run();
     await audit(
       db,
       "collector:review",
@@ -151,7 +213,8 @@ export async function recordReviewDecision(
     problems.push(
       "All reviewer checks must pass to publish; use hold or exclude",
     );
-  if (row.product_status !== "draft") problems.push("Product is not a draft");
+  if (!["draft", "published"].includes(row.product_status))
+    problems.push("Archived products cannot be published");
   if (!row.assessment_json) problems.push("No saved assessment");
   const assessment = row.assessment_json
     ? assessmentInput.safeParse(JSON.parse(row.assessment_json))
@@ -229,9 +292,9 @@ export async function recordReviewDecision(
   // Anything the public page would show must be approved together with the product.
   const referenced = await db
     .prepare(
-      "SELECT DISTINCT e.id,e.kind FROM evidence e WHERE e.product_id=? AND e.id IN (SELECT evidence_id FROM funnel_steps WHERE product_id=? UNION SELECT evidence_id FROM paywall_mechanics WHERE product_id=? UNION SELECT evidence_id FROM distribution_signals WHERE product_id=?)",
+      "SELECT DISTINCT e.id,e.kind FROM evidence e WHERE e.product_id=?1 AND e.id IN (SELECT evidence_id FROM funnel_steps WHERE product_id=?1 UNION SELECT evidence_id FROM paywall_mechanics WHERE product_id=?1 UNION SELECT evidence_id FROM distribution_signals WHERE product_id=?1 UNION SELECT j.value FROM pricing_snapshots ps, json_each(ps.evidence_ids) j WHERE ps.product_id=?1 UNION SELECT ds.evidence_id FROM distribution_scans ds JOIN distribution_watches w ON w.id=ds.watch_id WHERE w.product_id=?1)",
     )
-    .bind(input.productId, input.productId, input.productId, input.productId)
+    .bind(input.productId)
     .all<{ id: string; kind: string }>();
   const assets = input.approveAssetIds.length
     ? await db
@@ -274,9 +337,15 @@ export async function recordReviewDecision(
       .bind(time, input.productId),
     db
       .prepare(
-        "UPDATE products SET status='published',updated_at=? WHERE id=? AND status='draft'",
+        "UPDATE products SET status='published',updated_at=? WHERE id=? AND status IN ('draft','published')",
       )
       .bind(time, input.productId),
+    // Pricing snapshots go public once every evidence row behind them is approved.
+    db
+      .prepare(
+        "UPDATE pricing_snapshots SET status='published' WHERE product_id=? AND status='draft' AND NOT EXISTS(SELECT 1 FROM json_each(pricing_snapshots.evidence_ids) j JOIN evidence e ON e.id=j.value WHERE e.status!='approved')",
+      )
+      .bind(input.productId),
   ]);
   await audit(db, "collector:review", "review.publish", input.productId, {
     reviewerModel: input.reviewerModel,
