@@ -4,12 +4,12 @@ This repository now contains the arcex.dev platform. The retired T3 desktop fork
 
 - Backend functionality only until Finlay asks for UI/UX.
 - Use D1 for relational records and the existing Supabase Free project for private evidence files. R2 stays disabled because the user requires zero overage charges. Never upgrade a plan or activate a metered fallback.
-- Production research runs in actual ChatGPT Work cloud tasks with Terra Medium. Local Terra browser agents only configure accounts. Finish upfront research before enabling daily 09:00 America/Halifax runs. Both existing schedules are paused; production COLLECTION_ENABLED is false.
+- Finlay paused ChatGPT Work research on November 5, 2026 and requested Cursor Automations/Grok Bot onboarding for roughly the next month. Do not launch more Terra/Luna Work research or resume their schedules. Prepare the replacement using included plan usage only, with paid overages/top-ups off. Finish upfront research and owner review before enabling daily 09:00 America/Halifax runs. Both old schedules stay paused; production COLLECTION_ENABLED stays false during onboarding. No automatic date-based reversion.
 - Keep source observations, inference, and editorial claims separate. Ad observations do not prove revenue or continuous ad activity.
 - Follow docs/product-direction.md for strategic context and later user decisions. Products serve the AI-native builder audience; they need not be vibe-coded. Unknown scale is allowed but must never be presented as verified small.
 - Work runs bootstrap through research_context, use bounded read_product_research/read_capture retrieval, and persist save_research_checkpoint. The versioned src/research-playbook.ts and database are authoritative; chat memory is not the run ledger.
 - New imports are drafts. Publication requires an explicit admin action and supporting evidence. Never publish raw browser captures automatically.
-- Browser/computer-use testing must be delegated to GPT-6.1 Terra at medium reasoning, as requested by Finlay. HTTP and runtime tests need no browser.
+- Any one-off browser/computer-use work in this chat must still be delegated to GPT-6.1 Terra at medium reasoning. Production cloud research uses the separately selected Cursor/Grok worker. HTTP and runtime tests need no browser.
 - Never commit secrets, browser profiles, auth state, private DOM captures, or personally identifying screenshots.
 - Preserve ownership, publication and Pro access checks across API and MCP. Use parameterized SQL and bounded input.
 - Validate with pnpm check and pnpm smoke against an isolated local database. Do not test billing against live accounts.

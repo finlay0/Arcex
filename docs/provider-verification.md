@@ -8,11 +8,11 @@ Actual basic-profile authorization and authenticated session succeeded on api.ar
 
 ## GitHub
 
-Same-site origin selection is prepared in main71a7b02 and passed the existing31tests, typecheck/build and isolated local smoke. api.arcex.dev uses its own exact callback; workers.dev keeps the existing Collector callback and credentials. No second app or session-token bridge.
+Same-site origin selection in main71a7b02 passed the existing31tests, typecheck/build and isolated local smoke, and was deployed as Worker2dfb839d-e622-4cb7-8d3b-55d09ffaa65a. api.arcex.dev uses its own exact callback; workers.dev keeps the existing Collector callback and credentials. No second app or session-token bridge.
 
-The existing app's form is prepared with https://api.arcex.dev/auth/github/callback alongside the existing workers.dev callback and its /mcp callback. It has not been saved. The Windows computer-use confirmation policy requires action-time approval for this cloud-access edit. Production activation and real sign-in verification remain pending.
+Finlay approved and Terra saved https://api.arcex.dev/auth/github/callback on existing app3987896 alongside the original workers.dev callback and its /mcp callback. GitHub displayed Application updated successfully; all three exact callbacks persisted with wildcards off and credentials unchanged. Finlay also approved the read-only email-address grant required by the test's prepared consent screen; the subsequent fresh start redirected automatically.
 
-An actual connected Collector research_context call succeeded before deployment, returning policy 2026-11-05.2 and 30 private cohort rows. This is a baseline, not proof that the pending callback/deployment preserves the connection afterward.
+Actual browser sign-in from /auth/github/start redirected to arcex.dev, and the same browser's /api/v1/me returned a non-null user with a GitHub identity indicator. No account data/session credentials were exported. HTTP302checks separately verified each origin's intended redirect_uri. The connected private Collector also read research_context after deployment, returning policy2026-11-05.2 and30private cohort rows. Customer session and existing Collector preservation are now verified.
 
 ## X
 
