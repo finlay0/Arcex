@@ -48,7 +48,7 @@ export async function nextWork(
         SELECT r.product_id FROM research_profiles r JOIN products p ON p.id=r.product_id
         WHERE p.status!='archived' AND ${eligible}
           AND (r.work_lease_until IS NULL OR r.work_lease_until<?3)
-        ORDER BY r.updated_at,r.product_id LIMIT ?4)
+        ORDER BY (${RELEVANCE}='reference'),r.updated_at,r.product_id LIMIT ?4)
       AND (work_lease_until IS NULL OR work_lease_until<?3) RETURNING product_id`,
     )
     .bind(
