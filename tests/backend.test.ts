@@ -1789,6 +1789,7 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
             notDuplicate: true,
           },
           approveAssetIds: [],
+          withholdAssetIds: [],
           holdDays: 7,
         };
         // The homepage has not been checked yet, so publishing is refused.
@@ -1807,6 +1808,13 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
             checks: { ...decision.checks, noPersonalData: false },
           }),
           /reviewer checks must pass/,
+        );
+        await assert.rejects(
+          recordReviewDecision(env.DB, {
+            ...decision,
+            withholdAssetIds: ["asset-of-another-product"],
+          }),
+          /must belong to this product/,
         );
         await recordReviewDecision(env.DB, decision);
         const row = (

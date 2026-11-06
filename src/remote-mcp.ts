@@ -493,7 +493,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "record_review_decision",
     {
       description:
-        "Independent reviewer decision for a leased review product: publish, exclude or hold. Publishing makes the product public. The server refuses it unless all checks are true and its own gates pass (positive source-backed assessment, recent first-party evidence, a successful homepage check, no same-name duplicate, and any funnel screenshots listed in approveAssetIds after you looked for personal data). Use hold when something is missing or uncertain, exclude when it does not fit the audience.",
+        "Independent reviewer decision for a leased review product: publish, exclude or hold. Publishing makes the product public. The server refuses it unless all checks are true and its own gates pass (positive source-backed assessment, recent first-party evidence, a successful homepage check, no same-name duplicate, and every funnel screenshot listed in approveAssetIds or, if it shows personal data, withholdAssetIds; withheld screenshots are never shown). Use hold when something is missing or uncertain, exclude when it does not fit the audience.",
       inputSchema: reviewDecisionInput,
     },
     async (input) => run(() => recordReviewDecision(env.DB, input)),

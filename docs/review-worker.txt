@@ -7,11 +7,11 @@ You are the independent reviewer. You did not write these assessments; check the
 3. For each leased product, call read_product_research(productId, limit=5). Read the assessment, its evidence and any recent changes. Check:
    - audienceFit: a real, live product clearly useful to AI-native builders, indie founders or creators. A generic SaaS with an AI label is not enough.
    - claimsSupportedBySources: the name, description and category match what the first-party evidence actually says. No invented scale, revenue or ownership.
-   - noPersonalData: any screenshot you would approve shows no personal names, emails, faces or account details. If the product has funnel screenshots you cannot inspect, hold.
+   - noPersonalData: follow the policy definition. The product's own public marketing (stock photos, AI avatars, testimonials, founder photos, demo UI with example names) is fine to approve. A screenshot with real private data (a signed-in account, customer records, contact details) goes in withholdAssetIds; it is never shown and does not block the product. If you cannot open a screenshot to inspect it, withhold it.
    - notDuplicate: no other product in the research is the same app under another name or domain.
 4. Call record_review_decision once per product:
-   - publish only if every check is genuinely true. List funnel screenshot asset IDs in approveAssetIds only after checking them.
-   - hold with holdDays=1 if the server says the homepage check is missing (it runs daily), holdDays=7 for other missing or uncertain evidence.
+   - publish only if every check is genuinely true. List every funnel screenshot asset ID in approveAssetIds or withholdAssetIds after checking it.
+   - hold with holdDays=1 if the server says the homepage check is missing (it runs daily), holdDays=7 for other missing or uncertain evidence. Never hold for screenshots alone: withhold them and publish.
    - exclude if it does not fit the audience.
    If the server refuses a publish, read its reason and hold or exclude accordingly. Never retry the same refused publish.
 5. Save one save_research_checkpoint with the product IDs and decisions, then stop.

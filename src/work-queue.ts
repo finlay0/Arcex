@@ -142,6 +142,8 @@ export const reviewDecisionInput = z
       })
       .strict(),
     approveAssetIds: z.array(id).max(20).default([]),
+    // Inspected screenshots that show personal data: never served, but they no longer block the product.
+    withholdAssetIds: z.array(id).max(20).default([]),
     holdDays: z.number().int().min(1).max(30).default(7),
   })
   .strict();
@@ -296,23 +298,39 @@ export async function recordReviewDecision(
     )
     .bind(input.productId)
     .all<{ id: string; kind: string }>();
-  const assets = input.approveAssetIds.length
-    ? await db
-        .prepare(
-          `SELECT a.id,a.evidence_id FROM assets a JOIN evidence e ON e.id=a.evidence_id WHERE e.product_id=? AND a.id IN (${input.approveAssetIds.map(() => "?").join(",")})`,
-        )
-        .bind(input.productId, ...input.approveAssetIds)
-        .all<{ id: string; evidence_id: string }>()
-    : { results: [] };
-  if (assets.results.length !== input.approveAssetIds.length)
-    problems.push("Every approved asset must belong to this product");
+  const productAssets = async (ids: string[]) =>
+    ids.length
+      ? (
+          await db
+            .prepare(
+              `SELECT a.id,a.evidence_id FROM assets a JOIN evidence e ON e.id=a.evidence_id WHERE e.product_id=? AND a.id IN (${ids.map(() => "?").join(",")})`,
+            )
+            .bind(input.productId, ...ids)
+            .all<{ id: string; evidence_id: string }>()
+        ).results
+      : [];
+  const assets = { results: await productAssets(input.approveAssetIds) };
+  const withheld = await productAssets(input.withholdAssetIds);
+  if (
+    assets.results.length !== input.approveAssetIds.length ||
+    withheld.length !== input.withholdAssetIds.length
+  )
+    problems.push(
+      "Every approved or withheld asset must belong to this product",
+    );
+  if (input.withholdAssetIds.some((a) => input.approveAssetIds.includes(a)))
+    problems.push("An asset cannot be both approved and withheld");
   const assetEvidence = new Set(assets.results.map((r) => r.evidence_id));
+  const checked = new Set([
+    ...assetEvidence,
+    ...withheld.map((r) => r.evidence_id),
+  ]);
   const uncheckedScreens = referenced.results.filter(
-    (e) => e.kind === "screenshot" && !assetEvidence.has(e.id),
+    (e) => e.kind === "screenshot" && !checked.has(e.id),
   );
   if (uncheckedScreens.length)
     problems.push(
-      "Funnel screenshots must be checked and listed in approveAssetIds",
+      "Funnel screenshots must be checked and listed in approveAssetIds or withholdAssetIds",
     );
   if (problems.length) fail(409, "Not publishable: " + problems.join("; "));
 
@@ -352,6 +370,7 @@ export async function recordReviewDecision(
     reason: input.reason,
     evidenceApproved: approve.length,
     assetsApproved: assets.results.length,
+    assetsWithheld: withheld.map((r) => r.id),
   });
   return {
     decision: "publish",
