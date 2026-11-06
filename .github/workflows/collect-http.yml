@@ -41,5 +41,5 @@ jobs:
           ARCEX_API_URL: https://api.arcex.dev
           ARCEX_COLLECTOR_TOKEN: ${{ secrets.ARCEX_HTTP_COLLECTOR_TOKEN }}
           COLLECTION_MODE: ${{ github.event_name == 'schedule' && 'scheduled' || inputs.mode }}
-          COLLECTION_LIMIT: ${{ github.event_name == 'schedule' && 50 || inputs.limit }}
+          COLLECTION_LIMIT: ${{ github.event_name == 'schedule' && 100 || inputs.limit }}
     # No artifact uploads or dependency caches: private evidence stays in Arcex and no storage allowance is consumed.
