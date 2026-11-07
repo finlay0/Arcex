@@ -25,6 +25,11 @@ import { libraries } from "./libraries";
 import { collectorIcons, publicIcons, adminIcons } from "./icons";
 import { collectorTraffic } from "./traffic";
 import {
+  collectorStoreStats,
+  adminStoreStats,
+  publicStoreStats,
+} from "./store-stats";
+import {
   emailAlerts,
   adminEmailAlerts,
   deliverOneDigest,
@@ -102,6 +107,9 @@ app.get("/api/v1/distribution/:slug", async (c) => {
 app.route("/api/v1/collector/jobs", collector);
 app.route("/api/v1/collector/icons", collectorIcons);
 app.route("/api/v1/collector/traffic", collectorTraffic);
+app.route("/api/v1/collector/store-stats", collectorStoreStats);
+app.route("/api/v1/admin", adminStoreStats);
+app.route("/api/v1", publicStoreStats);
 app.route("/api/v1/icons", publicIcons);
 app.route("/api/v1/admin", adminIcons);
 app.route("/api/v1/media", media);

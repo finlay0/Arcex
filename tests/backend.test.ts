@@ -15,6 +15,148 @@ import sharp from "sharp";
 import { makeThumbnail } from "../scripts/thumbnail-image";
 import { validThumbnail } from "../src/thumbnail-format";
 import { MEDIA_LIMIT_BYTES } from "../src/file-store";
+import {
+  parseAppStore,
+  parseGooglePlay,
+  parseChromeWebStore,
+  parseFirefoxAddons,
+  parseVscodeMarketplace,
+} from "../scripts/store-stats";
+
+test("store parser: Apple lookup and publicly listed purchases", () => {
+  const body = JSON.stringify({
+    results: [
+      {
+        wrapperType: "software",
+        trackId: 123,
+        averageUserRating: 4.6,
+        userRatingCount: 42,
+        price: 0,
+        currency: "USD",
+        version: "2.0",
+        currentVersionReleaseDate: "2026-11-01T00:00:00Z",
+        primaryGenreName: "Productivity",
+      },
+    ],
+  });
+  const parsed = parseAppStore(
+    body,
+    "123",
+    "<dt>In-App Purchases</dt><dd><ul><li><span>Pro &amp; More</span><span>$9.99</span></li></ul></dd><span>Unrelated $49</span>",
+  );
+  assert.deepEqual(parsed, {
+    rating: 4.6,
+    ratingCount: 42,
+    price: 0,
+    currency: "USD",
+    version: "2.0",
+    storeUpdatedAt: "2026-11-01T00:00:00Z",
+    genre: "Productivity",
+    inAppPurchases: [{ name: "Pro & More", price: "$9.99" }],
+    hasInAppPurchases: true,
+  });
+  assert.throws(() => parseAppStore(body, "999"), /requested app/);
+});
+
+test("store parser: Google Play keeps install buckets and unknown flags", () => {
+  const ld =
+    '<script type="application/ld+json">{"@type":"SoftwareApplication","url":"https://play.google.com/store/apps/details?id=com.fixture.app","aggregateRating":{"ratingValue":"4.25","ratingCount":"1,234"},"offers":[{"price":"0","priceCurrency":"USD"}]}</script>';
+  const parsed = parseGooglePlay(
+    ld +
+      '<div>1M+</div><div>Downloads</div><span class="UIuSk">Contains ads</span><span class="UIuSk">In-app purchases</span><div>Updated on</div><div>Nov 1, 2026</div>',
+    "com.fixture.app",
+  );
+  assert.equal(parsed.installsOrUsers, 1_000_000);
+  assert.equal(parsed.installsLabel, "1M+");
+  assert.equal(parsed.ratingCount, 1234);
+  assert.equal(parsed.rating, 4.25);
+  assert.equal(parsed.price, 0);
+  assert.equal(parsed.currency, "USD");
+  assert.equal(parsed.containsAds, true);
+  assert.equal(parsed.hasInAppPurchases, true);
+  assert.equal(parsed.storeUpdatedAt, "Nov 1, 2026");
+  assert.equal(parseGooglePlay(ld, "com.fixture.app").containsAds, null);
+  assert.equal(
+    parseGooglePlay(
+      ld + "<p>Our description mentions Contains ads and In-app purchases.</p>",
+      "com.fixture.app",
+    ).containsAds,
+    null,
+  );
+  assert.throws(
+    () => parseGooglePlay("<title>Just a moment...</title>", "com.fixture.app"),
+    /challenge/,
+  );
+});
+
+test("store parser: Chrome exact embedded counters belong to the requested extension", () => {
+  const listing = "a".repeat(32);
+  const item = [
+    listing,
+    "icon",
+    "Fixture",
+    4.123,
+    1234,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    10000,
+  ];
+  const html = `<script>AF_initDataCallback({key: 'ds:0', hash: '2', data:${JSON.stringify([item])}, sideChannel: {}});</script><div>10,000 users</div><div>Version</div><div>1.2.3</div><div>Updated</div><div>November 1, 2026</div>`;
+  const parsed = parseChromeWebStore(html, listing);
+  assert.equal(parsed.ratingCount, 1234);
+  assert.equal(parsed.rating, 4.123);
+  assert.equal(parsed.installsOrUsers, 10000);
+  assert.equal(parsed.version, "1.2.3");
+  assert.equal(parsed.storeUpdatedAt, "November 1, 2026");
+  const rounded = parseChromeWebStore(
+    '<span aria-label="Average rating 4.1 out of 5 stars."></span><p>44.9K ratings</p><div>10,000 users</div>',
+    listing,
+  );
+  assert.equal(rounded.ratingCount, null);
+});
+
+test("store parser: Firefox users and average daily users remain distinct", () => {
+  const parsed = parseFirefoxAddons(
+    '{"slug":"fixture","users":200,"average_daily_users":150,"weekly_downloads":999,"ratings":{"average":4.8,"count":20}}',
+    "fixture",
+  );
+  assert.equal(parsed.installsOrUsers, 200);
+  assert.equal(parsed.averageDailyUsers, 150);
+  assert.equal(parsed.rating, 4.8);
+  assert.equal(parsed.ratingCount, 20);
+  const dailyOnly = parseFirefoxAddons(
+    '{"slug":"fixture","average_daily_users":150,"ratings":{"average":0,"count":0}}',
+    "fixture",
+  );
+  assert.equal(dailyOnly.installsLabel, "150 average daily users");
+  assert.throws(
+    () => parseFirefoxAddons('{"slug":"other"}', "fixture"),
+    /identity mismatch/,
+  );
+});
+
+test("store parser: VS Code Marketplace public install and rating counters", () => {
+  const parsed = parseVscodeMarketplace(
+    '<span class="installs-text" title="Unique installations, not updates"> 12,345 installs</span><span title="Average rating: 4.2 out of 5"></span><span class="ux-item-rating-count"> (<span>42</span>)</span>',
+  );
+  assert.deepEqual(parsed, {
+    installsOrUsers: 12345,
+    installsLabel: "12,345 installs",
+    rating: 4.2,
+    ratingCount: 42,
+  });
+  assert.throws(
+    () => parseVscodeMarketplace("<title>Access denied</title>"),
+    /challenge/,
+  );
+});
 
 test("Arcex backend: permissions, publication, community, jobs and billing", async (t) => {
   const mf = new Miniflare(
@@ -1672,6 +1814,167 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
           )
         ).items.find((p) => p.id === id);
         assert.match(row!.icon_url!, /\/api\/v1\/icons\/.+\?v=[0-9a-f]{16}$/);
+      },
+    );
+    await t.test(
+      "store stats enforce publication, bounded collector writes and daily upserts",
+      async () => {
+        const { id: ownId } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/products",
+          {
+            ...input,
+            slug: "store-stats-app",
+            url:
+              "https://chromewebstore.google.com/detail/fixture/" +
+              "c".repeat(32),
+          },
+          admin,
+          201,
+        );
+        assert.equal(
+          (
+            await req(
+              "GET",
+              "/api/v1/collector/store-stats/pending",
+              undefined,
+              admin,
+            )
+          ).status,
+          401,
+        );
+        const pending = await json<{
+          items: { id: string; product_id: string }[];
+        }>(
+          "GET",
+          "/api/v1/collector/store-stats/pending?limit=50",
+          undefined,
+          collector,
+        );
+        const listing = pending.items.find((s) => s.product_id === ownId)!;
+        assert.ok(
+          listing,
+          "Product's own store URL must be discovered automatically",
+        );
+        const path = `/api/v1/collector/store-stats/${listing.id}/snapshot`;
+        const body = {
+          status: "ok",
+          rating: 4.5,
+          ratingCount: 10,
+          installsOrUsers: 1000,
+          installsLabel: "1,000 users",
+          rawSha256: "a".repeat(64),
+        };
+        assert.equal((await req("POST", path, body, admin)).status, 401);
+        for (const change of [
+          { rating: 6 },
+          { ratingCount: -1 },
+          { installsOrUsers: 1.5 },
+          { installsOrUsers: 1e13 },
+          { price: -1 },
+          { version: "v".repeat(101) },
+          { rawSha256: "bad" },
+          { observedOn: "2020-01-01" },
+        ]) {
+          await json("POST", path, { ...body, ...change }, collector, 422);
+        }
+        await json("POST", path, body, collector);
+        await json("POST", path, { ...body, ratingCount: 11 }, collector);
+        assert.equal(
+          (await req("GET", `/api/v1/products/${ownId}/store-stats`)).status,
+          404,
+        );
+        assert.equal(
+          (await req("GET", "/api/v1/products/missing/store-stats")).status,
+          404,
+        );
+        const after = await json<{ items: { id: string }[] }>(
+          "GET",
+          "/api/v1/collector/store-stats/pending?limit=50",
+          undefined,
+          collector,
+        );
+        assert.ok(!after.items.some((s) => s.id === listing.id));
+        await json(
+          "POST",
+          path,
+          { status: "failed", reason: "Store returned HTTP 429" },
+          collector,
+        );
+        assert.equal(
+          (await db
+            .prepare("SELECT failure_streak FROM store_listings WHERE id=?")
+            .bind(listing.id)
+            .first<{ failure_streak: number }>())!.failure_streak,
+          1,
+        );
+        assert.equal(
+          (await db
+            .prepare(
+              "SELECT count(*) AS n FROM store_listing_snapshots WHERE listing_id=?",
+            )
+            .bind(listing.id)
+            .first<{ n: number }>())!.n,
+          1,
+        );
+        // A web product can have an extra listing; tracking/locale variants are duplicates.
+        const extra = {
+          listingUrl:
+            "https://play.google.com/store/apps/details?id=com.fixture.app&hl=fr&gl=ca",
+        };
+        await json(
+          "POST",
+          `/api/v1/admin/products/${productId}/store-listings`,
+          extra,
+          admin,
+          201,
+        );
+        await json(
+          "POST",
+          `/api/v1/admin/products/${productId}/store-listings`,
+          {
+            listingUrl:
+              "https://play.google.com/store/apps/details?id=com.fixture.app",
+          },
+          admin,
+          409,
+        );
+        await json(
+          "POST",
+          `/api/v1/admin/products/${productId}/store-listings`,
+          { listingUrl: "https://play.google.com/store/apps/" },
+          admin,
+          422,
+        );
+        await db
+          .prepare("UPDATE products SET status='published' WHERE id=?")
+          .bind(ownId)
+          .run();
+        await db
+          .prepare(
+            `INSERT INTO store_listing_snapshots(listing_id,observed_on,rating_count,raw_sha256,created_at)
+        WITH RECURSIVE days(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM days WHERE n<181)
+        SELECT ?,date('now','-'||n||' days'),n,?,? FROM days`,
+          )
+          .bind(listing.id, "b".repeat(64), new Date().toISOString())
+          .run();
+        const stats = await json<{
+          meaning: string;
+          listings: {
+            snapshots: { rating_count: number; observed_on: string }[];
+          }[];
+        }>("GET", `/api/v1/products/${ownId}/store-stats`);
+        assert.match(stats.meaning, /not verified downloads/);
+        assert.equal(stats.listings[0].snapshots.length, 180);
+        assert.equal(
+          stats.listings[0].snapshots.at(-1)!.rating_count,
+          11,
+          "Failure must preserve the last successful observation",
+        );
+        assert.equal(
+          stats.listings[0].snapshots.at(-1)!.observed_on,
+          new Date().toISOString().slice(0, 10),
+        );
       },
     );
     await t.test(
