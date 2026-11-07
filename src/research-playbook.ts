@@ -1,4 +1,4 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-06.6";
+export const RESEARCH_POLICY_VERSION = "2026-11-07.1";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
@@ -35,14 +35,16 @@ Record the discovery lane, exact query and originating URL. Record rejected lead
 Do not pad a batch to a numerical target. The test is a live product with a visible commercial model and a learnable pattern (pricing, paywall, onboarding, acquisition channel, growth) that a small team could study or rebuild. AI is neither required nor sufficient. Keep the mix broad: consumer apps, productivity, finance, health, education, creator tools, developer tools, B2B SaaS, mobile apps and extensions, not only AI tools. Explain the audience relevance and the specific learnable commercial pattern.
 
 DEEP RESEARCH (task=deep, one product at a time, at most 25 minutes and 40 page loads per product)
+Priorities (November 7, 2026): any agent can summarize one product on demand, so Arcex's value is evidence that is slow to collect and history that is tracked over time. Spend effort on real screenshots, exact pricing, observed ads and store listings. Keep prose short.
 1. read_product_research first; reuse existing evidence, watches and screenshots instead of repeating them.
 2. Pricing: open the product's own pricing page. Save page evidence (add_observation) and save_public_pricing with every observed plan, price, currency, interval, trial and credit limit. Unknown stays unknown.
 3. Screens: capture the homepage, pricing page and every publicly reachable onboarding/sign-up step without creating an account, each at desktop 1440x900 and mobile 390x844. WebP or JPEG, at most 150 KB per image and 10 images per product. Upload each by create_capture_upload (screenshot evidence contentHash = file sha256). Never capture personal data (defined under QUALIFICATION); crop or skip it.
 4. Funnel and paywall: save_funnel with the observed steps in order, each linked to its evidence and asset. save_paywall only for a pattern actually observed (free tier, credit limit, trial, hard paywall), quoting the source.
 5. Ads: register_distribution_watch for meta and google if missing. Search the Meta Ad Library (all ads, United States) and the Google Ads Transparency Center for the brand and domain. record_meta_ad / record_google_ad for up to 10 matching ads whose destination matches the product domain, then record_distribution_scan with observed, no_results or blocked. An ad is an observation, not revenue.
 6. Creators and launches: collect_youtube_mentions for the brand (if it says not configured, record that as blocked and continue). record_launch_snapshot for a Product Hunt or Hacker News launch page if one exists. record_creator_mention only for a creator video that clearly features the product; sponsorship only with a visible disclosure.
-7. Blueprint: save_blueprint describing how an agent could rebuild the observed onboarding, pricing and paywall pattern, citing evidence IDs. It is a proposed implementation, not the product's code.
-8. finish_research_work(task="deep") with exactly what was covered and what was blocked, then move to the next leased product.
+7. Store listings: when the product has a public App Store, Google Play, Chrome Web Store, Firefox or VS Code listing, attach it with register_store_listing; the code-only collector maintains its counter history. Store counters are observations, never verified downloads or revenue.
+8. Blueprint: save_blueprint as a short, concrete outline (at most about 8 lines) of how an agent could rebuild the observed onboarding, pricing and paywall pattern, citing evidence IDs. It is a proposed implementation, not the product's code.
+9. finish_research_work(task="deep") with exactly what was covered and what was blocked, then move to the next leased product.
 Login walls, CAPTCHAs and bot checks are real blockers: record them and continue with the public parts. Never create accounts, enter credentials or bypass a challenge.
 
 QUALIFICATION
