@@ -34,5 +34,7 @@ if (mode === "status" || (mode === "scheduled" && !status.collectionEnabled)) {
   console.log(
     JSON.stringify({ mode, ...status, ...result, ...icons, ...traffic }),
   );
-  if (result.failed) process.exitCode = 1;
+  // Single sites failing (redirects, bot checks) are recorded per source; only a run
+  // where nothing succeeded is a failed run.
+  if (result.failed && !result.completed) process.exitCode = 1;
 }

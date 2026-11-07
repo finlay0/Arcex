@@ -12,7 +12,9 @@ on:
         type: number
         default: 1
   schedule:
-    - cron: "17 * * * *"
+    # GitHub drops many scheduled triggers under load; four off-peak attempts an hour
+    # keep the daily checks moving. The concurrency group stops overlapping runs.
+    - cron: "7,22,37,52 * * * *"
 permissions:
   contents: read
 concurrency:
