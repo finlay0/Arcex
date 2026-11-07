@@ -18,7 +18,7 @@ export const media = new Hono<AppEnv>();
 const CAPTURE_TYPES = ["image/png", "image/jpeg", "image/webp"] as const;
 const CAPTURE_MAX_BYTES = 1_000_000;
 /** Validate and store one capture for existing evidence. Screenshot evidence must carry the image's own hash. */
-async function storeCapture(
+export async function storeCapture(
   env: AppEnv["Bindings"],
   evidenceId: string,
   type: string | undefined,

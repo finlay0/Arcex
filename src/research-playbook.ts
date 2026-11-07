@@ -1,4 +1,4 @@
-export const RESEARCH_POLICY_VERSION = "2026-11-07.1";
+export const RESEARCH_POLICY_VERSION = "2026-11-07.2";
 export const researchPlaybook = String.raw`
 ARCEX RESEARCH PLAYBOOK
 Version: ${RESEARCH_POLICY_VERSION}
@@ -38,7 +38,7 @@ DEEP RESEARCH (task=deep, one product at a time, at most 25 minutes and 40 page 
 Priorities (November 7, 2026): any agent can summarize one product on demand, so Arcex's value is evidence that is slow to collect and history that is tracked over time. Spend effort on real screenshots, exact pricing, observed ads and store listings. Keep prose short.
 1. read_product_research first; reuse existing evidence, watches and screenshots instead of repeating them.
 2. Pricing: open the product's own pricing page. Save page evidence (add_observation) and save_public_pricing with every observed plan, price, currency, interval, trial and credit limit. Unknown stays unknown.
-3. Screens: capture the homepage, pricing page and every publicly reachable onboarding/sign-up step without creating an account, each at desktop 1440x900 and mobile 390x844. WebP or JPEG, at most 150 KB per image and 10 images per product. Upload each by create_capture_upload (screenshot evidence contentHash = file sha256). Never capture personal data (defined under QUALIFICATION); crop or skip it.
+3. Screens: a free code-only job already captures the homepage and pricing page at desktop and mobile for most products (screenshot evidence with payload.captureSource "code"); reuse those in save_funnel instead of capturing them again. Capture yourself only what is missing: every publicly reachable onboarding/sign-up step without creating an account, and the homepage/pricing page if no code capture exists, each at desktop 1440x900 and mobile 390x844. WebP or JPEG, at most 150 KB per image and 10 images per product. Upload each by create_capture_upload (screenshot evidence contentHash = file sha256). Never capture personal data (defined under QUALIFICATION); crop or skip it.
 4. Funnel and paywall: save_funnel with the observed steps in order, each linked to its evidence and asset. save_paywall only for a pattern actually observed (free tier, credit limit, trial, hard paywall), quoting the source.
 5. Ads: register_distribution_watch for meta and google if missing. Search the Meta Ad Library (all ads, United States) and the Google Ads Transparency Center for the brand and domain. record_meta_ad / record_google_ad for up to 10 matching ads whose destination matches the product domain, then record_distribution_scan with observed, no_results or blocked. An ad is an observation, not revenue.
 6. Creators and launches: collect_youtube_mentions for the brand (if it says not configured, record that as blocked and continue). record_launch_snapshot for a Product Hunt or Hacker News launch page if one exists. record_creator_mention only for a creator video that clearly features the product; sponsorship only with a visible disclosure.

@@ -1700,6 +1700,59 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
       },
     );
     await t.test(
+      "code captures are collector-only, first-party and hash-checked",
+      async () => {
+        const { id } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/products",
+          { ...input, slug: "captured-app", url: "https://captured-app.com" },
+          admin,
+          201,
+        );
+        const image = await sharp({
+          create: { width: 390, height: 844, channels: 3, background: "#fff" },
+        })
+          .webp()
+          .toBuffer();
+        const body = {
+          page: "home",
+          viewport: "mobile",
+          sourceUrl: "https://www.captured-app.com/",
+          observedAt: new Date().toISOString(),
+          data: image.toString("base64"),
+        };
+        const path = `/api/v1/collector/captures/${id}`;
+        assert.equal((await req("POST", path, body, admin)).status, 401);
+        await json(
+          "POST",
+          path,
+          { ...body, sourceUrl: "https://other-site.com/" },
+          collector,
+          422,
+        );
+        const saved = await json<{ evidenceId: string; assetId: string }>(
+          "POST",
+          path,
+          body,
+          collector,
+          201,
+        );
+        const row = await env.DB.prepare(
+          "SELECT e.kind,e.status,e.content_hash,a.sha256,a.approved FROM evidence e JOIN assets a ON a.evidence_id=e.id WHERE a.id=?",
+        )
+          .bind(saved.assetId)
+          .first<Record<string, unknown>>();
+        assert.equal(row?.kind, "screenshot");
+        assert.equal(
+          row?.status,
+          "draft",
+          "Captures stay private until review",
+        );
+        assert.equal(row?.approved, 0);
+        assert.equal(row?.content_hash, row?.sha256);
+      },
+    );
+    await t.test(
       "daily traffic ranks are collector-only and dated today",
       async () => {
         const { id } = await json<{ id: string }>(

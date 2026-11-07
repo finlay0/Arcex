@@ -1,0 +1,41 @@
+name: Screen captures
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Products to capture, 1–60
+        type: number
+        default: 20
+  schedule:
+    # Several attempts a day because GitHub drops scheduled triggers under load.
+    - cron: "13,43 * * * *"
+permissions:
+  contents: read
+concurrency:
+  group: arcex-screen-captures
+  cancel-in-progress: false
+jobs:
+  capture:
+    # Standard Linux runners are free for public repos. Never fall back to paid private-repo compute.
+    if: github.repository == 'finlay0/Arcex' && github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10.14.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Capture homepage and pricing screens
+        run: pnpm exec tsx scripts/captures.ts
+        env:
+          ARCEX_API_URL: https://api.arcex.dev
+          ARCEX_COLLECTOR_TOKEN: ${{ secrets.ARCEX_HTTP_COLLECTOR_TOKEN }}
+          CAPTURE_LIMIT: ${{ github.event_name == 'schedule' && 30 || inputs.limit }}
+    # Images go straight to Arcex's private storage: no artifacts, logs carry only IDs and sizes.
