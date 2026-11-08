@@ -816,6 +816,12 @@ test("coverage, gating, limits, metrics, tracking and publication", async (t) =>
       ).status,
       422,
     );
+    // Research notes never pass as the page's own words.
+    const noted = { ...offerInput, offers: [{ ...offerInput.offers[0], displayedPrice: "$9 per product (annual toggle visible on page)" }] };
+    assert.equal(
+      (await request("POST", "/api/v1/admin/products/signals/public-pricing", noted, ADMIN)).status,
+      422,
+    );
     const price = await json<{ id: string }>(
       await request(
         "POST",

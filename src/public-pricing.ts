@@ -5,6 +5,7 @@ import { now } from "./types";
 import { id, publicUrl, timestamp } from "./contracts";
 import { requireAdmin } from "./auth";
 import { audit, decode, fail, page, parse } from "./lib";
+import { verbatim } from "./verbatim";
 
 export const publicPricingInput = z
   .object({
@@ -14,8 +15,9 @@ export const publicPricingInput = z
       .array(
         z
           .object({
-            name: z.string().min(1).max(120),
-            displayedPrice: z.string().min(1).max(500),
+            name: verbatim("Offer name", "the pricing evidence summary", 120, 1),
+            displayedPrice: verbatim("displayedPrice", "the pricing evidence summary", 500, 1)
+              .describe("The price exactly as the page shows it, with nothing added: billing toggles and observations go in the evidence summary."),
             amount: z
               .string()
               .regex(/^\d{1,10}(?:\.\d{1,6})?$/)
@@ -29,7 +31,11 @@ export const publicPricingInput = z
             interval: z
               .enum(["month", "year", "one_time", "usage", "free", "unknown"])
               .default("unknown"),
-            limits: z.array(z.string().min(1).max(500)).max(10).default([]),
+            limits: z
+              .array(verbatim("Each limit", "the pricing evidence summary", 500, 1))
+              .max(10)
+              .default([])
+              .describe("Plan limits as the page words them, one per item, without added labels."),
             sourceUrl: publicUrl,
           })
           .strict(),

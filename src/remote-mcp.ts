@@ -262,7 +262,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "record_google_ad",
     {
       description:
-        "Save an actually observed Google Ads Transparency creative as draft evidence: advertiser/creative IDs, source-reported last-shown date, country, format and matching product destination. Transparency listings do not reveal competitor keyword bids or conversions.",
+        "Save an actually observed Google Ads Transparency creative as draft evidence: advertiser/creative IDs, source-reported last-shown date, country, format and matching product destination. Transparency listings do not reveal competitor keyword bids or conversions. creativeText is the ad's own words or empty when unreadable; notes go in summary.",
       inputSchema: googleAdInput,
     },
     async (input) =>
@@ -550,7 +550,7 @@ export function collectorServer(env: Bindings, props: CollectorProps) {
     "save_public_pricing",
     {
       description:
-        "Save immutable observed public-offer snapshots as private drafts, separately from authenticated paywalls. Use exact saved evidence URLs/times, literal displayed prices and limits. Currency stays null if not stated; never inferUSDfrom$. Cannot approve or publish.",
+        "Save immutable observed public-offer snapshots as private drafts, separately from authenticated paywalls. Use exact saved evidence URLs/times, literal displayed prices and limits with nothing added (notes belong in the evidence summary). Currency stays null if not stated; never inferUSDfrom$. Cannot approve or publish.",
       inputSchema: z
         .object({ productId: id, pricing: publicPricingInput })
         .strict(),

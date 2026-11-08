@@ -6,6 +6,7 @@ import { requireAdmin } from "./auth";
 import { parse, fail, audit } from "./lib";
 import { id, publicUrl, timestamp } from "./contracts";
 import { insertEvidence, checkEvidence } from "./catalog";
+import { verbatim } from "./verbatim";
 
 export const watchInput = z
   .object({
@@ -44,7 +45,9 @@ export const adSightingInput = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
-    creativeText: z.string().max(12000),
+    creativeText: verbatim("creativeText", "summary", 12000).describe(
+      "The ad's own words exactly as the library displays them. Use an empty string when they aren't readable; never describe the creative here.",
+    ),
   })
   .strict();
 export const creatorMentionInput = z
@@ -143,7 +146,9 @@ export const googleAdInput = z
     country: z.string().regex(/^(ALL|[A-Z]{2})$/),
     format: z.enum(["text", "image", "video", "unknown"]),
     reportedLastShownDate: z.iso.date().optional(),
-    creativeText: z.string().max(12000),
+    creativeText: verbatim("creativeText", "summary", 12000).describe(
+      "The ad's own words exactly as the library displays them. Use an empty string when they aren't readable; never describe the creative here.",
+    ),
   })
   .strict();
 export const shortFormInput = z
