@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Crosshair, Eye, ImageOff, Layers, Lock, Mail, Share2, Sparkles, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type StackItem, type Step, type Traffic, type Usage, type Vault } from "./api";
-import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, priceLabel, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
 import { useSession } from "./shell";
 import { CodeLine, Confidence, ErrorPanel, GateModal, LimitModal, mcpPrompt, ProductIcon, useCopy } from "./ui";
 
@@ -325,7 +325,7 @@ function BusinessModel({ v, p, locked, onSignIn }: { v: Vault; p: Product; locke
       <div className="flex flex-col gap-4">
         <Observed>
           <dl className="flex flex-col gap-2 text-[13px]">
-            <div className="flex justify-between gap-4"><dt className="text-t2">Model</dt><dd className="text-right">{MODEL_LABEL[p.monetization]}</dd></div>
+            {p.monetization !== "unknown" && <div className="flex justify-between gap-4"><dt className="text-t2">Model</dt><dd className="text-right">{MODEL_LABEL[p.monetization]}</dd></div>}
             {pricing?.offers.map((offer, i) => (
               <div key={i}>
                 <div className="flex justify-between gap-4"><dt className="text-t2">{offer.name}</dt><dd className="text-right">{offer.displayedPrice}</dd></div>
@@ -717,7 +717,7 @@ export function AppPage() {
               {similar.data.map((x) => (
                 <Link key={x.slug} to={`/app/${x.slug}`} state={state} className="panel flex items-center gap-3 rounded-xl p-3 transition-colors hover:border-line-strong">
                   <ProductIcon p={x} />
-                  <span className="min-w-0 flex-1"><span className="block truncate font-medium">{x.name}</span><span className="block truncate text-[13px] text-t2">{MODEL_LABEL[x.monetization]}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate font-medium">{x.name}</span><span className="block truncate text-[13px] text-t2">{priceLabel(x.pricing) ?? CATEGORY_LABEL[x.category]}</span></span>
                   {x.traffic_tier && <span title={TRAFFIC_TITLE} className="num text-[13px] text-t2">{x.traffic_rank === null ? "1M+" : compactRank(x.traffic_rank)}</span>}
                 </Link>
               ))}

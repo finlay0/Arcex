@@ -64,6 +64,13 @@ export type Product = {
   revenue_low_usd: number | null; revenue_high_usd: number | null; revenue_confidence: number | null;
   /** Null rank with a tier means outside the top million; both null means not ranked yet. */
   traffic_rank: number | null; traffic_tier: string | null; icon_url: string | null;
+  /** Summary of the latest published pricing page; null when none is published. */
+  pricing: PricingSummary | null;
+};
+
+export type PricingSummary = {
+  freePlan: boolean; usageBased: boolean; customTier: boolean;
+  entry: { name: string; displayedPrice: string; monthlyAmount: number; currency: string | null } | null;
 };
 
 type RawProduct = Partial<Omit<Product, "activity_weekly" | "has_blueprint" | "open_sample">> & {
@@ -85,6 +92,7 @@ export function toProduct(raw: RawProduct): Product {
     first_seen: raw.first_seen ?? null, last_seen: raw.last_seen ?? null,
     revenue_low_usd: raw.revenue_low_usd ?? null, revenue_high_usd: raw.revenue_high_usd ?? null, revenue_confidence: raw.revenue_confidence ?? null,
     traffic_rank: raw.traffic_rank ?? null, traffic_tier: raw.traffic_tier ?? null, icon_url: raw.icon_url ?? null,
+    pricing: raw.pricing ?? null,
   };
 }
 

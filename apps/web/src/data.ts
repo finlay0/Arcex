@@ -22,6 +22,18 @@ export const DASH = "—";
 export const compactRank = (rank: number) => "#" + (rank < 1000 ? rank : rank < 100_000 ? `${(rank / 1000).toFixed(1).replace(/.0$/, "")}K` : `${Math.round(rank / 1000)}K`);
 export const TIER_LABEL: Record<string, string> = { "top 1K": "Top 1K", "top 10K": "Top 10K", "top 100K": "Top 100K", "top 1M": "Top 1M", "outside top 1M": "Below top 1M" };
 export const TRAFFIC_TITLE = "Site popularity rank in the Tranco top-million list, checked daily. Lower is more popular. A popularity tier, not visitor counts or revenue.";
+export const PRICE_TITLE = "From the product's public pricing page: the cheapest paid plan as listed, and whether a free plan exists.";
+
+/** The cheapest paid plan as the pricing page shows it, else the kind of plan it lists. */
+export function priceLabel(pricing: { freePlan: boolean; usageBased: boolean; customTier: boolean; entry: { displayedPrice: string } | null } | null) {
+  if (!pricing) return null;
+  // Trailing notes in brackets ("(billed yearly)") stay on the app page's full pricing list.
+  if (pricing.entry) return pricing.entry.displayedPrice.replace(/\s*\([^)]*\)\s*$/, "") || pricing.entry.displayedPrice;
+  if (pricing.freePlan) return "Free";
+  if (pricing.usageBased) return "Usage-based";
+  if (pricing.customTier) return "Custom";
+  return null;
+}
 
 const dollars = (n: number) => (n >= 1_000_000 ? `$${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `$${+(n / 1000).toFixed(1)}k` : `$${n}`);
 export const formatRevenue = (low: number | null, high: number | null) => (low === null || high === null ? DASH : low === high ? dollars(low) : `${dollars(low)}–${dollars(high)}`);

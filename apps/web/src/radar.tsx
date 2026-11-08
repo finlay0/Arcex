@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "rea
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, X } from "lucide-react";
 import { errorMessage, fetchRadar, useQuery, type Product } from "./api";
-import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, TIER_LABEL, TRAFFIC_TITLE, type Category, type Model } from "./data";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, PRICE_TITLE, priceLabel, TIER_LABEL, TRAFFIC_TITLE, type Category } from "./data";
 import { useOpenProduct, useSession } from "./shell";
 import { Confidence, ErrorPanel, FilterMenu, PageHeading, ProductIcon, useDebounced, useMedia, VideoCountIcon } from "./ui";
 
@@ -58,6 +58,25 @@ function TrafficCell({ p }: { p: Product }) {
   );
 }
 
+const PRICES = [
+  { value: "", label: "Any Price" },
+  { value: "free", label: "Has a free plan" },
+  { value: "paid_only", label: "Paid plans only" },
+];
+const hasFree = (p: Product) => !!p.pricing?.freePlan;
+const paidOnly = (p: Product) => !!p.pricing?.entry && !p.pricing.freePlan;
+
+function PriceCell({ p }: { p: Product }) {
+  const label = priceLabel(p.pricing);
+  if (!label) return <span title="No published pricing yet" className="col-mon num text-[13px] text-t3">{DASH}</span>;
+  return (
+    <span title={`${label}${p.pricing?.entry && p.pricing.freePlan ? " · free plan available" : ""}`} className="col-mon min-w-0">
+      <span className="num block truncate text-[13px] font-medium">{label}</span>
+      {p.pricing?.entry && p.pricing.freePlan && <span className="block truncate text-[11px] text-teal">Free plan</span>}
+    </span>
+  );
+}
+
 function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => void }) {
   const s = useSession();
   const open = !s.signedIn && p.open_sample && p.coverage === "full";
@@ -86,7 +105,7 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
       <TrafficCell p={p} />
       <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.active_ads ? "text-teal" : "text-t3"}`} />{p.active_ads ?? DASH}<Delta n={p.ads_delta_7d} /></span>
       <span className="col-yt"><span className="num flex items-center gap-1.5 font-medium"><VideoCountIcon className="size-4 text-t2" />{p.sponsors ?? DASH}</span></span>
-      <span className="col-mon min-w-0"><span className="pill"><span className="truncate">{MODEL_LABEL[p.monetization]}</span></span></span>
+      <PriceCell p={p} />
       <span className="col-first num whitespace-nowrap text-[13px] text-t2">{ago(p.first_seen)}</span>
       <span className="col-seen num whitespace-nowrap text-[13px] text-t2">{ago(p.last_seen)}</span>
       <ChevronRight className="size-4 text-t2" />
@@ -148,7 +167,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const tableRef = useRef<HTMLDivElement>(null);
   const wide = useMedia("(min-width: 1280px)");
   const cat = sp.get("cat") ?? "";
-  const model = sp.get("model") ?? "";
+  const price = sp.get("price") ?? "";
   const signal = sp.get("signal") ?? "";
   const added = sp.get("added") ?? "";
   const coverage = sp.get("coverage") ?? "";
@@ -177,7 +196,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
       offset: (page - 1) * PAGE_SIZE,
       ...(query && { q: query }),
       ...(cat && { category: cat }),
-      ...(model && { monetization: model }),
+      ...(price && { price }),
       ...(coverage && { coverage }),
       ...(firstSeen && { firstSeenDays: firstSeen }),
       ...(signal === "ads30" && { minObservedAdDays: 30 }),
@@ -186,7 +205,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
       ...(signal === "changed" && { changedDays: 7 }),
       ...(sort && { sort, dir }),
     };
-  }, [query, cat, model, coverage, added, preset, signal, sort, dir, page]);
+  }, [query, cat, price, coverage, added, preset, signal, sort, dir, page]);
   const remote = useQuery((abort) => fetchRadar(params, abort), [JSON.stringify(params)], scope === "radar");
 
   // Saved and history are short lists the session already holds.
@@ -195,7 +214,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
     const needle = q.trim().toLowerCase();
     const pool = scope === "saved" ? s.saved : s.history;
     const out = pool.filter((p) =>
-      (!cat || p.category === cat) && (!model || p.monetization === model) && (!coverage || p.coverage === coverage) &&
+      (!cat || p.category === cat) && (price !== "free" || hasFree(p)) && (price !== "paid_only" || paidOnly(p)) && (!coverage || p.coverage === coverage) &&
       (!added || (!!p.first_seen && Date.now() - Date.parse(p.first_seen) <= Number(added) * DAY)) &&
       (signal !== "ads30" || (p.longest_ad_days ?? 0) >= 30) &&
       (signal !== "sponsored" || (p.sponsors ?? 0) > 0) &&
@@ -211,7 +230,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
       if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
       return (x < y ? -1 : x > y ? 1 : 0) * sign;
     });
-  }, [scope, s.saved, s.history, s.changes, cat, model, signal, added, coverage, q, sort, dir]);
+  }, [scope, s.saved, s.history, s.changes, cat, price, signal, added, coverage, q, sort, dir]);
 
   const total = scope === "radar" ? remote.data?.total ?? 0 : local.length;
   const rows = useMemo(() => (scope === "radar" ? remote.data?.items ?? [] : local.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)), [scope, remote.data, local, page]);
@@ -261,7 +280,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const chips = [
     q && { label: `Search: ${q}`, key: "q" },
     cat && { label: `Category: ${CATEGORY_LABEL[cat as Category] ?? cat}`, key: "cat" },
-    model && { label: `Monetization: ${MODEL_LABEL[model as Model] ?? model}`, key: "model" },
+    price && { label: PRICES.find((x) => x.value === price)?.label ?? price, key: "price" },
     signal && { label: SIGNALS.find((x) => x.value === signal)?.label ?? signal, key: "signal" },
     added && { label: ADDED.find((x) => x.value === added)?.label ?? added, key: "added" },
     coverage && { label: COVERAGE.find((x) => x.value === coverage)?.label ?? coverage, key: "coverage" },
@@ -307,7 +326,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
             <kbd className="hidden min-[1400px]:block">/</kbd>
           </label>
           <FilterMenu label="Category" value={cat} onChange={(v) => update({ cat: v || null })} options={[{ value: "", label: "All Categories" }, ...(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))]} />
-          <FilterMenu label="Monetization" value={model} onChange={(v) => update({ model: v || null })} options={[{ value: "", label: "All Monetization" }, ...(Object.keys(MODEL_LABEL) as Model[]).map((m) => ({ value: m, label: MODEL_LABEL[m] }))]} />
+          <FilterMenu label="Price" value={price} onChange={(v) => update({ price: v || null })} options={PRICES} />
           <FilterMenu label="Signals" value={signal} onChange={(v) => update({ signal: v || null })} options={SIGNALS} />
           <FilterMenu label="First seen" value={added} onChange={(v) => update({ added: v || null })} options={ADDED} />
           <FilterMenu label="Coverage" value={coverage} onChange={(v) => update({ coverage: v || null })} options={COVERAGE} />
@@ -355,7 +374,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
                 <SortHead id="traffic" sort={sort} dir={dir} onSort={onSort}><span title={TRAFFIC_TITLE}>Traffic</span></SortHead>
                 <SortHead id="ads" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">Ads</span><span className="hidden md:inline">Active ads</span></SortHead>
                 <SortHead id="sponsors" sort={sort} dir={dir} onSort={onSort} className="col-yt">Sponsors</SortHead>
-                <span className="col-mon">Monetization</span>
+                <span className="col-mon" title={PRICE_TITLE}>Price</span>
                 <SortHead id="first" sort={sort} dir={dir} onSort={onSort} className="col-first">First seen</SortHead>
                 <SortHead id="seen" sort={sort} dir={dir} onSort={onSort} className="col-seen">Last seen</SortHead>
                 <span />
