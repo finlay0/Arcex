@@ -113,6 +113,9 @@ const RADAR_SORT: Record<string, string> = {
   sponsors: "m.sponsors",
   first: "m.first_seen",
   seen: "m.last_seen",
+  // Negated rank, so the default descending order puts the most popular site first.
+  traffic:
+    "-(SELECT t.rank FROM traffic_ranks t WHERE t.product_id=p.id AND t.source='tranco' ORDER BY t.observed_on DESC LIMIT 1)",
 };
 catalog.get("/radar", async (c) => {
   const { limit, offset } = page(c);

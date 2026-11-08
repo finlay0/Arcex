@@ -48,7 +48,9 @@ app.use("*", async (c, next) => {
     "content-security-policy",
     "default-src 'none'; frame-ancestors 'none'",
   );
-  c.header("cache-control", "no-store");
+  // Routes that choose their own caching (versioned icons) keep it; everything else is no-store.
+  if (!c.res.headers.has("cache-control"))
+    c.header("cache-control", "no-store");
 });
 app.use(
   "*",
