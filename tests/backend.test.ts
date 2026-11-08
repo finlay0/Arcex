@@ -1825,6 +1825,24 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         movers.items.map((i) => [i.slug, i.change]),
         [["mover-live", 1]],
       );
+      // Draft pricing never reaches the public Radar summary.
+      await env.DB.prepare(
+        "INSERT INTO pricing_snapshots(id,product_id,evidence_ids,offers,observed_at,created_at) VALUES ('draft-price',?,'[]',?,?,?)",
+      )
+        .bind(
+          ids[0],
+          JSON.stringify([
+            { name: "Pro", displayedPrice: "$9/mo", amount: "9", currency: "USD", interval: "month", limits: [], sourceUrl: "https://mover-live.com/pricing" },
+          ]),
+          new Date().toISOString(),
+          new Date().toISOString(),
+        )
+        .run();
+      const radar = await json<{ items: { slug: string; pricing: unknown }[] }>(
+        "GET",
+        "/api/v1/radar?limit=100",
+      );
+      assert.equal(radar.items.find((i) => i.slug === "mover-live")?.pricing, null);
     });
     await t.test(
       "daily traffic ranks are collector-only and dated today",

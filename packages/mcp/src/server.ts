@@ -156,7 +156,7 @@ export function createMcpServer(options: {
     "market_overview",
     {
       description:
-        "Cross-market view of published Arcex products: category and pricing-model mix, Tranco traffic tiers, the most common detected tech stack and app-store presence. Aggregates of public observations, not revenue or visitor counts.",
+        "Cross-market view of published Arcex products: category and pricing-model mix, Tranco traffic tiers, the most common detected tech stack, app-store presence, and how many list free, paid, usage-based or custom plans with a median USD entry price. Aggregates of public observations, not revenue or visitor counts.",
       inputSchema: { category: categoryInput },
     },
     async ({ category }) =>

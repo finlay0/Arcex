@@ -51,6 +51,56 @@ export function pricingResponse(row: Record<string, unknown> | undefined) {
       }
     : null;
 }
+/** Latest published pricing offers for the product aliased `p`, for list views. */
+export const LATEST_PRICING_OFFERS = `(SELECT pr.offers FROM pricing_snapshots pr WHERE pr.product_id=p.id AND ${PUBLISHED_PRICING} ORDER BY pr.observed_at DESC,pr.created_at DESC,pr.id DESC LIMIT 1)`;
+
+type StoredOffer = z.infer<typeof publicPricingInput>["offers"][number];
+export type PricingSummary = {
+  freePlan: boolean;
+  /** The cheapest paid monthly or yearly plan, as the page displays it. */
+  entry: {
+    name: string;
+    displayedPrice: string;
+    monthlyAmount: number;
+    currency: string | null;
+  } | null;
+  usageBased: boolean;
+  customTier: boolean;
+};
+
+/**
+ * Summarises observed offers without currency conversion: the entry plan is only
+ * compared against plans in the same stated currency (or the same unstated one).
+ */
+export function pricingSummary(offers: StoredOffer[]): PricingSummary {
+  const amount = (o: StoredOffer) => (o.amount === null ? null : Number(o.amount));
+  const recurring = offers
+    .filter((o) => (o.interval === "month" || o.interval === "year") && (amount(o) ?? 0) > 0)
+    .map((o) => ({
+      offer: o,
+      monthly: o.interval === "year" ? amount(o)! / 12 : amount(o)!,
+    }));
+  const currency = recurring[0]?.offer.currency ?? null;
+  const cheapest = recurring
+    .filter((r) => r.offer.currency === currency)
+    .sort((a, b) => a.monthly - b.monthly)[0];
+  return {
+    freePlan: offers.some((o) => o.interval === "free" || amount(o) === 0),
+    entry: cheapest
+      ? {
+          name: cheapest.offer.name,
+          displayedPrice: cheapest.offer.displayedPrice,
+          monthlyAmount: Math.round(cheapest.monthly * 100) / 100,
+          currency,
+        }
+      : null,
+    usageBased: offers.some((o) => o.interval === "usage"),
+    customTier: offers.some(
+      (o) => o.amount === null && (o.interval === "unknown" || o.interval === "month" || o.interval === "year"),
+    ),
+  };
+}
+
 export const publicPricing = new Hono<AppEnv>();
 publicPricing.get("/pricing/:slug", async (c) => {
   const product = await c.env.DB.prepare(

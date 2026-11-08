@@ -422,12 +422,12 @@ export const openapi = {
     "/auth/logout": { post: operation("Revoke current session", "user") },
     "/api/v1/radar": {
       get: operation(
-        "Published products; q, category, monetization, minObservedAdDays, limit, offset. Ad days are distinct approved observed dates per ad, not continuous delivery.",
+        "Published products; q, category, monetization, price (free|paid_only, from published pricing), minObservedAdDays, sort, limit, offset. Each row carries a pricing summary of its latest published pricing page. Ad days are distinct approved observed dates per ad, not continuous delivery.",
       ),
     },
     "/api/v1/market/overview": {
       get: operation(
-        "Cross-market aggregates of published products; optional category. Category and pricing-model mix, Tranco traffic tiers, detected stack and store presence. Not revenue or visitor counts.",
+        "Cross-market aggregates of published products; optional category. Category and pricing-model mix, Tranco traffic tiers, detected stack, store presence and observed plan types with a USD-only median entry price. Not revenue or visitor counts.",
       ),
     },
     "/api/v1/market/movers": {

@@ -8,7 +8,12 @@ import {
   flowHistory,
   flowVersion,
 } from "./flow-history";
-import { PUBLIC_PRICING_SELECT, pricingResponse } from "./public-pricing";
+import {
+  LATEST_PRICING_OFFERS,
+  PUBLIC_PRICING_SELECT,
+  pricingResponse,
+  pricingSummary,
+} from "./public-pricing";
 import { iconUrl } from "./icons";
 import { productTraffic, trafficTier } from "./traffic";
 import { audit, decode, fail, page, parse, rateLimit } from "./lib";
@@ -129,6 +134,13 @@ catalog.get("/radar", async (c) => {
     clauses.push("p.monetization=?");
     values.push(monetization.parse(c.req.query("monetization")));
   }
+  if (c.req.query("price")) {
+    // Reads the same published snapshot the row summary shows.
+    const free = `EXISTS (SELECT 1 FROM json_each(${LATEST_PRICING_OFFERS}) o WHERE json_extract(o.value,'$.interval')='free' OR (json_extract(o.value,'$.amount') IS NOT NULL AND CAST(json_extract(o.value,'$.amount') AS REAL)=0))`;
+    const paid = `EXISTS (SELECT 1 FROM json_each(${LATEST_PRICING_OFFERS}) o WHERE json_extract(o.value,'$.interval') IN ('month','year') AND CAST(json_extract(o.value,'$.amount') AS REAL)>0)`;
+    const price = z.enum(["free", "paid_only"]).parse(c.req.query("price"));
+    clauses.push(price === "free" ? free : `${paid} AND NOT ${free}`);
+  }
   if (c.req.query("minObservedAdDays") !== undefined) {
     const days = z.coerce
       .number()
@@ -202,6 +214,7 @@ catalog.get("/radar", async (c) => {
         (SELECT id FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published' LIMIT 1) IS NOT NULL AS has_blueprint,
         (SELECT pi.sha256 FROM product_icons pi WHERE pi.product_id=p.id AND pi.status='ok') AS icon_sha256,
         (SELECT json_object('rank',t.rank,'on',t.observed_on) FROM traffic_ranks t WHERE t.product_id=p.id AND t.source='tranco' ORDER BY t.observed_on DESC LIMIT 1) AS traffic_latest,
+        ${LATEST_PRICING_OFFERS} AS pricing_offers,
         (SELECT a.id FROM funnel_steps f JOIN evidence e ON e.id=f.evidence_id JOIN assets a ON a.id=f.asset_id AND a.evidence_id=e.id WHERE f.product_id=p.id AND p.coverage_level='full' AND e.status='approved' AND a.approved=1 AND a.thumbnail_key IS NOT NULL ORDER BY (f.stage='paywall') DESC,f.position DESC LIMIT 1) AS thumbnail_asset_id
        ${from} ORDER BY ${order} LIMIT ? OFFSET ?`,
     ).bind(...values, limit, offset),
@@ -225,6 +238,10 @@ catalog.get("/radar", async (c) => {
           )
         : null,
       traffic_latest: undefined,
+      pricing: row.pricing_offers
+        ? pricingSummary(decode(row.pricing_offers as string))
+        : null,
+      pricing_offers: undefined,
       icon_url: iconUrl(
         c.env.API_ORIGIN,
         String(row.id),

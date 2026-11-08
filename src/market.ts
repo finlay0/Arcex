@@ -3,6 +3,8 @@ import { z } from "zod";
 import type { AppEnv } from "./types";
 import { category } from "./contracts";
 import { TRAFFIC_MEANING, trafficTier } from "./traffic";
+import { decode } from "./lib";
+import { LATEST_PRICING_OFFERS, pricingSummary } from "./public-pricing";
 
 // Cross-market views over published products only. Every figure is an aggregate of public
 // observations (site popularity rank, detected client-side technology, public store
@@ -37,7 +39,7 @@ const scopeArgs = (cat?: string) => (cat ? [cat] : []);
 
 export async function marketOverview(db: D1Database, cat?: string) {
   const where = "p.status='published'" + scopeSql(cat);
-  const [mix, ranks, stack, stores] = await db.batch([
+  const [mix, ranks, stack, stores, prices] = await db.batch([
     db
       .prepare(
         `SELECT p.category,p.monetization,count(*) n FROM products p WHERE ${where} GROUP BY 1,2`,
@@ -62,6 +64,11 @@ export async function marketOverview(db: D1Database, cat?: string) {
          WHERE ${where} AND s.enabled=1 GROUP BY 1 ORDER BY n DESC`,
       )
       .bind(...scopeArgs(cat)),
+    db
+      .prepare(
+        `SELECT offers FROM (SELECT ${LATEST_PRICING_OFFERS} offers FROM products p WHERE ${where}) WHERE offers IS NOT NULL`,
+      )
+      .bind(...scopeArgs(cat)),
   ]);
   const mixRows = mix.results as {
     category: string;
@@ -84,6 +91,14 @@ export async function marketOverview(db: D1Database, cat?: string) {
     acc[tier] = (acc[tier] ?? 0) + 1;
     return acc;
   }, {});
+  const summaries = (prices.results as { offers: string }[]).map((row) =>
+    pricingSummary(decode(row.offers)),
+  );
+  const share = (n: number) => n / Math.max(summaries.length, 1);
+  const usdEntries = summaries
+    .map((s) => (s.entry?.currency === "USD" ? s.entry.monthlyAmount : null))
+    .filter((n): n is number => n !== null)
+    .sort((a, b) => a - b);
   return {
     scope: { category: cat ?? null, products },
     note:
@@ -114,6 +129,21 @@ export async function marketOverview(db: D1Database, cat?: string) {
       })),
     },
     stores: stores.results as { store: string; n: number }[],
+    pricing: {
+      meaning:
+        "Shares of products with published pricing whose public pricing page lists each kind of plan. Entry price is the cheapest paid monthly or yearly plan per month; the median uses only plans that state USD, with no currency conversion.",
+      products: summaries.length,
+      freePlan: share(summaries.filter((s) => s.freePlan).length),
+      paidPlan: share(summaries.filter((s) => s.entry).length),
+      usageBased: share(summaries.filter((s) => s.usageBased).length),
+      customTier: share(summaries.filter((s) => s.customTier).length),
+      medianEntryUsd: usdEntries.length
+        ? {
+            monthly: usdEntries[Math.floor((usdEntries.length - 1) / 2)],
+            basis: usdEntries.length,
+          }
+        : null,
+    },
   };
 }
 
