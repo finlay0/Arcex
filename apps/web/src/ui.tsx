@@ -128,7 +128,7 @@ export function FilterMenu({ label, options, value, onChange }: { label: string;
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <DropdownMenu.Root modal={false}>
-      <DropdownMenu.Trigger aria-label={label} className="facet-frame flex h-11 shrink-0 items-center gap-1.5 px-3 text-[13px] text-t1 outline-none">
+      <DropdownMenu.Trigger aria-label={label} className="field flex h-11 shrink-0 items-center gap-1.5 px-3 text-[13px] text-t1 outline-none">
         {current.label}<ChevronDown className="size-3.5 text-t2" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -232,7 +232,7 @@ export function PageHeading({ title, sub, children }: { title: string; sub: stri
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="glow-text font-display text-[30px] font-semibold leading-[36px] tracking-[-0.03em] md:text-[34px] md:leading-[40px]">{title}</h1>
+        <h1 className="font-display text-[30px] font-semibold leading-[36px] tracking-[-0.03em] md:text-[34px] md:leading-[40px]">{title}</h1>
         <p className="mt-1.5 text-[15px] leading-[22px] text-t2">{sub}</p>
       </div>
       {children}

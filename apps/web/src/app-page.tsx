@@ -615,8 +615,8 @@ export function AppPage() {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-3 px-4 pt-5 lg:px-6">
         <button onClick={back} className="flex items-center gap-1.5 text-t2 hover:text-t1"><ArrowLeft className="size-4" />Radar</button>
         <span className="ml-auto flex items-center gap-1 lg:order-last lg:ml-0">
-          <button aria-label="Previous app" disabled={!prevApp} onClick={() => goApp(prevApp)} className="facet-frame flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronLeft className="size-4" /></button>
-          <button aria-label="Next app" disabled={!nextApp} onClick={() => goApp(nextApp)} className="facet-frame flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronRight className="size-4" /></button>
+          <button aria-label="Previous app" disabled={!prevApp} onClick={() => goApp(prevApp)} className="field flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronLeft className="size-4" /></button>
+          <button aria-label="Next app" disabled={!nextApp} onClick={() => goApp(nextApp)} className="field flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronRight className="size-4" /></button>
         </span>
         <div className="flex w-full min-w-0 items-center gap-3 lg:w-auto lg:flex-1">
           <ProductIcon p={p} size={48} />

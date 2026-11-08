@@ -320,7 +320,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           </div>
         )}
         <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
-          <label className="facet-frame flex h-11 min-w-[160px] flex-1 items-center gap-2 px-3">
+          <label className="field flex h-11 min-w-[160px] flex-1 items-center gap-2 px-3">
             <Search className="size-4 shrink-0 text-t2" />
             <input id="radar-search" aria-label="Search products" maxLength={120} value={q} onChange={(e) => update({ q: e.target.value || null })} placeholder="Search products..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             <kbd className="hidden min-[1400px]:block">/</kbd>
@@ -346,7 +346,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           )}
         </div>
 
-        <div ref={tableRef} className="panel arc-edge mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
+        <div ref={tableRef} className="panel mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
           {lockedList ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-t2">Sign in to keep your saved products here.</div>
@@ -366,7 +366,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
             </div>
           ) : (
             <div className={remote.loading ? "opacity-60 transition-opacity" : ""}>
-              <div className="radar-grid radar-head eyebrow sticky top-0 z-10 border-b border-line bg-[#0a1120]/90 px-4 pb-3 pt-3 backdrop-blur-md">
+              <div className="radar-grid radar-head eyebrow sticky top-0 z-10 border-b border-line bg-s1/90 px-4 pb-3 pt-3 backdrop-blur-md">
                 <span>Product</span>
                 <span className="col-thumb">Screens</span>
                 <span className="col-cat">Category</span>

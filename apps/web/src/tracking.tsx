@@ -109,7 +109,7 @@ export function Tracking() {
               <h2 className={CARD_TITLE}>Competitors</h2>
               <span className="num text-[13px] text-t2">{s.insider ? `${s.watches.length} tracked` : `${s.watches.length} of ${FREE_WATCHES} free`}</span>
             </div>
-            <label className="facet-frame mt-3 flex h-11 items-center gap-2 px-3">
+            <label className="field mt-3 flex h-11 items-center gap-2 px-3">
               <Search className="size-4 shrink-0 text-t2" />
               <input aria-label="Find a product to track" maxLength={120} value={text} onChange={(e) => setText(e.target.value)} placeholder="Find a product to track..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             </label>

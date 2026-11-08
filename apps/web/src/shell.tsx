@@ -308,7 +308,7 @@ function AccountMenu() {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button aria-label="Account menu" aria-expanded={open} className="facet-frame flex size-10 items-center justify-center" onClick={() => setOpen(!open)}><CircleUser className="size-[18px]" /></button>
+      <button aria-label="Account menu" aria-expanded={open} className="field flex size-10 items-center justify-center" onClick={() => setOpen(!open)}><CircleUser className="size-[18px]" /></button>
       {open && (
         <div className="fade-in absolute right-0 top-12 z-50 w-56 rounded-xl border border-line-strong bg-s2 p-1 shadow-2xl" onMouseLeave={() => setOpen(false)}>
           {s.userName && <div className="truncate px-3 pt-2 font-medium">{s.userName}</div>}
@@ -327,41 +327,10 @@ function SoonItem({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Icon className="size-[18px]" />{label}<span className="eyebrow ml-auto bg-s3 px-1.5 py-0.5 text-[9.5px] leading-[14px] text-t3 [clip-path:var(--facet-xs)]">Soon</span></span>
+        <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Icon className="size-[18px]" />{label}<span className="eyebrow ml-auto bg-s3 px-1.5 py-0.5 text-[9.5px] leading-[14px] text-t3 rounded">Soon</span></span>
       </TooltipTrigger>
       <TooltipContent>{label} is coming soon</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** The brand's light arcs, fixed behind the app at low strength so data stays readable. */
-function BackdropArcs() {
-  return (
-    <svg aria-hidden="true" className="backdrop-arcs" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="arc-a" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stopColor="#5ea6ff" stopOpacity="0" />
-          <stop offset=".45" stopColor="#5ea6ff" stopOpacity=".55" />
-          <stop offset=".62" stopColor="#d6e6ff" stopOpacity=".7" />
-          <stop offset="1" stopColor="#5ea6ff" stopOpacity="0" />
-        </linearGradient>
-        <linearGradient id="arc-b" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stopColor="#5ea6ff" stopOpacity="0" />
-          <stop offset=".5" stopColor="#5ea6ff" stopOpacity=".45" />
-          <stop offset=".7" stopColor="#cfe0ff" stopOpacity=".55" />
-          <stop offset="1" stopColor="#5ea6ff" stopOpacity="0" />
-        </linearGradient>
-        <filter id="arc-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="6" /></filter>
-      </defs>
-      <g opacity=".85">
-        <path d="M-80 520 C 260 300, 640 120, 1240 -40" stroke="url(#arc-a)" strokeWidth="6" fill="none" filter="url(#arc-glow)" />
-        <path d="M-80 520 C 260 300, 640 120, 1240 -40" stroke="url(#arc-a)" strokeWidth="1.2" fill="none" />
-        <path d="M-60 330 C 200 200, 420 110, 760 -30" stroke="url(#arc-b)" strokeWidth=".8" fill="none" opacity=".6" />
-        <path d="M480 1060 C 900 860, 1280 760, 1680 700" stroke="url(#arc-b)" strokeWidth="6" fill="none" filter="url(#arc-glow)" />
-        <path d="M480 1060 C 900 860, 1280 760, 1680 700" stroke="url(#arc-b)" strokeWidth="1.2" fill="none" />
-        <path d="M900 1060 C 1180 900, 1420 820, 1680 790" stroke="url(#arc-a)" strokeWidth=".8" fill="none" opacity=".6" />
-      </g>
-    </svg>
   );
 }
 
@@ -382,7 +351,7 @@ function TopNav() {
         <NavLink to="/updates" className={item}><span className="relative">New{s.unseen.length > 0 && <span aria-label={`${s.unseen.length} unseen changes`} className="absolute -right-2 top-0 size-1.5 rounded-full bg-arc" />}</span></NavLink>
       </nav>
       <div className="flex items-center gap-2 justify-self-end">
-        <button onClick={s.openPalette} aria-label="Search" className="facet-frame hidden h-10 items-center gap-2.5 px-3 text-t2 transition-colors hover:text-t1 sm:flex lg:w-[150px]">
+        <button onClick={s.openPalette} aria-label="Search" className="field hidden h-10 items-center gap-2.5 px-3 text-t2 transition-colors hover:text-t1 sm:flex lg:w-[150px]">
           <Search className="size-4" /><kbd className="hidden lg:inline">⌘K</kbd>
         </button>
         <button onClick={s.openMcp} className="hidden h-10 items-center gap-2 rounded-xl px-3 font-medium text-t1 transition-colors hover:bg-s2 md:flex"><Cable className="size-4 text-t2" />MCP</button>
@@ -396,7 +365,7 @@ function RailLink({ to, icon: Icon, label, end, badge }: { to: string; icon: Luc
   return (
     <NavLink to={to} end={end} className={({ isActive }) => `flex h-11 items-center gap-3 rounded-xl px-3.5 text-[15px] transition-colors ${isActive ? "nav-on" : "text-t2 hover:bg-s1/70 hover:text-t1"}`}>
       <Icon className="size-[18px]" />{label}
-      {!!badge && <span aria-label={`${badge} unseen`} className="num ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-arc px-1.5 text-[11px] font-semibold text-canvas shadow-[0_0_10px_rgba(94,166,255,0.6)]">{badge}</span>}
+      {!!badge && <span aria-label={`${badge} unseen`} className="num ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-arc px-1.5 text-[11px] font-semibold text-canvas">{badge}</span>}
     </NavLink>
   );
 }
@@ -459,7 +428,6 @@ export function Shell() {
 
   return (
     <SessionProvider openers={openers} insiderOpen={insiderOpen}>
-      <BackdropArcs />
       <div className="relative z-[1]">
         <TopNav />
         <div className="flex">
