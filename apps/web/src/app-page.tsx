@@ -15,7 +15,7 @@ function Observed({ onReceipt, children }: { onReceipt?: () => void; children: R
   return (
     <section className="rounded-xl border border-line-strong bg-canvas p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h4 className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.05em] text-teal"><Eye className="size-3.5" />Observed</h4>
+        <h4 className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.05em] text-arc"><Eye className="size-3.5" />Observed</h4>
         {onReceipt && <button onClick={onReceipt} className="text-[12px] text-t2 underline underline-offset-2 hover:text-t1">View receipt</button>}
       </div>
       {children}
@@ -48,7 +48,7 @@ function Metric({ label, tag, children }: { label: string; tag?: string; childre
 
 function ThisWeek({ n }: { n: number | null }) {
   if (!n) return null;
-  return <span className={`text-[13px] font-normal ${n > 0 ? "text-teal" : "text-t3"}`}>{n > 0 ? "+" : ""}{n} this week</span>;
+  return <span className={`text-[13px] font-normal ${n > 0 ? "text-arc" : "text-t3"}`}>{n > 0 ? "+" : ""}{n} this week</span>;
 }
 
 function Overview({ p }: { p: Product }) {
@@ -88,12 +88,12 @@ function TrafficSection({ traffic }: { traffic?: Traffic }) {
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <span className="num text-[28px] font-semibold leading-[34px] tracking-[-0.02em]">{traffic.latest.rank === null ? "Outside top 1M" : `#${traffic.latest.rank.toLocaleString()}`}</span>
         <span className="pill">{TIER_LABEL[traffic.latest.tier] ?? traffic.latest.tier}</span>
-        {Math.abs(moved) >= 0.04 && <span className={`num text-[13px] font-medium ${moved > 0 ? "text-teal" : "text-t3"}`}>{moved > 0 ? "Up" : "Down"} from {compactRank(first.rank)} on {day(first.observed_on)}</span>}
+        {Math.abs(moved) >= 0.04 && <span className={`num text-[13px] font-medium ${moved > 0 ? "text-arc" : "text-t3"}`}>{moved > 0 ? "Up" : "Down"} from {compactRank(first.rank)} on {day(first.observed_on)}</span>}
         <span className="ml-auto text-[12px] text-t3">Tracked daily since {day(history[0].observed_on)}</span>
       </div>
       {points.length > 1 ? (
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-4 h-[120px] w-full" role="img" aria-label="Traffic rank over time">
-          <polyline points={points.map((x) => x.join(",")).join(" ")} fill="none" stroke="var(--color-teal)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+          <polyline points={points.map((x) => x.join(",")).join(" ")} fill="none" stroke="var(--color-arc)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         </svg>
       ) : (
         <p className="mt-3 text-[13px] text-t2">The chart fills in as daily ranks come in.</p>
@@ -139,8 +139,8 @@ function StageRail({ steps, index, go }: { steps: Step[]; index: number; go: (i:
           <div key={stage} className="flex min-w-fit flex-1 items-center">
             {si > 0 && <span className="h-px w-3 shrink-0 bg-line-strong md:flex-1" />}
             <button disabled={!idxs.length} onClick={() => go(on ? index : idxs[0])} aria-current={on ? "step" : undefined} className={`flex flex-col items-start gap-1 rounded-lg px-2.5 py-2 transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${on ? "bg-s2" : "hover:bg-s1"}`}>
-              <span className={`eyebrow flex items-center gap-1.5 whitespace-nowrap ${on ? "!text-t1" : ""} ${stage === "paywall" ? "!text-teal" : ""}`}><span className="num">{si + 1}</span>{STAGE_LABEL[stage]}</span>
-              <span className="flex h-2 items-center gap-1">{idxs.map((i) => <span key={i} className={`size-1.5 rounded-full ${i === index ? (stage === "paywall" ? "bg-teal" : "bg-t1") : "bg-t3/50"}`} />)}</span>
+              <span className={`eyebrow flex items-center gap-1.5 whitespace-nowrap ${on ? "!text-t1" : ""} ${stage === "paywall" ? "!text-arc" : ""}`}><span className="num">{si + 1}</span>{STAGE_LABEL[stage]}</span>
+              <span className="flex h-2 items-center gap-1">{idxs.map((i) => <span key={i} className={`size-1.5 rounded-full ${i === index ? (stage === "paywall" ? "bg-arc" : "bg-t1") : "bg-t3/50"}`} />)}</span>
             </button>
           </div>
         );
@@ -258,7 +258,7 @@ function Ads({ v, p }: { v: Vault; p: Product }) {
           const running = text(d.activity) === "active";
           return (
             <div key={latest.external_id} className="flex items-start gap-3 border-b border-line px-3 py-2.5 last:border-b-0">
-              <span title={running ? "Active when last checked" : "Not active when last checked"} className={`mt-1.5 size-1.5 shrink-0 rounded-full ${running ? "bg-teal" : "bg-t3"}`} />
+              <span title={running ? "Active when last checked" : "Not active when last checked"} className={`mt-1.5 size-1.5 shrink-0 rounded-full ${running ? "bg-arc" : "bg-t3"}`} />
               <div className="min-w-0 flex-1">
                 <div className="line-clamp-2 leading-[20px]">{text(d.creativeText) || text(d.advertiserName) || "Ad"}</div>
                 <div className="num mt-0.5 text-[12px] text-t3">{text(d.platform) === "google" ? "Google" : "Meta"} · seen on {days} {days === 1 ? "day" : "days"} · first {shortDate(first.observed_at)} · last {shortDate(latest.observed_at)}</div>
@@ -345,8 +345,8 @@ function BusinessModel({ v, p, locked, onSignIn }: { v: Vault; p: Product; locke
               {paywall.transitions.map((t, i) => (
                 <div key={i}>
                   {(i === 0 || paywall.transitions[i - 1].to !== t.from) && <div className="rounded-md border border-line-strong bg-s2 px-2.5 py-1.5 text-[13px]">{t.from}</div>}
-                  <div className="num ml-3 border-l border-teal/50 py-1.5 pl-3 text-[11px] text-t3">{t.trigger} ↓</div>
-                  <div className={`rounded-md border px-2.5 py-1.5 text-[13px] ${i === paywall.transitions.length - 1 ? "border-teal/60 bg-teal-dim" : "border-line-strong bg-s2"}`}>{t.to}</div>
+                  <div className="num ml-3 border-l border-arc/50 py-1.5 pl-3 text-[11px] text-t3">{t.trigger} ↓</div>
+                  <div className={`rounded-md border px-2.5 py-1.5 text-[13px] ${i === paywall.transitions.length - 1 ? "border-arc/60 bg-arc-dim" : "border-line-strong bg-s2"}`}>{t.to}</div>
                 </div>
               ))}
             </div>
@@ -452,7 +452,7 @@ function AgentDrawer({ p, blueprintId, onClose }: { p: Product; blueprintId: str
             </>
           )}
           <div className="eyebrow mb-2 mt-6">Or connect with MCP</div>
-          <button className="btn btn-ghost w-full" onClick={() => { copy(mcpPrompt(), "mcp"); s.setFirstRun({ mcp: true }); }}>{copied === "mcp" ? <><Check className="size-4 text-teal" />Copied. Paste it into your agent</> : "Copy connection instructions"}</button>
+          <button className="btn btn-ghost w-full" onClick={() => { copy(mcpPrompt(), "mcp"); s.setFirstRun({ mcp: true }); }}>{copied === "mcp" ? <><Check className="size-4 text-arc" />Copied. Paste it into your agent</> : "Copy connection instructions"}</button>
           <div className="mt-2"><CodeLine text={`Use Arcex to pull the ${p.name} blueprint`} id="pull" /></div>
         </div>
       </div>
@@ -615,15 +615,15 @@ export function AppPage() {
       <header className="flex flex-wrap items-center gap-x-3 gap-y-3 px-4 pt-5 lg:px-6">
         <button onClick={back} className="flex items-center gap-1.5 text-t2 hover:text-t1"><ArrowLeft className="size-4" />Radar</button>
         <span className="ml-auto flex items-center gap-1 lg:order-last lg:ml-0">
-          <button aria-label="Previous app" disabled={!prevApp} onClick={() => goApp(prevApp)} className="flex size-9 items-center justify-center rounded-lg border border-line-strong text-t2 hover:text-t1 disabled:opacity-40"><ChevronLeft className="size-4" /></button>
-          <button aria-label="Next app" disabled={!nextApp} onClick={() => goApp(nextApp)} className="flex size-9 items-center justify-center rounded-lg border border-line-strong text-t2 hover:text-t1 disabled:opacity-40"><ChevronRight className="size-4" /></button>
+          <button aria-label="Previous app" disabled={!prevApp} onClick={() => goApp(prevApp)} className="facet-frame flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronLeft className="size-4" /></button>
+          <button aria-label="Next app" disabled={!nextApp} onClick={() => goApp(nextApp)} className="facet-frame flex size-9 items-center justify-center text-t2 hover:text-t1 disabled:opacity-40"><ChevronRight className="size-4" /></button>
         </span>
         <div className="flex w-full min-w-0 items-center gap-3 lg:w-auto lg:flex-1">
           <ProductIcon p={p} size={48} />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="font-display text-[28px] font-semibold leading-[34px] tracking-[-0.02em]">{p.name}</h1>
-              {openToAll && <span className="rounded bg-teal-dim px-1.5 py-0.5 text-[12px] text-teal">No sign-in</span>}
+              {openToAll && <span className="rounded bg-arc-dim px-1.5 py-0.5 text-[12px] text-arc">No sign-in</span>}
               <span className="pill">{CATEGORY_LABEL[p.category]}</span>
             </div>
             <div className="truncate text-t2"><a href={p.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-t3 hover:text-t1">{p.domain}<ArrowUpRight className="size-3" /></a></div>
@@ -631,7 +631,7 @@ export function AppPage() {
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
           <button aria-pressed={saved} onClick={() => (s.signedIn ? s.toggleSave(p) : locked ? signIn() : s.openSignIn())} className="btn btn-ghost"><Bookmark className={`size-4 ${saved ? "fill-t1" : ""}`} />{saved ? "Saved" : "Save"}</button>
-          <button aria-pressed={watching} onClick={() => (s.signedIn ? s.toggleWatch(p) : locked ? signIn() : s.openSignIn())} className="btn btn-ghost"><Crosshair className={`size-4 ${watching ? "text-teal" : ""}`} />{watching ? "Tracking" : "Track"}</button>
+          <button aria-pressed={watching} onClick={() => (s.signedIn ? s.toggleWatch(p) : locked ? signIn() : s.openSignIn())} className="btn btn-ghost"><Crosshair className={`size-4 ${watching ? "text-arc" : ""}`} />{watching ? "Tracking" : "Track"}</button>
           {full && (locked || blueprintId) && <button onClick={openAgent} className="btn btn-primary"><Zap className="size-4" />Send to my agent</button>}
         </div>
       </header>

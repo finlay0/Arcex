@@ -49,7 +49,7 @@ export function CodeLine({ text, id, onCopy }: { text: string; id?: string; onCo
   const { copied, copy } = useCopy();
   return (
     <button onClick={() => { copy(text, id); onCopy?.(); }} className="group flex w-full items-center justify-between gap-3 rounded-[10px] border border-line-strong bg-canvas px-3 py-2.5 text-left hover:bg-s2">
-      <code className="min-w-0 truncate font-mono text-[13px]"><span className="text-teal">$ </span>{text}</code>
+      <code className="min-w-0 truncate font-mono text-[13px]"><span className="text-arc">$ </span>{text}</code>
       <span className="eyebrow shrink-0 group-hover:text-t1">{copied ? "Copied" : "Copy"}</span>
     </button>
   );
@@ -68,7 +68,7 @@ export function CopyBlock({ text, label = "Copy", onCopy }: { text: string; labe
 export function Confidence({ level }: { level: number }) {
   return (
     <span className="inline-flex gap-[3px]" role="img" aria-label={`Confidence ${level} of 4`} title={`Confidence: ${level} of 4`}>
-      {[1, 2, 3, 4].map((i) => <span key={i} className={`size-[5px] rounded-full ${i <= level ? "bg-teal" : "bg-s3"}`} />)}
+      {[1, 2, 3, 4].map((i) => <span key={i} className={`size-[5px] rounded-full ${i <= level ? "bg-arc" : "bg-s3"}`} />)}
     </span>
   );
 }
@@ -84,7 +84,7 @@ export function Sparkline({ data }: { data: (number | null)[] }) {
     if (d === null) runs.push([]);
     else runs[runs.length - 1].push([(i / (data.length - 1)) * 54 + 1, 17 - ((d - min) / range) * 16]);
   });
-  const color = known[known.length - 1] >= known[0] ? "var(--color-teal)" : "var(--color-t3)";
+  const color = known[known.length - 1] >= known[0] ? "var(--color-arc)" : "var(--color-t3)";
   return (
     <svg width="56" height="18" viewBox="0 0 56 18" aria-hidden>
       {runs.map((run, i) => run.length === 1
@@ -97,7 +97,7 @@ export function Sparkline({ data }: { data: (number | null)[] }) {
 /** Change in observed ads and creators. Not product or business growth. */
 export function GrowthValue({ value }: { value: number | null }) {
   if (value === null) return <span title="Not enough comparable scans yet" className="num text-[13px] text-t3">{DASH}</span>;
-  return <span className={`num text-[13px] font-medium ${value > 0 ? "text-teal" : value < 0 ? "text-t3" : "text-t2"}`}>{value > 0 ? "+" : ""}{value}%</span>;
+  return <span className={`num text-[13px] font-medium ${value > 0 ? "text-arc" : value < 0 ? "text-t3" : "text-t2"}`}>{value > 0 ? "+" : ""}{value}%</span>;
 }
 
 const iconHue = (name: string) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
@@ -128,14 +128,14 @@ export function FilterMenu({ label, options, value, onChange }: { label: string;
   const current = options.find((o) => o.value === value) ?? options[0];
   return (
     <DropdownMenu.Root modal={false}>
-      <DropdownMenu.Trigger aria-label={label} className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl border border-line-strong bg-canvas px-3 text-[13px] text-t1 outline-none transition-colors hover:bg-s2 focus-visible:border-teal data-[state=open]:bg-s2">
+      <DropdownMenu.Trigger aria-label={label} className="facet-frame flex h-11 shrink-0 items-center gap-1.5 px-3 text-[13px] text-t1 outline-none">
         {current.label}<ChevronDown className="size-3.5 text-t2" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content align="start" sideOffset={6} className="fade-in z-50 min-w-[200px] rounded-xl border border-line-strong bg-s2 p-1 shadow-2xl">
           {options.map((o) => (
             <DropdownMenu.Item key={o.value} onSelect={() => onChange(o.value)} className="flex cursor-pointer items-center justify-between gap-4 rounded-lg px-2.5 py-2 text-[13px] text-t2 outline-none data-[highlighted]:bg-s3 data-[highlighted]:text-t1">
-              {o.label}{o.value === value && <Check className="size-3.5 text-teal" />}
+              {o.label}{o.value === value && <Check className="size-3.5 text-arc" />}
             </DropdownMenu.Item>
           ))}
         </DropdownMenu.Content>
@@ -158,13 +158,13 @@ export function GateModal({ product, screens, onClose }: { product?: { name: str
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="overflow-hidden rounded-2xl border-line-strong bg-s1 p-0 sm:max-w-[440px]" overlayClassName={OVERLAY}>
         <div className="p-6">
-          <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-teal">Arcex access // 100% free</div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-arc">Arcex access // 100% free</div>
           <DialogTitle className="mt-3 font-display text-[26px] font-semibold leading-[32px] tracking-[-0.02em]">
             {product ? `See ${screens ? `all ${screens} screens` : "everything"} inside ${product.name} & copy the Agent Blueprint.` : "Sign in to Arcex"}
           </DialogTitle>
           <DialogDescription className="sr-only">Sign in for free</DialogDescription>
           <ul className="mt-5 flex flex-col gap-2.5 text-t2">
-            {["Every screen from sign-up to paywall", "Ads, creators and sourced revenue ranges", "1-click blueprint for Claude and Cursor"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
+            {["Every screen from sign-up to paywall", "Ads, creators and sourced revenue ranges", "1-click blueprint for Claude and Cursor"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-arc" />{x}</li>)}
           </ul>
           {inApp && (
             <div className="mt-5 rounded-xl border border-line-strong bg-s2 p-3 text-[13px] leading-[19px] text-t2">
@@ -206,11 +206,11 @@ export function InsiderModal({ onSubscribe, onClose }: { onSubscribe: () => Prom
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="rounded-2xl border-line-strong bg-s1 sm:max-w-[440px]" overlayClassName={OVERLAY}>
-        <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-teal">Arcex Insider</div>
+        <div className="text-[11px] font-medium uppercase tracking-[0.05em] text-arc">Arcex Insider</div>
         <DialogTitle className="font-display text-[26px] font-semibold leading-[32px] tracking-[-0.02em]">No daily limits. {INSIDER_PRICE}.</DialogTitle>
         <DialogDescription className="text-t2">Arcex stays free. Insider is for when {DAILY_LIMIT} a day isn't enough.</DialogDescription>
         <ul className="flex flex-col gap-2.5 text-t2">
-          {["Unlimited apps", "Unlimited blueprint pulls over MCP", "Unlimited tracking with email alerts", "Priority on full-breakdown requests"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-teal" />{x}</li>)}
+          {["Unlimited apps", "Unlimited blueprint pulls over MCP", "Unlimited tracking with email alerts", "Priority on full-breakdown requests"].map((x) => <li key={x} className="flex items-center gap-2.5"><Check className="size-4 shrink-0 text-arc" />{x}</li>)}
         </ul>
         <button disabled={busy} className="btn btn-primary h-11 w-full disabled:opacity-60" onClick={() => { setBusy(true); void onSubscribe().finally(() => setBusy(false)); }}>{busy ? "Opening checkout..." : "Go Insider"}</button>
       </DialogContent>
@@ -232,7 +232,7 @@ export function PageHeading({ title, sub, children }: { title: string; sub: stri
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="font-display text-[30px] font-semibold leading-[36px] tracking-[-0.025em] md:text-[34px] md:leading-[40px]">{title}</h1>
+        <h1 className="glow-text font-display text-[30px] font-semibold leading-[36px] tracking-[-0.03em] md:text-[34px] md:leading-[40px]">{title}</h1>
         <p className="mt-1.5 text-[15px] leading-[22px] text-t2">{sub}</p>
       </div>
       {children}

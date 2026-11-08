@@ -37,7 +37,7 @@ function ApiKeys() {
   return (
     <>
       <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-        <input required maxLength={100} aria-label="Key name" placeholder="Key name, like My laptop" value={name} onChange={(e) => setName(e.target.value)} className="h-[38px] min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 outline-none focus:border-teal" />
+        <input required maxLength={100} aria-label="Key name" placeholder="Key name, like My laptop" value={name} onChange={(e) => setName(e.target.value)} className="h-[38px] min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 outline-none focus:border-arc" />
         <button className="btn btn-primary">Create key</button>
       </form>
       {keys.error ? <p className="mt-2 text-[13px] text-t2">{errorMessage(keys.error)}</p> : null}
@@ -91,7 +91,7 @@ export function Developers() {
                   <div className="eyebrow mb-1">{x.label}</div>
                   <button onClick={() => copy(x.text, x.label)} className="group flex w-full items-start justify-between gap-3 rounded-[10px] border border-line-strong bg-canvas p-3 text-left hover:bg-s2">
                     <code className="min-w-0 whitespace-pre-wrap break-all font-mono text-[12px] leading-[18px] text-t2">{x.text}</code>
-                    <span className="eyebrow flex shrink-0 items-center gap-1 group-hover:text-t1">{copied === x.label ? <><Check className="size-3 text-teal" />Copied</> : "Copy"}</span>
+                    <span className="eyebrow flex shrink-0 items-center gap-1 group-hover:text-t1">{copied === x.label ? <><Check className="size-3 text-arc" />Copied</> : "Copy"}</span>
                   </button>
                 </div>
               ))}

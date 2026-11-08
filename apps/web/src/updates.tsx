@@ -31,7 +31,7 @@ export function Updates() {
                 <button key={c.id} onClick={() => openProduct(c.slug)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-s2">
                   <ProductIcon p={c} />
                   <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 font-medium">{c.name}{fresh.has(c.id) && <span title="New since your last visit" className="size-1.5 shrink-0 rounded-full bg-teal" />}</span>
+                    <span className="flex items-center gap-1.5 font-medium">{c.name}{fresh.has(c.id) && <span title="New since your last visit" className="size-1.5 shrink-0 rounded-full bg-arc" />}</span>
                     <span className="block text-[13px] leading-[18px] text-t2">{c.summary}</span>
                   </span>
                   <span className="pill hidden sm:inline-flex">{CHANGE_LABEL[c.kind] ?? c.kind}</span>

@@ -11,42 +11,49 @@
   /* Page and modal headings. Point this at the serif to try it. */
   --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
 
-  --color-canvas: #000000;
-  --color-s1: #0a0b0d;
-  --color-s2: #131519;
-  --color-s3: #1b1e23;
-  --color-line: rgba(255, 255, 255, 0.08);
-  --color-line-strong: rgba(255, 255, 255, 0.14);
-  --color-t1: #f4f5f6;
-  --color-t2: #a3a7ae;
-  --color-t3: #767a82;
-  --color-teal: #2dd4bf;
-  --color-teal-dim: rgba(45, 212, 191, 0.07);
-  --color-ads: #2dd4bf;
-  --color-creator: #a3a7ae;
+  /* Deep-space navy surfaces and the electric arc blue from the brand banners. */
+  --color-canvas: #03050a;
+  --color-s1: #070b14;
+  --color-s2: #0c1220;
+  --color-s3: #131b2c;
+  --color-line: rgba(150, 180, 255, 0.09);
+  --color-line-strong: rgba(150, 180, 255, 0.17);
+  --color-t1: #edf2fa;
+  --color-t2: #9aa6ba;
+  --color-t3: #6c788d;
+  --color-arc: #5ea6ff;
+  --color-arc-dim: rgba(94, 166, 255, 0.1);
+  --color-glow: #2c6bff;
+  --color-ads: #5ea6ff;
+  --color-creator: #9aa6ba;
 
   /* shadcn tokens mapped to Arcex surfaces */
-  --color-background: #000000;
-  --color-foreground: #f4f5f6;
-  --color-popover: #131519;
-  --color-popover-foreground: #f4f5f6;
-  --color-muted: #131519;
-  --color-muted-foreground: #a3a7ae;
-  --color-accent: #1b1e23;
-  --color-accent-foreground: #f4f5f6;
-  --color-border: rgba(255, 255, 255, 0.08);
-  --color-input: rgba(255, 255, 255, 0.14);
-  --color-ring: #2dd4bf;
-  --color-primary: #f4f5f6;
-  --color-primary-foreground: #000000;
-  --color-secondary: #131519;
-  --color-secondary-foreground: #f4f5f6;
+  --color-background: #03050a;
+  --color-foreground: #edf2fa;
+  --color-popover: #0c1220;
+  --color-popover-foreground: #edf2fa;
+  --color-muted: #0c1220;
+  --color-muted-foreground: #9aa6ba;
+  --color-accent: #131b2c;
+  --color-accent-foreground: #edf2fa;
+  --color-border: rgba(150, 180, 255, 0.09);
+  --color-input: rgba(150, 180, 255, 0.17);
+  --color-ring: #5ea6ff;
+  --color-primary: #edf2fa;
+  --color-primary-foreground: #03050a;
+  --color-secondary: #0c1220;
+  --color-secondary-foreground: #edf2fa;
 }
 
 html, body, #root { min-height: 100%; }
 body {
   margin: 0;
-  background: var(--color-canvas);
+  /* Two soft light sources at opposite corners, as in the brand banners. */
+  background:
+    radial-gradient(1100px 620px at -8% -14%, rgba(44, 107, 255, 0.16), transparent 62%),
+    radial-gradient(900px 560px at 108% 112%, rgba(44, 107, 255, 0.12), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
   color: var(--color-t1);
   font-family: var(--font-sans);
   font-size: 14px;
@@ -56,26 +63,68 @@ body {
 @layer base {
   *, ::before, ::after { border-color: var(--color-line); }
   button { cursor: pointer; }
-  kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 5px; border-radius: 5px; background: var(--color-s3); color: var(--color-t2); }
+  kbd { font-family: var(--font-mono); font-size: 11px; padding: 1px 6px; background: var(--color-s3); color: var(--color-t2); clip-path: var(--facet-xs); }
 }
-:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
-::selection { background: var(--color-teal); color: #000; }
+:focus-visible { outline: 2px solid var(--color-arc); outline-offset: 2px; }
+::selection { background: rgba(94, 166, 255, 0.35); color: #fff; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--color-s3); border-radius: 8px; border: 2px solid var(--color-canvas); }
+::-webkit-scrollbar-thumb { background: var(--color-s3); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
 
 @layer components {
 .num { font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
-.eyebrow { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--color-t2); }
-.panel { background: var(--color-s1); border: 1px solid var(--color-line); }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; font-weight: 500; transition: background .1s, border-color .1s, color .1s; white-space: nowrap; }
-.btn-primary { background: var(--color-t1); color: #000; }
+.eyebrow { font-family: var(--font-mono); font-size: 10.5px; line-height: 16px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-t2); }
+
+/* Faceted corners echo the cut shards of the mark: top-left and bottom-right are chamfered. */
+:root {
+  --facet-xs: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+  --facet-sm: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  --facet-md: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+  --facet-in-sm: polygon(6.6px 0, 100% 0, 100% calc(100% - 6.6px), calc(100% - 6.6px) 100%, 0 100%, 0 6.6px);
+}
+.facet { clip-path: var(--facet-sm); border-radius: 0 !important; }
+/* A faceted outline: the element paints the edge, ::before paints the fill 1px inside it. */
+.facet-frame { position: relative; isolation: isolate; clip-path: var(--facet-sm); border-radius: 0 !important; border: 0 !important; background: var(--frame, var(--color-line-strong)) !important; }
+.facet-frame::before { content: ""; position: absolute; inset: 1px; z-index: -1; clip-path: var(--facet-in-sm); background: var(--fill, var(--color-canvas)); transition: background .12s; }
+.facet-frame:hover::before, .facet-frame[data-state="open"]::before { background: var(--fill-hover, var(--color-s2)); }
+.facet-frame:focus-within, .facet-frame:focus-visible, .facet-frame[data-state="open"] { --frame: rgba(94, 166, 255, 0.7); }
+label.facet-frame:hover::before { background: var(--fill, var(--color-canvas)); }
+
+/* Radar rows light up with a faint arc wash and a lit left edge. */
+.radar-row { position: relative; }
+.radar-row:hover, .radar-row:focus-visible { background: linear-gradient(90deg, rgba(94, 166, 255, 0.09), rgba(94, 166, 255, 0.02) 60%, transparent); outline: none; }
+.radar-row:hover::before, .radar-row:focus-visible::before { content: ""; position: absolute; left: 0; top: 22%; bottom: 22%; width: 2px; background: var(--color-arc); box-shadow: 0 0 8px var(--color-arc); }
+
+.panel {
+  background: linear-gradient(180deg, rgba(20, 30, 52, 0.55), rgba(7, 11, 20, 0.82) 140px), var(--color-s1);
+  border: 1px solid var(--color-line);
+  box-shadow: inset 0 1px 0 rgba(170, 200, 255, 0.07), 0 20px 50px -30px rgba(0, 0, 0, 0.9);
+}
+/* A thin light arc along a top edge, like light catching a shard. */
+.panel.arc-edge {
+  border-top-color: transparent;
+  background:
+    linear-gradient(90deg, transparent 6%, rgba(94, 166, 255, 0.5) 40%, rgba(220, 234, 255, 0.95) 60%, rgba(94, 166, 255, 0.4) 72%, transparent 86%) top / 100% 1px no-repeat,
+    radial-gradient(420px 60px at 58% 0, rgba(94, 166, 255, 0.12), transparent 70%) top / 100% 80px no-repeat,
+    linear-gradient(180deg, rgba(20, 30, 52, 0.55), rgba(7, 11, 20, 0.82) 140px), var(--color-s1);
+  background-origin: border-box;
+}
+.glow-text { background: linear-gradient(180deg, #ffffff 30%, #b9cdf0); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 0; clip-path: var(--facet-sm); font-weight: 500; transition: background .12s, box-shadow .12s, color .12s, filter .12s; white-space: nowrap; }
+.btn-primary { background: linear-gradient(180deg, #ffffff, #d6e4ff); color: #03050a; }
 .btn-primary:hover { background: #fff; }
-.btn-ghost { border: 1px solid var(--color-line-strong); color: var(--color-t1); }
-.btn-ghost:hover { background: var(--color-s2); }
-.chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--color-line); color: var(--color-t2); font-size: 13px; white-space: nowrap; transition: background .1s, color .1s, border-color .1s; }
+.btn-ghost { --fill: var(--color-canvas); position: relative; isolation: isolate; background: var(--color-line-strong); color: var(--color-t1); }
+.btn-ghost::before { content: ""; position: absolute; inset: 1px; z-index: -1; clip-path: var(--facet-in-sm); background: var(--fill); transition: background .12s; }
+.btn-ghost:hover::before { background: var(--color-s2); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; clip-path: var(--facet-sm); background: var(--color-s1); color: var(--color-t2); font-size: 13px; white-space: nowrap; transition: background .1s, color .1s; }
 .chip:hover { color: var(--color-t1); background: var(--color-s2); }
-.chip[data-on="true"] { color: var(--color-t1); background: var(--color-s3); border-color: var(--color-line-strong); }
-.pill { display: inline-flex; align-items: center; max-width: 100%; height: 28px; padding: 0 10px; border-radius: 7px; background: var(--color-s2); font-size: 12px; color: var(--color-t1); }
+.chip[data-on="true"] { color: var(--color-t1); background: var(--color-s3); }
+.pill { display: inline-flex; align-items: center; max-width: 100%; height: 26px; padding: 0 10px; clip-path: var(--facet-xs); background: var(--color-s3); font-size: 12px; color: var(--color-t1); }
+
+/* Active navigation: a lit facet with a short arc bar on the left. */
+.nav-on { position: relative; clip-path: var(--facet-sm); border-radius: 0 !important; background: linear-gradient(90deg, rgba(94, 166, 255, 0.16), rgba(94, 166, 255, 0.03) 70%) !important; color: var(--color-t1) !important; }
+.nav-on::before { content: ""; position: absolute; left: 0; top: 25%; bottom: 25%; width: 2px; background: var(--color-arc); box-shadow: 0 0 8px var(--color-arc); }
 
 /* Radar table columns. More appear as the screen gets wider. */
 .radar-grid { display: grid; align-items: center; column-gap: 12px; grid-template-columns: minmax(0, 1fr) 56px 44px 16px; }
@@ -97,7 +146,7 @@ body {
 }
 }
 
-.live-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--color-teal); box-shadow: 0 0 10px var(--color-teal); animation: pulse 2.4s ease-in-out infinite; }
+.live-dot { width: 8px; height: 8px; border-radius: 99px; background: var(--color-arc); box-shadow: 0 0 10px var(--color-glow), 0 0 3px var(--color-arc); animation: pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .45; } }
 .fade-in { animation: fadeIn .18s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
@@ -108,6 +157,10 @@ body {
 .drawer { animation: drawerIn .18s ease-out; }
 @keyframes drawerIn { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Fixed light arcs behind the app, drawn once and never interactive. */
+.backdrop-arcs { position: fixed; inset: 0; z-index: 0; pointer-events: none; width: 100%; height: 100%; }
+
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

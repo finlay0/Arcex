@@ -122,7 +122,7 @@ export function McpSetup({ onClose }: { onClose?: () => void }) {
           <div className="font-medium">Blueprints need a free key</div>
           <p className="mt-0.5 text-[13px] leading-[18px] text-t2">Search works without one. A key gives you {DAILY_LIMIT} blueprint pulls a day, and Insider is unlimited.</p>
           {key ? (
-            <p role="status" className="mt-2 flex items-start gap-2 text-[13px] leading-[18px] text-t2"><Check className="mt-px size-4 shrink-0 text-teal" />Your key is in the instructions above. It's only shown this once, so copy it now and keep it private, like a password.</p>
+            <p role="status" className="mt-2 flex items-start gap-2 text-[13px] leading-[18px] text-t2"><Check className="mt-px size-4 shrink-0 text-arc" />Your key is in the instructions above. It's only shown this once, so copy it now and keep it private, like a password.</p>
           ) : s.signedIn ? (
             <button disabled={busy} className="btn btn-ghost mt-2 w-full disabled:opacity-60" onClick={() => void createKey()}>{busy ? "Creating key..." : "Add my key to the instructions"}</button>
           ) : (
@@ -308,11 +308,11 @@ function AccountMenu() {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button aria-label="Account menu" aria-expanded={open} className="flex size-10 items-center justify-center rounded-xl border border-line-strong hover:bg-s2" onClick={() => setOpen(!open)}><CircleUser className="size-[18px]" /></button>
+      <button aria-label="Account menu" aria-expanded={open} className="facet-frame flex size-10 items-center justify-center" onClick={() => setOpen(!open)}><CircleUser className="size-[18px]" /></button>
       {open && (
         <div className="fade-in absolute right-0 top-12 z-50 w-56 rounded-xl border border-line-strong bg-s2 p-1 shadow-2xl" onMouseLeave={() => setOpen(false)}>
           {s.userName && <div className="truncate px-3 pt-2 font-medium">{s.userName}</div>}
-          <div className="px-3 py-2 text-t2">{s.insider ? <span className="text-teal">Insider: unlimited</span> : s.usage ? <><span className="num text-t1">{Math.min(s.usage.used, s.usage.limit)} of {s.usage.limit}</span> apps today</> : null}</div>
+          <div className="px-3 py-2 text-t2">{s.insider ? <span className="text-arc">Insider: unlimited</span> : s.usage ? <><span className="num text-t1">{Math.min(s.usage.used, s.usage.limit)} of {s.usage.limit}</span> apps today</> : null}</div>
           {s.insider
             ? <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { void s.portal(); setOpen(false); }}>Manage billing</button>
             : <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.openInsider(); setOpen(false); }}>Go Insider ({INSIDER_PRICE})</button>}
@@ -327,34 +327,66 @@ function SoonItem({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Icon className="size-[18px]" />{label}<span className="ml-auto rounded-md bg-s3 px-1.5 py-0.5 text-[12px] leading-[16px] text-t2">Soon</span></span>
+        <span tabIndex={0} aria-disabled="true" className="flex h-11 cursor-default items-center gap-3 rounded-xl px-3.5 text-[15px] text-t3"><Icon className="size-[18px]" />{label}<span className="eyebrow ml-auto bg-s3 px-1.5 py-0.5 text-[9.5px] leading-[14px] text-t3 [clip-path:var(--facet-xs)]">Soon</span></span>
       </TooltipTrigger>
       <TooltipContent>{label} is coming soon</TooltipContent>
     </Tooltip>
   );
 }
 
+/** The brand's light arcs, fixed behind the app at low strength so data stays readable. */
+function BackdropArcs() {
+  return (
+    <svg aria-hidden="true" className="backdrop-arcs" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="arc-a" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#5ea6ff" stopOpacity="0" />
+          <stop offset=".45" stopColor="#5ea6ff" stopOpacity=".55" />
+          <stop offset=".62" stopColor="#d6e6ff" stopOpacity=".7" />
+          <stop offset="1" stopColor="#5ea6ff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="arc-b" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor="#5ea6ff" stopOpacity="0" />
+          <stop offset=".5" stopColor="#5ea6ff" stopOpacity=".45" />
+          <stop offset=".7" stopColor="#cfe0ff" stopOpacity=".55" />
+          <stop offset="1" stopColor="#5ea6ff" stopOpacity="0" />
+        </linearGradient>
+        <filter id="arc-glow" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="6" /></filter>
+      </defs>
+      <g opacity=".85">
+        <path d="M-80 520 C 260 300, 640 120, 1240 -40" stroke="url(#arc-a)" strokeWidth="6" fill="none" filter="url(#arc-glow)" />
+        <path d="M-80 520 C 260 300, 640 120, 1240 -40" stroke="url(#arc-a)" strokeWidth="1.2" fill="none" />
+        <path d="M-60 330 C 200 200, 420 110, 760 -30" stroke="url(#arc-b)" strokeWidth=".8" fill="none" opacity=".6" />
+        <path d="M480 1060 C 900 860, 1280 760, 1680 700" stroke="url(#arc-b)" strokeWidth="6" fill="none" filter="url(#arc-glow)" />
+        <path d="M480 1060 C 900 860, 1280 760, 1680 700" stroke="url(#arc-b)" strokeWidth="1.2" fill="none" />
+        <path d="M900 1060 C 1180 900, 1420 820, 1680 790" stroke="url(#arc-a)" strokeWidth=".8" fill="none" opacity=".6" />
+      </g>
+    </svg>
+  );
+}
+
 function TopNav() {
   const s = useSession();
   const { pathname } = useLocation();
-  const item = ({ isActive }: { isActive: boolean }) => `flex h-10 items-center rounded-xl px-2.5 text-[15px] font-medium transition-colors md:px-5 ${isActive ? "bg-s3 text-t1" : "text-t2 hover:text-t1"}`;
+  const item = ({ isActive }: { isActive: boolean }) => `flex h-10 items-center rounded-xl px-2.5 text-[15px] font-medium transition-colors md:px-5 ${isActive ? "nav-on" : "text-t2 hover:text-t1"}`;
   return (
-    <header className="sticky top-0 z-40 grid h-[68px] grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-line bg-canvas px-4 lg:grid-cols-[1fr_auto_1fr] lg:px-6">
-      <Link to="/" aria-label="Arcex home" className="flex w-[46px] items-center justify-self-start overflow-hidden sm:w-auto">
-        <img src="/brand/arcex-logo.webp" alt="Arcex" width={172} height={48} className="h-9 w-auto max-w-none md:h-12" />
+    <header className="sticky top-0 z-40 grid h-[68px] grid-cols-[auto_1fr_auto] items-center gap-2 border-b border-line bg-canvas/70 px-4 backdrop-blur-xl lg:grid-cols-[1fr_auto_1fr] lg:px-6">
+      <Link to="/" aria-label="Arcex home" className="flex items-center justify-self-start">
+        <img src="/brand/arcex-icon.png" alt="Arcex" width={1024} height={991} className="h-8 w-auto sm:hidden" />
+        <img src="/brand/arcex-logo.png" alt="Arcex" width={2000} height={770} className="hidden h-10 w-auto sm:block" />
       </Link>
       {/* The rail carries navigation where it exists; this covers phones and the app page. */}
       <nav aria-label="Main" className={`flex items-center justify-self-center ${pathname.startsWith("/app/") ? "" : "lg:invisible"}`}>
         <NavLink to="/" end className={item}>Radar</NavLink>
         <NavLink to="/tracking" className={item}>Track</NavLink>
-        <NavLink to="/updates" className={item}><span className="relative">New{s.unseen.length > 0 && <span aria-label={`${s.unseen.length} unseen changes`} className="absolute -right-2 top-0 size-1.5 rounded-full bg-teal" />}</span></NavLink>
+        <NavLink to="/updates" className={item}><span className="relative">New{s.unseen.length > 0 && <span aria-label={`${s.unseen.length} unseen changes`} className="absolute -right-2 top-0 size-1.5 rounded-full bg-arc" />}</span></NavLink>
       </nav>
       <div className="flex items-center gap-2 justify-self-end">
-        <button onClick={s.openPalette} aria-label="Search" className="hidden h-10 items-center gap-2.5 rounded-xl border border-line-strong px-3 text-t2 transition-colors hover:bg-s2 hover:text-t1 sm:flex lg:w-[150px]">
+        <button onClick={s.openPalette} aria-label="Search" className="facet-frame hidden h-10 items-center gap-2.5 px-3 text-t2 transition-colors hover:text-t1 sm:flex lg:w-[150px]">
           <Search className="size-4" /><kbd className="hidden lg:inline">⌘K</kbd>
         </button>
         <button onClick={s.openMcp} className="hidden h-10 items-center gap-2 rounded-xl px-3 font-medium text-t1 transition-colors hover:bg-s2 md:flex"><Cable className="size-4 text-t2" />MCP</button>
-        {s.status === "loading" ? <span className="size-10" /> : s.signedIn ? <AccountMenu /> : <button onClick={s.openSignIn} className="h-10 rounded-xl border border-line-strong px-3.5 font-medium transition-colors hover:bg-s2 md:px-4">Sign in</button>}
+        {s.status === "loading" ? <span className="size-10" /> : s.signedIn ? <AccountMenu /> : <button onClick={s.openSignIn} className="btn btn-primary h-10 px-3.5 md:px-4">Sign in</button>}
       </div>
     </header>
   );
@@ -362,9 +394,9 @@ function TopNav() {
 
 function RailLink({ to, icon: Icon, label, end, badge }: { to: string; icon: LucideIcon; label: string; end?: boolean; badge?: number }) {
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => `flex h-11 items-center gap-3 rounded-xl px-3.5 text-[15px] transition-colors ${isActive ? "bg-s2 text-t1" : "text-t2 hover:bg-s1 hover:text-t1"}`}>
+    <NavLink to={to} end={end} className={({ isActive }) => `flex h-11 items-center gap-3 rounded-xl px-3.5 text-[15px] transition-colors ${isActive ? "nav-on" : "text-t2 hover:bg-s1/70 hover:text-t1"}`}>
       <Icon className="size-[18px]" />{label}
-      {!!badge && <span aria-label={`${badge} unseen`} className="num ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-teal px-1.5 text-[11px] font-semibold text-black">{badge}</span>}
+      {!!badge && <span aria-label={`${badge} unseen`} className="num ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-arc px-1.5 text-[11px] font-semibold text-canvas shadow-[0_0_10px_rgba(94,166,255,0.6)]">{badge}</span>}
     </NavLink>
   );
 }
@@ -372,7 +404,7 @@ function RailLink({ to, icon: Icon, label, end, badge }: { to: string; icon: Luc
 function Rail() {
   const s = useSession();
   return (
-    <aside className="sticky top-[68px] hidden h-[calc(100dvh-68px)] w-[200px] shrink-0 flex-col border-r border-line p-3 lg:flex 2xl:w-[232px] 2xl:p-4">
+    <aside className="sticky top-[68px] hidden h-[calc(100dvh-68px)] w-[200px] shrink-0 flex-col border-r border-line bg-canvas/40 p-3 lg:flex 2xl:w-[232px] 2xl:p-4">
       <nav aria-label="Workspace" className="flex flex-col gap-1">
         <RailLink to="/" end icon={Radio} label="Radar" />
         <RailLink to="/updates" icon={Bell} label="What's New" badge={s.unseen.length} />
@@ -427,10 +459,13 @@ export function Shell() {
 
   return (
     <SessionProvider openers={openers} insiderOpen={insiderOpen}>
-      <TopNav />
-      <div className="flex">
-        {!workspace && <Rail />}
-        <div className="min-w-0 flex-1"><Outlet /></div>
+      <BackdropArcs />
+      <div className="relative z-[1]">
+        <TopNav />
+        <div className="flex">
+          {!workspace && <Rail />}
+          <div className="min-w-0 flex-1"><Outlet /></div>
+        </div>
       </div>
       <Palette open={palette} setOpen={setPalette} />
       <McpDialog open={mcp} setOpen={setMcp} />

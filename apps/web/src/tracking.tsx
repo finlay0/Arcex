@@ -28,7 +28,7 @@ function YourProducts() {
       <h2 className={CARD_TITLE}>Your products</h2>
       <p className="mt-1 text-[13px] leading-[18px] text-t2">Add yours so it's on file for when side-by-side comparison opens.</p>
       <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); void add(); }}>
-        <input required type="url" pattern="https://.*" maxLength={500} aria-label="Your product's URL" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} className="h-[38px] min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 outline-none focus:border-teal" />
+        <input required type="url" pattern="https://.*" maxLength={500} aria-label="Your product's URL" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} className="h-[38px] min-w-0 flex-1 rounded-[10px] border border-line-strong bg-canvas px-3 outline-none focus:border-arc" />
         <button className="btn btn-primary">Add</button>
       </form>
       <div className="mt-2 flex flex-col gap-1">
@@ -62,7 +62,7 @@ function EmailAlerts() {
       <h2 className={`${CARD_TITLE} flex items-center gap-2`}><Bell className="size-4 text-t2" />Email alerts</h2>
       <p className="mt-1 text-[13px] leading-[18px] text-t2">Get an email when a tracked product has a reviewed change to its paywall, pricing page, onboarding or ads.</p>
       {s.insider ? (
-        <label className="mt-3 flex items-center gap-2"><input type="checkbox" className="accent-teal" checked={on} disabled={!alerts.data} onChange={(e) => change(e.target.checked)} />Email me about changes</label>
+        <label className="mt-3 flex items-center gap-2"><input type="checkbox" className="accent-arc" checked={on} disabled={!alerts.data} onChange={(e) => change(e.target.checked)} />Email me about changes</label>
       ) : (
         <button onClick={s.openInsider} className="btn btn-ghost mt-3 w-full">Go Insider ({INSIDER_PRICE})</button>
       )}
@@ -109,7 +109,7 @@ export function Tracking() {
               <h2 className={CARD_TITLE}>Competitors</h2>
               <span className="num text-[13px] text-t2">{s.insider ? `${s.watches.length} tracked` : `${s.watches.length} of ${FREE_WATCHES} free`}</span>
             </div>
-            <label className="mt-3 flex h-11 items-center gap-2 rounded-xl border border-line-strong px-3 transition-colors focus-within:border-teal">
+            <label className="facet-frame mt-3 flex h-11 items-center gap-2 px-3">
               <Search className="size-4 shrink-0 text-t2" />
               <input aria-label="Find a product to track" maxLength={120} value={text} onChange={(e) => setText(e.target.value)} placeholder="Find a product to track..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             </label>

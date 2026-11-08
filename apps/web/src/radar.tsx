@@ -45,7 +45,7 @@ const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
 
 function Delta({ n }: { n: number | null }) {
   if (!n) return null;
-  return <span title="Change in the last 7 days" className={`hidden text-[12px] font-normal md:inline ${n > 0 ? "text-teal" : "text-t3"}`}>{n > 0 ? `+${n}` : n}</span>;
+  return <span title="Change in the last 7 days" className={`hidden text-[12px] font-normal md:inline ${n > 0 ? "text-arc" : "text-t3"}`}>{n > 0 ? `+${n}` : n}</span>;
 }
 
 function TrafficCell({ p }: { p: Product }) {
@@ -72,7 +72,7 @@ function PriceCell({ p }: { p: Product }) {
   return (
     <span title={`${label}${p.pricing?.entry && p.pricing.freePlan ? " · free plan available" : ""}`} className="col-mon min-w-0">
       <span className="num block truncate text-[13px] font-medium">{label}</span>
-      {p.pricing?.entry && p.pricing.freePlan && <span className="block truncate text-[11px] text-teal">Free plan</span>}
+      {p.pricing?.entry && p.pricing.freePlan && <span className="block truncate text-[11px] text-arc">Free plan</span>}
     </span>
   );
 }
@@ -81,14 +81,14 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
   const s = useSession();
   const open = !s.signedIn && p.open_sample && p.coverage === "full";
   return (
-    <button data-radar-row data-slug={p.slug} onClick={onOpen} className="radar-grid w-full rounded-lg px-4 py-[13px] text-left transition-colors hover:bg-s2 focus-visible:bg-s2">
+    <button data-radar-row data-slug={p.slug} onClick={onOpen} className="radar-grid radar-row w-full rounded-lg px-4 py-[13px] text-left transition-colors">
       <span className="flex min-w-0 items-center gap-3">
         <ProductIcon p={p} />
         <span className="min-w-0">
           <span className="flex items-center gap-1.5 text-[15px] font-medium leading-[20px]">
             <span className="truncate">{p.name}</span>
-            {fresh && <span title="Changed since your last visit" className="size-1.5 shrink-0 rounded-full bg-teal" />}
-            {open && <span className="shrink-0 rounded bg-teal-dim px-1.5 text-[11px] font-medium leading-[18px] text-teal">No sign-in</span>}
+            {fresh && <span title="Changed since your last visit" className="size-1.5 shrink-0 rounded-full bg-arc" />}
+            {open && <span className="shrink-0 rounded bg-arc-dim px-1.5 text-[11px] font-medium leading-[18px] text-arc">No sign-in</span>}
           </span>
           <span className="line-clamp-2 text-[13px] leading-[18px] text-t2">{p.description}</span>
         </span>
@@ -103,7 +103,7 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
       <span className="col-cat"><span className="pill">{CATEGORY_LABEL[p.category]}</span></span>
       <span className="col-rev"><span className="num block text-[13px] font-medium">{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <span className="flex items-center gap-1.5 text-[11px] text-t3">Range <Confidence level={p.revenue_confidence} /></span>}</span>
       <TrafficCell p={p} />
-      <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.active_ads ? "text-teal" : "text-t3"}`} />{p.active_ads ?? DASH}<Delta n={p.ads_delta_7d} /></span>
+      <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.active_ads ? "text-arc" : "text-t3"}`} />{p.active_ads ?? DASH}<Delta n={p.ads_delta_7d} /></span>
       <span className="col-yt"><span className="num flex items-center gap-1.5 font-medium"><VideoCountIcon className="size-4 text-t2" />{p.sponsors ?? DASH}</span></span>
       <PriceCell p={p} />
       <span className="col-first num whitespace-nowrap text-[13px] text-t2">{ago(p.first_seen)}</span>
@@ -126,7 +126,7 @@ function SortHead({ id, sort, dir, onSort, className, children }: { id: string; 
 
 function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <span className="flex h-7 items-center gap-1.5 rounded-lg bg-teal-dim pl-2.5 pr-1 text-[12px] text-teal">
+    <span className="flex h-7 items-center gap-1.5 rounded-lg bg-arc-dim pl-2.5 pr-1 text-[12px] text-arc">
       {label}
       <button aria-label={`Remove filter: ${label}`} onClick={onClear} className="flex size-5 items-center justify-center rounded hover:bg-s3"><X className="size-3" /></button>
     </span>
@@ -145,7 +145,7 @@ function FirstRunSteps({ onFirstApp }: { onFirstApp?: () => void }) {
       <span className="font-medium">Get started</span>
       {steps.map((x) => (
         <button key={x.label} onClick={x.go} disabled={x.done || !x.go} className={`flex items-center gap-1.5 text-[13px] ${x.done ? "text-t3 line-through" : "text-t2 hover:text-t1"}`}>
-          {x.done ? <Check className="size-3.5 text-teal" /> : <Circle className="size-3.5" />}{x.label}
+          {x.done ? <Check className="size-3.5 text-arc" /> : <Circle className="size-3.5" />}{x.label}
         </button>
       ))}
       <button aria-label="Dismiss getting started" onClick={() => s.setFirstRun({ dismissed: true })} className="text-t3 hover:text-t1"><X className="size-3.5" /></button>
@@ -299,12 +299,12 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           <div className="mt-4 flex flex-wrap items-center justify-between gap-x-5 gap-y-2">
             <div role="group" aria-label="Views" className="flex items-center gap-1">
               {PRESETS.map((x) => (
-                <button key={x.value} aria-pressed={x.value === presetId} onClick={() => update({ preset: x.value || null, sort: null, dir: null })} className={`flex h-9 items-center rounded-xl px-3.5 font-medium transition-colors ${x.value === presetId ? "bg-s3 text-t1" : "text-t2 hover:text-t1"}`}>{x.label}</button>
+                <button key={x.value} aria-pressed={x.value === presetId} onClick={() => update({ preset: x.value || null, sort: null, dir: null })} className={`flex h-9 items-center rounded-xl px-3.5 font-medium transition-colors ${x.value === presetId ? "nav-on" : "text-t2 hover:text-t1"}`}>{x.label}</button>
               ))}
             </div>
             {s.status === "out" ? sampleProduct && (
               <button onClick={() => open(sampleProduct)} className="group flex min-w-0 items-center gap-2 text-left">
-                <span className="shrink-0 rounded bg-teal-dim px-1.5 text-[12px] font-medium leading-[20px] text-teal">No sign-in</span>
+                <span className="shrink-0 rounded bg-arc-dim px-1.5 text-[12px] font-medium leading-[20px] text-arc">No sign-in</span>
                 <span className="text-t2 group-hover:text-t1">See everything about {sampleProduct.name}</span>
                 <ArrowRight className="size-3.5 shrink-0 text-t2" />
               </button>
@@ -320,7 +320,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           </div>
         )}
         <div className="no-scrollbar -mx-4 mt-4 flex items-center gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
-          <label className="flex h-11 min-w-[160px] flex-1 items-center gap-2 rounded-xl border border-line-strong px-3 transition-colors focus-within:border-teal">
+          <label className="facet-frame flex h-11 min-w-[160px] flex-1 items-center gap-2 px-3">
             <Search className="size-4 shrink-0 text-t2" />
             <input id="radar-search" aria-label="Search products" maxLength={120} value={q} onChange={(e) => update({ q: e.target.value || null })} placeholder="Search products..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             <kbd className="hidden min-[1400px]:block">/</kbd>
@@ -346,7 +346,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           )}
         </div>
 
-        <div ref={tableRef} className="panel mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
+        <div ref={tableRef} className="panel arc-edge mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
           {lockedList ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-t2">Sign in to keep your saved products here.</div>
@@ -366,7 +366,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
             </div>
           ) : (
             <div className={remote.loading ? "opacity-60 transition-opacity" : ""}>
-              <div className="radar-grid radar-head eyebrow sticky top-0 z-10 bg-s1 px-4 pb-3 pt-3">
+              <div className="radar-grid radar-head eyebrow sticky top-0 z-10 border-b border-line bg-[#0a1120]/90 px-4 pb-3 pt-3 backdrop-blur-md">
                 <span>Product</span>
                 <span className="col-thumb">Screens</span>
                 <span className="col-cat">Category</span>
