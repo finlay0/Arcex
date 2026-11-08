@@ -143,6 +143,52 @@ export function createMcpServer(options: {
         true,
       ),
   );
+  const categoryInput = z
+    .enum([
+      "coding_dev",
+      "video_creator",
+      "sales_automation",
+      "consumer_ai",
+      "other",
+    ])
+    .optional();
+  server.registerTool(
+    "market_overview",
+    {
+      description:
+        "Cross-market view of published Arcex products: category and pricing-model mix, Tranco traffic tiers, the most common detected tech stack and app-store presence. Aggregates of public observations, not revenue or visitor counts.",
+      inputSchema: { category: categoryInput },
+    },
+    async ({ category }) =>
+      call(
+        "/api/v1/market/overview" +
+          (category ? "?category=" + encodeURIComponent(category) : ""),
+      ),
+  );
+  server.registerTool(
+    "top_movers",
+    {
+      description:
+        "Products whose public signals moved most over 7 or 30 days: Tranco site rank (traffic) or ratings added on app-store listings (store_ratings). Tracked daily since November 2026, so early windows can be empty. Movement is not revenue or proof of growth.",
+      inputSchema: {
+        metric: z.enum(["traffic", "store_ratings"]).default("traffic"),
+        window: z.union([z.literal(7), z.literal(30)]).default(30),
+        direction: z.enum(["up", "down"]).default("up"),
+        category: categoryInput,
+        limit: z.number().int().min(1).max(50).default(20),
+      },
+    },
+    async (input) => {
+      const params = new URLSearchParams({
+        metric: input.metric,
+        window: String(input.window),
+        direction: input.direction,
+        limit: String(input.limit),
+      });
+      if (input.category) params.set("category", input.category);
+      return call("/api/v1/market/movers?" + params);
+    },
+  );
   server.registerTool(
     "list_arena_builds",
     {

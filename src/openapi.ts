@@ -425,6 +425,16 @@ export const openapi = {
         "Published products; q, category, monetization, minObservedAdDays, limit, offset. Ad days are distinct approved observed dates per ad, not continuous delivery.",
       ),
     },
+    "/api/v1/market/overview": {
+      get: operation(
+        "Cross-market aggregates of published products; optional category. Category and pricing-model mix, Tranco traffic tiers, detected stack and store presence. Not revenue or visitor counts.",
+      ),
+    },
+    "/api/v1/market/movers": {
+      get: operation(
+        "Largest moves over window 7|30 days; metric traffic|store_ratings, direction up|down, category, limit≤50. Public signals, not revenue or growth claims.",
+      ),
+    },
     "/api/v1/vault/{slug}": {
       get: operation(
         "Public Signals Only details; reviewed Full Screens requires sign-in and ten distinct free apps/day. Bare step numbers never grant screen access; signed shared links expose only their one step.",

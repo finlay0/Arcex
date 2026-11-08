@@ -1750,8 +1750,82 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         );
         assert.equal(row?.approved, 0);
         assert.equal(row?.content_hash, row?.sha256);
+        // Storage protection: a near-identical later screen is not stored again.
+        const visual = "ab".repeat(32);
+        const shot = (background: string) =>
+          sharp({
+            create: { width: 390, height: 844, channels: 3, background },
+          })
+            .webp()
+            .toBuffer();
+        const first = await json<{ assetId: string }>(
+          "POST",
+          path,
+          {
+            ...body,
+            page: "pricing",
+            data: (await shot("#eef")).toString("base64"),
+            visualHash: visual,
+          },
+          collector,
+          201,
+        );
+        const again = await json<{ assetId: string; unchanged: boolean }>(
+          "POST",
+          path,
+          {
+            ...body,
+            page: "pricing",
+            data: (await shot("#fef")).toString("base64"),
+            visualHash: "ab".repeat(31) + "aa",
+          },
+          collector,
+          200,
+        );
+        assert.deepEqual(again, {
+          ...again,
+          assetId: first.assetId,
+          unchanged: true,
+        });
       },
     );
+    await t.test("market movers show published products only", async () => {
+      const ids: string[] = [];
+      for (const name of ["mover-live", "mover-draft"]) {
+        const { id } = await json<{ id: string }>(
+          "POST",
+          "/api/v1/admin/products",
+          { ...input, slug: name, url: `https://${name}.com` },
+          admin,
+          201,
+        );
+        ids.push(id);
+        const today = new Date().toISOString().slice(0, 10);
+        const before = new Date(Date.now() - 30 * 86_400_000)
+          .toISOString()
+          .slice(0, 10);
+        for (const [day, rank] of [
+          [before, 50_000],
+          [today, 5_000],
+        ] as const)
+          await env.DB.prepare(
+            "INSERT INTO traffic_ranks(product_id,source,observed_on,site,rank,list_id,created_at) VALUES (?,'tranco',?,?,?,'TEST',?)",
+          )
+            .bind(id, day, `${name}.com`, rank, new Date().toISOString())
+            .run();
+      }
+      await env.DB.prepare("UPDATE products SET status='published' WHERE id=?")
+        .bind(ids[0])
+        .run();
+      const movers = await json<{ items: { slug: string; change: number }[] }>(
+        "GET",
+        "/api/v1/market/movers?metric=traffic&window=30",
+      );
+      assert.deepEqual(
+        movers.items.map((i) => [i.slug, i.change]),
+        [["mover-live", 1]],
+      );
+    });
     await t.test(
       "daily traffic ranks are collector-only and dated today",
       async () => {

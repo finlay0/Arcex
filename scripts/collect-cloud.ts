@@ -43,7 +43,7 @@ if (mode === "status" || (mode === "scheduled" && !status.collectionEnabled)) {
       ...stores,
     }),
   );
-  // Single sites failing (redirects, bot checks) are recorded per source; only a run
-  // where nothing succeeded is a failed run.
-  if (result.failed && !result.completed) process.exitCode = 1;
+  // Single sites failing (404s, redirects, bot checks) are recorded per source; only a run
+  // where several attempts all failed points at the collector itself.
+  if (result.failed >= 3 && !result.completed) process.exitCode = 1;
 }

@@ -27,6 +27,26 @@ async function toWebp(png: Buffer) {
     .toBuffer();
 }
 
+// Difference hash: each bit says whether a pixel is brighter than its right neighbour.
+async function visualHash(png: Buffer) {
+  const px = await sharp(png)
+    .greyscale()
+    .resize(17, 16, { fit: "fill" })
+    .raw()
+    .toBuffer();
+  let hex = "";
+  for (let row = 0; row < 16; row++)
+    for (let col = 0; col < 16; col += 4) {
+      let nibble = 0;
+      for (let k = 0; k < 4; k++)
+        nibble =
+          (nibble << 1) |
+          (px[row * 17 + col + k] > px[row * 17 + col + k + 1] ? 1 : 0);
+      hex += nibble.toString(16);
+    }
+  return hex;
+}
+
 async function open(page: Page, url: string) {
   const response = await page.goto(url, {
     waitUntil: "domcontentloaded",
@@ -71,6 +91,7 @@ async function captureProduct(
   product: { id: string; url: string },
 ) {
   let captured = 0,
+    same = 0,
     pricing: string | undefined,
     reason: string | undefined;
   for (const viewport of ["desktop", "mobile"] as Viewport[]) {
@@ -108,48 +129,59 @@ async function captureProduct(
           pricing = await pricingLink(page);
         const png = await page.screenshot({ type: "png", fullPage: false });
         const webp = await toWebp(png);
-        await api(`/api/v1/collector/captures/${product.id}`, {
-          method: "POST",
-          token: collectorToken,
-          body: {
-            page: target,
-            viewport,
-            sourceUrl: finalUrl,
-            observedAt: new Date().toISOString(),
-            title,
-            data: webp.toString("base64"),
+        const saved = await api<{ unchanged: boolean }>(
+          `/api/v1/collector/captures/${product.id}`,
+          {
+            method: "POST",
+            token: collectorToken,
+            body: {
+              page: target,
+              viewport,
+              sourceUrl: finalUrl,
+              observedAt: new Date().toISOString(),
+              title,
+              data: webp.toString("base64"),
+              visualHash: await visualHash(png),
+            },
           },
-        });
+        );
         captured++;
+        if (saved.unchanged) same++;
       }
     } finally {
       await context.close();
     }
   }
-  return { captured, reason };
+  return { captured, same, reason };
 }
 
 export async function captureScreens(limit: number) {
   if (!collectorToken) throw new Error("Collector credential required");
-  const { items } = await api<{ items: { id: string; url: string }[] }>(
-    `/api/v1/collector/captures/pending?limit=${limit}`,
-    { token: collectorToken },
-  );
+  const { items, paused } = await api<{
+    items: { id: string; url: string }[];
+    paused?: string;
+  }>(`/api/v1/collector/captures/pending?limit=${limit}`, {
+    token: collectorToken,
+  });
+  if (paused) return { products: 0, ok: 0, failed: 0, images: 0, paused };
   const browser = await chromium.launch();
   let ok = 0,
     failed = 0,
-    images = 0;
+    images = 0,
+    unchanged = 0;
   try {
     for (const product of items) {
       let captured = 0,
+        same = 0,
         reason: string | undefined;
       try {
-        ({ captured, reason } = await captureProduct(browser, product));
+        ({ captured, same, reason } = await captureProduct(browser, product));
       } catch (error) {
         reason = (error as Error).message.split("\n")[0];
       }
       reason = reason?.slice(0, 300);
       images += captured;
+      unchanged += same;
       // Partial captures still count; the product is retried only if nothing was saved.
       const status = captured ? "ok" : "failed";
       status === "ok" ? ok++ : failed++;
@@ -158,12 +190,19 @@ export async function captureScreens(limit: number) {
         token: collectorToken,
         body: { status, captured, ...(reason ? { reason } : {}) },
       });
-      console.log(JSON.stringify({ productId: product.id, captured, reason }));
+      console.log(
+        JSON.stringify({
+          productId: product.id,
+          captured,
+          unchanged: same,
+          reason,
+        }),
+      );
     }
   } finally {
     await browser.close();
   }
-  return { products: items.length, ok, failed, images };
+  return { products: items.length, ok, failed, images, unchanged };
 }
 
 const limit = Number(process.env.CAPTURE_LIMIT ?? 20);

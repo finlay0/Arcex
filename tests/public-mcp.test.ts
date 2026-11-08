@@ -63,7 +63,12 @@ test("public MCP connects without sign-in and keeps key checks", async () => {
       }) as Promise<{ isError?: boolean; content: { text: string }[] }>;
 
     const anonymous = await connect();
-    assert.equal((await anonymous.listTools()).tools.length, 5);
+    assert.equal((await anonymous.listTools()).tools.length, 7);
+    const overview = (await anonymous.callTool({
+      name: "market_overview",
+      arguments: {},
+    })) as { isError?: boolean; content: { text: string }[] };
+    assert.equal(JSON.parse(overview.content[0].text).scope.products, 0);
     const search = (await anonymous.callTool({
       name: "search_products",
       arguments: { query: "paywall", limit: 1 },

@@ -1,3 +1,4 @@
+import { market } from "./market";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
@@ -112,6 +113,7 @@ app.route("/api/v1/collector/captures", collectorCaptures);
 app.route("/api/v1/collector/store-stats", collectorStoreStats);
 app.route("/api/v1/admin", adminStoreStats);
 app.route("/api/v1", publicStoreStats);
+app.route("/api/v1", market);
 app.route("/api/v1/icons", publicIcons);
 app.route("/api/v1/admin", adminIcons);
 app.route("/api/v1/media", media);
@@ -152,7 +154,7 @@ export default {
     _ctx: ExecutionContext,
   ) {
     // Share one timer within the account's Free cron limit. Metrics run with collection off.
-    // At most34 metrics +4 auth cleanup +10 enqueue, or12 delivery statements.
+    // At most34 metrics +4 auth cleanup +11 enqueue, or12 delivery statements.
     // Collection and delivery alternate when both are enabled, staying below D1 Free's50 queries.
     await expireAuthState(env.DB);
     if (event.cron === METRICS_CRON) {

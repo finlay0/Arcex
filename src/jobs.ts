@@ -45,6 +45,10 @@ export async function enqueueDue(env: Bindings) {
   }
   const results = await env.DB.batch([
     ...statements,
+    // Work for a disabled source or archived product is closed rather than left queued.
+    env.DB.prepare(
+      "UPDATE jobs SET status='failed',error='Source disabled or product archived',updated_at=? WHERE status='queued' AND source_id IN (SELECT s.id FROM sources s LEFT JOIN products p ON p.id=s.product_id WHERE s.enabled=0 OR p.status='archived')",
+    ).bind(time),
     env.DB.prepare(
       "UPDATE jobs SET status='failed',error='Lease expired after maximum attempts',lease_token=NULL,lease_expires_at=NULL,updated_at=? WHERE status='running' AND lease_expires_at<=? AND attempts>=max_attempts",
     ).bind(time, time),
