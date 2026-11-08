@@ -90,9 +90,11 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
             {fresh && <span title="Changed since your last visit" className="size-1.5 shrink-0 rounded-full bg-arc" />}
             {open && <span className="shrink-0 rounded bg-arc-dim px-1.5 text-[11px] font-medium leading-[18px] text-arc">No sign-in</span>}
           </span>
-          <span className="line-clamp-2 text-[13px] leading-[18px] text-t2">{p.description}</span>
+          <span className="line-clamp-2 text-[13px] leading-[18px] text-t2 max-md:hidden">{p.description}</span>
         </span>
       </span>
+      {/* Phones give the description its own full-width line under the name and numbers. */}
+      <span className="col-desc line-clamp-2 text-[13px] leading-[18px] text-t2 md:hidden">{p.description}</span>
       <span className={`col-thumb ${p.coverage === "full" ? "" : "max-md:hidden"}`}>
         {p.coverage === "full" ? (
           <span title={`${p.step_count} screens captured`} className="num flex aspect-[1280/800] w-[72px] items-center justify-center gap-1 rounded-md border border-line-strong bg-s2 text-[12px] text-t1">{s.signedIn || open ? <Layers className="size-3" /> : <Lock className="size-3" />}{p.step_count}</span>
@@ -235,6 +237,12 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const total = scope === "radar" ? remote.data?.total ?? 0 : local.length;
   const rows = useMemo(() => (scope === "radar" ? remote.data?.items ?? [] : local.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)), [scope, remote.data, local, page]);
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // The table scrolls inside itself on wide screens and with the page on narrow ones.
+  const goPage = (n: number) => {
+    update({ page: String(n) }, true);
+    tableRef.current?.scrollTo(0, 0);
+    if (!wide) window.scrollTo(0, 0);
+  };
   const firstLoad = scope === "radar" ? remote.loading && !remote.data : s.status === "loading";
   const failed = scope === "radar" && !!remote.error;
   const unseenSlugs = useMemo(() => new Set(s.unseen.map((c) => c.slug)), [s.unseen]);
@@ -286,6 +294,12 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
     coverage && { label: COVERAGE.find((x) => x.value === coverage)?.label ?? coverage, key: "coverage" },
   ].filter(Boolean) as { label: string; key: string }[];
   const clearFilters = () => update(Object.fromEntries(chips.map((c) => [c.key, null])));
+  // Columns with nothing collected on this page collapse instead of showing a dash per row.
+  const emptyColumns = [
+    !rows.some((p) => p.coverage === "full") && "thumb",
+    !rows.some((p) => p.revenue_high_usd !== null) && "rev",
+    !rows.some((p) => p.sponsors !== null) && "yt",
+  ].filter(Boolean).join(" ");
   const sampleProduct = rows.find((p) => p.open_sample && p.coverage === "full");
   const firstApp = rows.find((p) => p.coverage === "full") ?? rows[0];
   const onboardingDone = !!s.firstRun.dismissed || (s.history.length > 0 && !!s.firstRun.blueprint && !!s.firstRun.mcp);
@@ -339,14 +353,14 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           {chips.length > 1 && <button onClick={clearFilters} className="text-[12px] text-t2 underline underline-offset-2 hover:text-t1">Clear all</button>}
           {pages > 1 && (
             <span className="ml-auto flex items-center gap-2">
-              <button disabled={page <= 1} onClick={() => { update({ page: String(page - 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40"><ChevronLeft className="size-3.5" />Prev</button>
+              <button disabled={page <= 1} onClick={() => goPage(page - 1)} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40"><ChevronLeft className="size-3.5" />Prev</button>
               <span className="num text-[12px] text-t2">Page {page} of {pages}</span>
-              <button disabled={page >= pages} onClick={() => { update({ page: String(page + 1) }, true); tableRef.current?.scrollTo(0, 0); }} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40">Next<ChevronRight className="size-3.5" /></button>
+              <button disabled={page >= pages} onClick={() => goPage(page + 1)} className="btn btn-ghost !h-7 !px-2 text-[12px] disabled:opacity-40">Next<ChevronRight className="size-3.5" /></button>
             </span>
           )}
         </div>
 
-        <div ref={tableRef} className="panel mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
+        <div ref={tableRef} data-empty={emptyColumns} className="panel mt-3 min-h-0 flex-1 overflow-y-auto rounded-2xl p-1.5">
           {lockedList ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 p-6 text-center">
               <div className="text-t2">Sign in to keep your saved products here.</div>
@@ -382,6 +396,15 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
               <div className="flex flex-col gap-0.5">
                 {rows.map((p) => <Row key={p.slug} p={p} fresh={unseenSlugs.has(p.slug)} onOpen={() => open(p)} />)}
               </div>
+              {pages > 1 && (
+                <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3 text-[13px] text-t2">
+                  <span className="num">Page {page} of {pages}</span>
+                  <span className="flex gap-2">
+                    {page > 1 && <button onClick={() => goPage(page - 1)} className="btn btn-ghost !h-9"><ChevronLeft className="size-4" />Previous</button>}
+                    {page < pages && <button onClick={() => goPage(page + 1)} className="btn btn-ghost !h-9">Next {Math.min(PAGE_SIZE, total - page * PAGE_SIZE)}<ChevronRight className="size-4" /></button>}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
+import { Link } from "react-router";
 import { CHANGE_LABEL, shortDate, type ChangeKind } from "./data";
 import { useOpenProduct, useSession } from "./shell";
 import { PageHeading, ProductIcon } from "./ui";
@@ -17,12 +18,22 @@ export function Updates() {
   return (
     <main className="px-4 py-5 pb-24 lg:px-6 lg:py-6">
       <PageHeading title="What's New" sub="Reviewed changes we've observed across tracked products." />
-      <div className="no-scrollbar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+      {/* Kind filters only help once there is something to filter. */}
+      {s.changes.length > 0 && <div className="no-scrollbar -mx-4 mt-5 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
         <button className="chip" data-on={!kind} onClick={() => setKind(null)}>All</button>
         {(Object.keys(CHANGE_LABEL) as ChangeKind[]).map((k) => <button key={k} className="chip" data-on={kind === k} onClick={() => setKind(k)}>{CHANGE_LABEL[k]}</button>)}
-      </div>
+      </div>}
       <div className="mt-5 flex max-w-[900px] flex-col gap-5">
-        {!shown.length && <p className="panel rounded-2xl p-6 text-center text-t2">{kind ? "No changes of this kind yet." : "No changes have been published yet."}</p>}
+        {!shown.length && (kind ? <p className="panel rounded-2xl p-6 text-center text-t2">No changes of this kind yet.</p> : (
+          <div className="panel flex flex-col items-start gap-3 rounded-2xl p-6">
+            <div className="font-medium">Nothing has changed yet</div>
+            <p className="max-w-[560px] text-t2">We check every product daily. When a price, paywall, onboarding step or ad campaign changes, it lands here once we've reviewed it. Track the products you care about to follow their changes in one place.</p>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/tracking" className="btn btn-primary">Track a product</Link>
+              <Link to="/" className="btn btn-ghost">Browse the Radar<ArrowRight className="size-4" /></Link>
+            </div>
+          </div>
+        ))}
         {days.map((day) => (
           <section key={day}>
             <h2 className="eyebrow mb-2">{day}</h2>

@@ -133,22 +133,28 @@ label.field:hover { background: color-mix(in srgb, var(--canvas) 70%, transparen
 .pill { display: inline-flex; align-items: center; max-width: 100%; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--s3); font-size: 12px; color: var(--t1); }
 .nav-on { background: var(--s3) !important; color: var(--t1) !important; }
 
-/* Radar table columns. More appear as the screen gets wider. */
+/* Radar table columns. More appear as the screen gets wider. A column that is empty on
+   every row of the page collapses to zero width, so the table doesn't show a wall of dashes. */
+[data-empty~="thumb"] { --w-thumb: 0px; }
+[data-empty~="rev"] { --w-rev: 0px; }
+[data-empty~="yt"] { --w-yt: 0px; }
+[data-empty~="thumb"] .col-thumb, [data-empty~="rev"] .col-rev, [data-empty~="yt"] .col-yt { visibility: hidden; overflow: hidden; }
 .radar-grid { display: grid; align-items: center; column-gap: 12px; grid-template-columns: minmax(0, 1fr) 56px 44px 16px; }
-.radar-grid > .col-thumb { grid-column: 1 / -1; grid-row: 2; margin: 10px 0 0 48px; }
+.radar-grid > .col-desc { grid-column: 1 / -1; grid-row: 2; margin: 2px 0 0 48px; }
+.radar-grid > .col-thumb { grid-column: 1 / -1; grid-row: 3; margin: 10px 0 0 48px; }
 .radar-head > .col-thumb { display: none; }
 .radar-grid > .col-cat, .radar-grid > .col-rev, .radar-grid > .col-yt, .radar-grid > .col-mon, .radar-grid > .col-first, .radar-grid > .col-seen { display: none; }
 @media (min-width: 768px) {
-  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 110px 84px 150px 16px; }
+  .radar-grid { grid-template-columns: minmax(0, 1fr) var(--w-thumb, 72px) 110px 84px 150px 16px; }
   .radar-grid > .col-thumb, .radar-head > .col-thumb { display: block; grid-column: auto; grid-row: auto; margin: 0; }
   .radar-grid > .col-mon { display: block; }
 }
 @media (min-width: 1280px) {
-  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 96px 110px 84px 84px 150px 72px 16px; }
+  .radar-grid { grid-template-columns: minmax(0, 1fr) var(--w-thumb, 72px) var(--w-rev, 96px) 110px 84px var(--w-yt, 84px) 150px 72px 16px; }
   .radar-grid > .col-rev, .radar-grid > .col-yt, .radar-grid > .col-first { display: block; }
 }
 @media (min-width: 1536px) {
-  .radar-grid { grid-template-columns: minmax(0, 1fr) 72px 76px 96px 110px 84px 84px 150px 72px 64px 16px; }
+  .radar-grid { grid-template-columns: minmax(0, 1fr) var(--w-thumb, 72px) 76px var(--w-rev, 96px) 110px 84px var(--w-yt, 84px) 150px 72px 64px 16px; }
   .radar-grid > .col-cat, .radar-grid > .col-seen { display: block; }
 }
 }

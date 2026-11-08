@@ -7,7 +7,7 @@ import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, pri
 import { useSession } from "./shell";
 import { CodeLine, Confidence, ErrorPanel, GateModal, LimitModal, mcpPrompt, ProductIcon, useCopy } from "./ui";
 
-const SECTIONS = [["overview", "Overview"], ["traffic", "Traffic"], ["stack", "Stack"], ["screens", "Screens"], ["ads", "Ads"], ["creators", "Creators"], ["model", "Model"], ["blueprint", "Blueprint"]];
+const SECTIONS = [["overview", "Overview"], ["traffic", "Traffic"], ["stack", "Stack"], ["screens", "Screens"], ["ads", "Ads"], ["creators", "Creators"], ["model", "Pricing"], ["blueprint", "Blueprint"]];
 const SECTION_TITLE = "font-display text-[22px] font-semibold leading-[28px] tracking-[-0.015em]";
 
 /** Facts we captured. Visually distinct from our interpretation, which sits in Analysis. */
@@ -51,15 +51,17 @@ function ThisWeek({ n }: { n: number | null }) {
   return <span className={`text-[13px] font-normal ${n > 0 ? "text-arc" : "text-t3"}`}>{n > 0 ? "+" : ""}{n} this week</span>;
 }
 
-function Overview({ p }: { p: Product }) {
+function Overview({ p, adsSeen }: { p: Product; adsSeen: number }) {
   const longest = p.longest_ad_days;
+  // Longest ad counts days an ad was seen active, so inactive sightings read as "none active".
+  const longestLabel = longest === null ? DASH : longest ? `${longest} days seen` : adsSeen ? "None active" : "None seen";
   return (
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Revenue range/mo" tag="Manual"><span>{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <Confidence level={p.revenue_confidence} />}</Metric>
         <Metric label="Traffic rank" tag="Daily">{p.traffic_tier ? <span title={TRAFFIC_TITLE}>{p.traffic_rank === null ? "1M+" : p.traffic_rank.toLocaleString()}<span className="ml-2 text-[13px] font-normal text-t3">{TIER_LABEL[p.traffic_tier] ?? p.traffic_tier}</span></span> : DASH}</Metric>
-        <Metric label="Active ads" tag="Observed">{p.active_ads ?? DASH}<ThisWeek n={p.ads_delta_7d} /></Metric>
-        <Metric label="Longest ad" tag="Observed">{longest === null ? DASH : longest ? `${longest} days seen` : "None seen"}</Metric>
+        <Metric label="Active ads" tag="Observed">{p.active_ads ?? DASH}{adsSeen > 0 && <span className="text-[13px] font-normal text-t3">of {adsSeen} seen</span>}<ThisWeek n={p.ads_delta_7d} /></Metric>
+        <Metric label="Longest ad" tag="Observed">{longestLabel}</Metric>
         <Metric label="Creator sponsors" tag="Observed">{p.sponsors ?? DASH}{p.creators !== null && <span className="text-[13px] font-normal text-t3">of {p.creators} {p.creators === 1 ? "creator" : "creators"}</span>}</Metric>
         <Metric label="First seen" tag="Observed">{ago(p.first_seen)}</Metric>
       </div>
@@ -247,28 +249,74 @@ function latestByExternalId(signals: Signal[], kind: string) {
   });
 }
 
+// Research notes sometimes land where ad copy belongs when a Transparency page hides the text.
+const AD_NOTE = /simgad|googlesyndication|static html|creative page|not (?:present|extracted|exported)|playwright|grid item|transparency listing|archive image/i;
+const dayDate = (day?: string) => (day ? shortDate(`${day}T12:00:00Z`) : undefined);
+
+type AdGroup = {
+  key: string; platform: "google" | "meta"; copy: string | null; format?: string; versions: number;
+  active: boolean | null; started?: string; lastShown?: string; lastSeen: string; days: number; source: string;
+};
+
+/** One row per distinct ad, with identical copy across library IDs folded into versions. */
+function adGroups(signals: Signal[]) {
+  const groups = new Map<string, AdGroup>();
+  for (const { latest, days } of latestByExternalId(signals, "ad_observed")) {
+    const d = latest.detail;
+    const platform = text(d.platform) === "google" ? "google" : "meta";
+    const raw = text(d.creativeText)?.trim() || null;
+    const copy = raw && !AD_NOTE.test(raw) ? raw : null;
+    const activity = text(d.activity);
+    const active = activity === "active" ? true : activity === "inactive" ? false : null;
+    const started = text(d.reportedStartDate), lastShown = text(d.reportedLastShownDate);
+    // Same copy folds into versions; ads whose text we couldn't read fold together per platform.
+    const key = copy ? `${platform}:${copy.replace(/\s+/g, " ").toLowerCase()}` : `${platform}:${text(d.format) ?? ""}:unreadable`;
+    const g = groups.get(key);
+    if (!g) {
+      groups.set(key, { key, platform, copy, format: text(d.format), versions: 1, active, started, lastShown, lastSeen: latest.observed_at, days, source: latest.source_url });
+      continue;
+    }
+    g.versions++;
+    g.active = g.active || active ? true : g.active === false || active === false ? false : null;
+    if (started && (!g.started || started < g.started)) g.started = started;
+    if (lastShown && (!g.lastShown || lastShown > g.lastShown)) g.lastShown = lastShown;
+    if (latest.observed_at > g.lastSeen) g.lastSeen = latest.observed_at;
+    g.days = Math.max(g.days, days);
+  }
+  const rank = (g: AdGroup) => (g.active ? 0 : g.copy ? 1 : 2);
+  return [...groups.values()].sort((a, b) => rank(a) - rank(b) || (a.started ?? "9").localeCompare(b.started ?? "9") || b.days - a.days);
+}
+
 function Ads({ v, p }: { v: Vault; p: Product }) {
-  const ads = useMemo(() => latestByExternalId(v.signals, "ad_observed").sort((a, b) => b.days - a.days), [v.signals]);
-  if (!ads.length) return <div className="panel rounded-xl p-6 text-t2">{p.active_ads === null ? "We haven't collected ad data for this product yet." : "No ads seen in our scans. That doesn't prove it isn't advertising."}</div>;
+  const groups = useMemo(() => adGroups(v.signals), [v.signals]);
+  const total = groups.reduce((n, g) => n + g.versions, 0);
+  if (!groups.length) return <div className="panel rounded-xl p-6 text-t2">{p.active_ads === null ? "We haven't collected ad data for this product yet." : "No ads seen in our scans. That doesn't prove it isn't advertising."}</div>;
+  const active = groups.filter((g) => g.active).reduce((n, g) => n + g.versions, 0);
+  const earliest = groups.map((g) => g.started).filter(Boolean).sort()[0];
   return (
     <>
+      <p className="mb-2 text-[13px] text-t2">
+        <span className="num text-t1">{total}</span> {total === 1 ? "ad" : "ads"} seen · <span className="num text-t1">{active}</span> active when last checked{earliest && <> · earliest started {dayDate(earliest)}</>}
+      </p>
       <div className="panel rounded-xl">
-        {ads.map(({ latest, first, days }) => {
-          const d = latest.detail;
-          const running = text(d.activity) === "active";
-          return (
-            <div key={latest.external_id} className="flex items-start gap-3 border-b border-line px-3 py-2.5 last:border-b-0">
-              <span title={running ? "Active when last checked" : "Not active when last checked"} className={`mt-1.5 size-1.5 shrink-0 rounded-full ${running ? "bg-arc" : "bg-t3"}`} />
-              <div className="min-w-0 flex-1">
-                <div className="line-clamp-2 leading-[20px]">{text(d.creativeText) || text(d.advertiserName) || "Ad"}</div>
-                <div className="num mt-0.5 text-[12px] text-t3">{text(d.platform) === "google" ? "Google" : "Meta"} · seen on {days} {days === 1 ? "day" : "days"} · first {shortDate(first.observed_at)} · last {shortDate(latest.observed_at)}</div>
+        {groups.map((g) => (
+          <div key={g.key} className="flex items-start gap-3 border-b border-line px-3.5 py-3 last:border-b-0">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                {g.active !== null && <span className={`rounded-full px-2 text-[11px] font-medium leading-[20px] ${g.active ? "bg-arc-dim text-arc" : "bg-s3 text-t2"}`}>{g.active ? "Active" : "Inactive"}</span>}
+                <span className="text-[12px] text-t2">{g.platform === "google" ? "Google" : "Meta"}{g.format && g.format !== "unknown" ? ` ${g.format} ad` : " ad"}</span>
+                {g.versions > 1 && <span className="text-[12px] text-t3">· {g.versions} {g.copy ? "versions" : "ads"}</span>}
               </div>
-              <SourceLink href={latest.source_url}>Source</SourceLink>
+              {g.copy ? <div className="line-clamp-3 whitespace-pre-line leading-[20px]">{g.copy}</div> : <div className="text-[13px] text-t3">{g.versions > 1 ? "Their text wasn't readable on the public listing. The source link opens one of them." : "Ad text wasn't readable on the public listing. Open the source to view it."}</div>}
+              <div className="num mt-1 text-[12px] text-t3">
+                {[g.started && `Started ${dayDate(g.started)}`, g.lastShown && `Last shown ${dayDate(g.lastShown)}`, `Seen by us ${shortDate(g.lastSeen)}${g.days > 1 ? ` (${g.days} days)` : ""}`].filter(Boolean).join(" · ")}
+              </div>
             </div>
-          );
-        })}
+            <SourceLink href={g.source}>Source</SourceLink>
+          </div>
+        ))}
       </div>
-      <p className="mt-2 text-[12px] leading-[17px] text-t3">{v.adObservations.meaning}</p>
+      <p className="mt-2 text-[12px] leading-[17px] text-t3">{v.adObservations.meaning} Start and last-shown dates are as the ad library reports them.</p>
     </>
   );
 }
@@ -503,6 +551,7 @@ export function AppPage() {
   const vault = useQuery((signal) => api<Vault>(`/api/v1/vault/${encodeURIComponent(slug)}${shared}`, { signal }), [slug, shared, s.status], s.status !== "loading");
   const v = vault.data?.product.slug === slug ? vault.data : undefined;
   const p = useMemo(() => (v ? vaultProduct(v) : undefined), [v]);
+  const adsSeen = useMemo(() => (v ? adGroups(v.signals).reduce((n, g) => n + g.versions, 0) : 0), [v]);
   const limitError = vault.error instanceof ApiError && vault.error.code === "daily_limit" ? vault.error : undefined;
   const limitUsage = limitError ? (limitError.body as unknown as Usage) : null;
 
@@ -644,7 +693,7 @@ export function AppPage() {
       <div className="flex flex-col gap-10 px-4 pt-6 lg:px-6">
         <section id="overview" className="scroll-mt-[120px]">
           <h2 className="sr-only">Overview</h2>
-          <Overview p={p} />
+          <Overview p={p} adsSeen={adsSeen} />
         </section>
 
         <section id="traffic" className="scroll-mt-[120px]">
@@ -702,7 +751,7 @@ export function AppPage() {
           {locked ? <LockedCard label="Sign in to see the creators" onSignIn={signIn} /> : <Creators v={v} p={p} />}
         </section>
         <section id="model" className="scroll-mt-[120px]">
-          <h2 className={`${SECTION_TITLE} mb-3`}>Model</h2>
+          <h2 className={`${SECTION_TITLE} mb-3`}>Pricing</h2>
           <BusinessModel v={v} p={p} locked={locked} onSignIn={signIn} />
         </section>
         {full && <section id="blueprint" className="scroll-mt-[120px]">
