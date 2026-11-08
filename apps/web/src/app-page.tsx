@@ -2,12 +2,12 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Crosshair, Eye, ImageOff, Layers, Lock, Mail, Share2, Sparkles, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type Step, type Usage, type Vault } from "./api";
-import { ago, CATEGORY_LABEL, DASH, formatRevenue, MODEL_LABEL, shortDate, STAGES, STAGE_LABEL } from "./data";
+import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type StackItem, type Step, type Traffic, type Usage, type Vault } from "./api";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
 import { useSession } from "./shell";
-import { CodeLine, Confidence, ErrorPanel, GateModal, GrowthValue, LimitModal, mcpPrompt, ProductIcon, Sparkline, useCopy } from "./ui";
+import { CodeLine, Confidence, ErrorPanel, GateModal, LimitModal, mcpPrompt, ProductIcon, useCopy } from "./ui";
 
-const SECTIONS = [["overview", "Overview"], ["screens", "Screens"], ["ads", "Ads"], ["creators", "Creators"], ["model", "Model"], ["blueprint", "Blueprint"]];
+const SECTIONS = [["overview", "Overview"], ["traffic", "Traffic"], ["stack", "Stack"], ["screens", "Screens"], ["ads", "Ads"], ["creators", "Creators"], ["model", "Model"], ["blueprint", "Blueprint"]];
 const SECTION_TITLE = "font-display text-[22px] font-semibold leading-[28px] tracking-[-0.015em]";
 
 /** Facts we captured. Visually distinct from our interpretation, which sits in Analysis. */
@@ -57,13 +57,73 @@ function Overview({ p }: { p: Product }) {
     <>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric label="Revenue range/mo" tag="Manual"><span>{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <Confidence level={p.revenue_confidence} />}</Metric>
-        <Metric label="Distribution activity, 4w" tag="Observed"><GrowthValue value={p.activity_change_4w} /><Sparkline data={p.activity_weekly} /></Metric>
+        <Metric label="Traffic rank" tag="Daily">{p.traffic_tier ? <span title={TRAFFIC_TITLE}>{p.traffic_rank === null ? "1M+" : p.traffic_rank.toLocaleString()}<span className="ml-2 text-[13px] font-normal text-t3">{TIER_LABEL[p.traffic_tier] ?? p.traffic_tier}</span></span> : DASH}</Metric>
         <Metric label="Active ads" tag="Observed">{p.active_ads ?? DASH}<ThisWeek n={p.ads_delta_7d} /></Metric>
         <Metric label="Longest ad" tag="Observed">{longest === null ? DASH : longest ? `${longest} days seen` : "None seen"}</Metric>
         <Metric label="Creator sponsors" tag="Observed">{p.sponsors ?? DASH}{p.creators !== null && <span className="text-[13px] font-normal text-t3">of {p.creators} {p.creators === 1 ? "creator" : "creators"}</span>}</Metric>
         <Metric label="First seen" tag="Observed">{ago(p.first_seen)}</Metric>
       </div>
-      <p className="mt-2 text-[12px] leading-[17px] text-t3">Observed ad and creator activity, not product or business growth. A dash means not collected yet.</p>
+      <p className="mt-2 text-[12px] leading-[17px] text-t3">Observed public signals, not product or business growth. A dash means not collected yet.</p>
+    </>
+  );
+}
+
+/** Rank history on a log scale, so a climb from #90K to #9K reads as far as #9K to #900. */
+function TrafficSection({ traffic }: { traffic?: Traffic }) {
+  const history = traffic?.history ?? [];
+  if (!traffic?.latest) return <div className="panel rounded-xl p-6 text-t2">This site isn't ranked yet. Products on shared hosting or app stores have no site of their own to rank.</div>;
+  const ranked = history.filter((h): h is { observed_on: string; rank: number } => h.rank !== null);
+  const first = ranked[0], last = ranked[ranked.length - 1];
+  const W = 640, H = 120, PAD = 6;
+  const logs = ranked.map((h) => Math.log10(h.rank));
+  // At least a 2x rank range on the axis, so day-to-day noise stays flat instead of looking like a surge.
+  const span = Math.max(Math.max(...logs) - Math.min(...logs), 0.3), lo = (Math.max(...logs) + Math.min(...logs)) / 2 - span / 2;
+  const t0 = Date.parse(history[0].observed_on), t1 = Date.parse(history[history.length - 1].observed_on), tSpan = t1 - t0 || 1;
+  const points = ranked.map((h) => [PAD + ((Date.parse(h.observed_on) - t0) / tSpan) * (W - 2 * PAD), PAD + ((Math.log10(h.rank) - lo) / span) * (H - 2 * PAD)]);
+  const moved = first && last && first !== last ? Math.log10(first.rank / last.rank) : 0;
+  // Ranks are dated by UTC day; noon keeps the label on the same day in every time zone.
+  const day = (d: string) => shortDate(d + "T12:00:00Z");
+  return (
+    <div className="panel rounded-xl p-4">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <span className="num text-[28px] font-semibold leading-[34px] tracking-[-0.02em]">{traffic.latest.rank === null ? "Outside top 1M" : `#${traffic.latest.rank.toLocaleString()}`}</span>
+        <span className="pill">{TIER_LABEL[traffic.latest.tier] ?? traffic.latest.tier}</span>
+        {Math.abs(moved) >= 0.04 && <span className={`num text-[13px] font-medium ${moved > 0 ? "text-teal" : "text-t3"}`}>{moved > 0 ? "Up" : "Down"} from {compactRank(first.rank)} on {day(first.observed_on)}</span>}
+        <span className="ml-auto text-[12px] text-t3">Tracked daily since {day(history[0].observed_on)}</span>
+      </div>
+      {points.length > 1 ? (
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mt-4 h-[120px] w-full" role="img" aria-label="Traffic rank over time">
+          <polyline points={points.map((x) => x.join(",")).join(" ")} fill="none" stroke="var(--color-teal)" strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <p className="mt-3 text-[13px] text-t2">The chart fills in as daily ranks come in.</p>
+      )}
+      <p className="mt-3 text-[12px] leading-[17px] text-t3">{traffic.meaning}</p>
+    </div>
+  );
+}
+
+const STACK_LABEL: Record<string, string> = { framework: "Framework", site_builder: "Site builder", payments: "Payments", analytics: "Analytics", ad_pixel: "Ad pixels", support: "Support", auth: "Auth", backend: "Backend", marketing: "Marketing" };
+
+function StackSection({ stack }: { stack?: { meaning: string; items: StackItem[] } }) {
+  const items = stack?.items ?? [];
+  if (!items.length) return <div className="panel rounded-xl p-6 text-t2">No known technologies detected in this site's public homepage code yet.</div>;
+  const groups = Object.entries(items.reduce<Record<string, StackItem[]>>((acc, x) => ((acc[x.category] ??= []).push(x), acc), {}));
+  return (
+    <>
+      <div className="panel grid gap-px overflow-hidden rounded-xl sm:grid-cols-2 lg:grid-cols-3">
+        {groups.map(([category, list]) => (
+          <div key={category} className="p-3.5">
+            <div className="eyebrow mb-2">{STACK_LABEL[category] ?? category}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {list.map((x) => (
+                <span key={x.technology} title={x.removed_at ? `Seen from ${shortDate(x.first_seen)}, gone since ${shortDate(x.removed_at)}` : `Seen since ${shortDate(x.first_seen)}`} className={`rounded-md border px-2 py-0.5 text-[13px] ${x.removed_at ? "border-dashed border-line text-t3 line-through" : "border-line-strong"}`}>{x.technology}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[12px] leading-[17px] text-t3">{stack!.meaning}</p>
     </>
   );
 }
@@ -505,7 +565,7 @@ export function AppPage() {
   });
 
   const similar = useQuery(async (signal) => {
-    const result = await fetchRadar({ category: p!.category, sort: "activity", dir: "desc", limit: 4 }, signal);
+    const result = await fetchRadar({ category: p!.category, sort: "traffic", dir: "desc", limit: 4 }, signal);
     return result.items.filter((x) => x.id !== p!.id).slice(0, 3);
   }, [p?.category, p?.id], !!p);
 
@@ -587,6 +647,15 @@ export function AppPage() {
           <Overview p={p} />
         </section>
 
+        <section id="traffic" className="scroll-mt-[120px]">
+          <h2 className={`${SECTION_TITLE} mb-3`}>Traffic</h2>
+          <TrafficSection traffic={v.traffic} />
+        </section>
+        <section id="stack" className="scroll-mt-[120px]">
+          <h2 className={`${SECTION_TITLE} mb-3`}>Tech stack</h2>
+          <StackSection stack={v.stack} />
+        </section>
+
         {!full && (
           <section id="screens" className="scroll-mt-[120px]">
             <h2 className={`${SECTION_TITLE} mb-3`}>Screens</h2>
@@ -649,7 +718,7 @@ export function AppPage() {
                 <Link key={x.slug} to={`/app/${x.slug}`} state={state} className="panel flex items-center gap-3 rounded-xl p-3 transition-colors hover:border-line-strong">
                   <ProductIcon p={x} />
                   <span className="min-w-0 flex-1"><span className="block truncate font-medium">{x.name}</span><span className="block truncate text-[13px] text-t2">{MODEL_LABEL[x.monetization]}</span></span>
-                  <GrowthValue value={x.activity_change_4w} />
+                  {x.traffic_tier && <span title={TRAFFIC_TITLE} className="num text-[13px] text-t2">{x.traffic_rank === null ? "1M+" : compactRank(x.traffic_rank)}</span>}
                 </Link>
               ))}
             </div>

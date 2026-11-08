@@ -18,6 +18,10 @@ export const CHANGE_LABEL: Record<ChangeKind, string> = { ads: "Ads", creators: 
 
 /** Shown wherever a value wasn't collected. Unknown never reads as zero or small. */
 export const DASH = "—";
+/** Tranco rank, compact for table cells: #880, #17.8K, #412K. */
+export const compactRank = (rank: number) => "#" + (rank < 1000 ? rank : rank < 100_000 ? `${(rank / 1000).toFixed(1).replace(/.0$/, "")}K` : `${Math.round(rank / 1000)}K`);
+export const TIER_LABEL: Record<string, string> = { "top 1K": "Top 1K", "top 10K": "Top 10K", "top 100K": "Top 100K", "top 1M": "Top 1M", "outside top 1M": "Below top 1M" };
+export const TRAFFIC_TITLE = "Site popularity rank in the Tranco top-million list, checked daily. Lower is more popular. A popularity tier, not visitor counts or revenue.";
 
 const dollars = (n: number) => (n >= 1_000_000 ? `$${+(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `$${+(n / 1000).toFixed(1)}k` : `$${n}`);
 export const formatRevenue = (low: number | null, high: number | null) => (low === null || high === null ? DASH : low === high ? dollars(low) : `${dollars(low)}–${dollars(high)}`);

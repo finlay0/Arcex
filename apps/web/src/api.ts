@@ -62,6 +62,8 @@ export type Product = {
   activity_change_4w: number | null; activity_weekly: (number | null)[];
   first_seen: string | null; last_seen: string | null;
   revenue_low_usd: number | null; revenue_high_usd: number | null; revenue_confidence: number | null;
+  /** Null rank with a tier means outside the top million; both null means not ranked yet. */
+  traffic_rank: number | null; traffic_tier: string | null; icon_url: string | null;
 };
 
 type RawProduct = Partial<Omit<Product, "activity_weekly" | "has_blueprint" | "open_sample">> & {
@@ -82,6 +84,7 @@ export function toProduct(raw: RawProduct): Product {
     activity_change_4w: raw.activity_change_4w ?? null, activity_weekly: weekly ?? [],
     first_seen: raw.first_seen ?? null, last_seen: raw.last_seen ?? null,
     revenue_low_usd: raw.revenue_low_usd ?? null, revenue_high_usd: raw.revenue_high_usd ?? null, revenue_confidence: raw.revenue_confidence ?? null,
+    traffic_rank: raw.traffic_rank ?? null, traffic_tier: raw.traffic_tier ?? null, icon_url: raw.icon_url ?? null,
   };
 }
 
@@ -107,8 +110,12 @@ export type Signal = { id: string; kind: string; external_id: string; observed_a
 export type Evidence = { id: string; source_url: string; observed_at: string; kind: string; summary: string };
 export type Offer = { name: string; displayedPrice: string; limits: string[]; sourceUrl: string };
 export type RevenueRange = { low_usd: number; high_usd: number; confidence: number; method_version: string; inputs: { basis: string; label: string; value: string; sourceUrl?: string }[]; meaning: string };
+export type Traffic = { source: string; meaning: string; latest: { observedOn: string; rank: number | null; tier: string } | null; history: { observed_on: string; rank: number | null }[] };
+export type StackItem = { technology: string; category: string; first_seen: string; removed_at: string | null };
 export type Vault = {
   product: RawProduct;
+  traffic?: Traffic;
+  stack?: { meaning: string; items: StackItem[] };
   coverage: Product["coverage"];
   access: "open" | "preview" | "full";
   usage: Usage | null;
@@ -126,7 +133,8 @@ export type Vault = {
 
 export function vaultProduct(v: Vault): Product {
   const range = v.revenueRange;
-  return toProduct({ ...v.product, ...v.metrics, coverage: v.coverage, revenue_low_usd: range?.low_usd, revenue_high_usd: range?.high_usd, revenue_confidence: range?.confidence });
+  const latest = v.traffic?.latest;
+  return toProduct({ ...v.product, ...v.metrics, coverage: v.coverage, revenue_low_usd: range?.low_usd, revenue_high_usd: range?.high_usd, revenue_confidence: range?.confidence, traffic_rank: latest?.rank ?? null, traffic_tier: latest?.tier ?? null });
 }
 
 export type BlueprintExport = { title: string; spec: Record<string, unknown>; partners: { name: string; url: string; relationship: string; disclosure: string; role: string }[] };

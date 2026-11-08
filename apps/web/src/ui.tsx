@@ -102,7 +102,11 @@ export function GrowthValue({ value }: { value: number | null }) {
 
 const iconHue = (name: string) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 
-export function ProductIcon({ p, size = 36 }: { p: { name: string }; size?: number }) {
+export function ProductIcon({ p, size = 36 }: { p: { name: string; icon_url?: string | null }; size?: number }) {
+  const [state, setState] = useState<"loading" | "loaded" | "broken">("loading");
+  // The letter tile's colour shows until the icon arrives, so rows don't flash white.
+  if (p.icon_url && state !== "broken")
+    return <img src={p.icon_url} alt="" width={size} height={size} loading="lazy" decoding="async" onLoad={() => setState("loaded")} onError={() => setState("broken")} className="shrink-0 object-contain" style={{ width: size, height: size, borderRadius: size * 0.24, background: state === "loaded" ? "#fff" : `hsl(${iconHue(p.name)} 42% 34%)` }} />;
   return (
     <span className="flex shrink-0 items-center justify-center font-bold text-white" style={{ width: size, height: size, borderRadius: size * 0.24, background: `hsl(${iconHue(p.name)} 42% 34%)`, fontSize: size * 0.5 }}>
       {p.name[0]?.toUpperCase()}

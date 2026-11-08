@@ -2,9 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "rea
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, X } from "lucide-react";
 import { errorMessage, fetchRadar, useQuery, type Product } from "./api";
-import { ago, CATEGORY_LABEL, DASH, formatRevenue, MODEL_LABEL, type Category, type Model } from "./data";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, TIER_LABEL, TRAFFIC_TITLE, type Category, type Model } from "./data";
 import { useOpenProduct, useSession } from "./shell";
-import { Confidence, ErrorPanel, FilterMenu, GrowthValue, PageHeading, ProductIcon, Sparkline, useDebounced, useMedia, VideoCountIcon } from "./ui";
+import { Confidence, ErrorPanel, FilterMenu, PageHeading, ProductIcon, useDebounced, useMedia, VideoCountIcon } from "./ui";
 
 const PAGE_SIZE = 50;
 const DAY = 86_400_000;
@@ -26,15 +26,17 @@ const COVERAGE = [
   { value: "full", label: "Full Screens" },
   { value: "signals", label: "Signals Only" },
 ];
+// Views sort on data collected for every product. Ad and creator trends join when those scans are live.
 const PRESETS = [
   { value: "", label: "All", sort: "", firstSeenDays: 0 },
-  { value: "trending", label: "Trending", sort: "activity", firstSeenDays: 0 },
-  { value: "rising", label: "Rising", sort: "activity", firstSeenDays: 120 },
+  { value: "popular", label: "Most visited", sort: "traffic", firstSeenDays: 0 },
   { value: "new", label: "New", sort: "first", firstSeenDays: 30 },
 ];
 const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
   revenue: (p) => p.revenue_high_usd,
   activity: (p) => p.activity_change_4w,
+  // Negated so "descending" means most popular first, matching the server.
+  traffic: (p) => (p.traffic_rank === null ? null : -p.traffic_rank),
   ads: (p) => p.active_ads,
   sponsors: (p) => p.sponsors,
   first: (p) => p.first_seen,
@@ -44,6 +46,16 @@ const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
 function Delta({ n }: { n: number | null }) {
   if (!n) return null;
   return <span title="Change in the last 7 days" className={`hidden text-[12px] font-normal md:inline ${n > 0 ? "text-teal" : "text-t3"}`}>{n > 0 ? `+${n}` : n}</span>;
+}
+
+function TrafficCell({ p }: { p: Product }) {
+  if (!p.traffic_tier) return <span title="Not ranked yet" className="num text-[13px] text-t3">{DASH}</span>;
+  return (
+    <span title={TRAFFIC_TITLE} className="min-w-0">
+      <span className="num block text-[13px] font-medium">{p.traffic_rank === null ? "1M+" : compactRank(p.traffic_rank)}</span>
+      <span className="hidden truncate text-[11px] text-t3 md:block">{TIER_LABEL[p.traffic_tier] ?? p.traffic_tier}</span>
+    </span>
+  );
 }
 
 function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => void }) {
@@ -62,7 +74,7 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
           <span className="line-clamp-2 text-[13px] leading-[18px] text-t2">{p.description}</span>
         </span>
       </span>
-      <span className="col-thumb">
+      <span className={`col-thumb ${p.coverage === "full" ? "" : "max-md:hidden"}`}>
         {p.coverage === "full" ? (
           <span title={`${p.step_count} screens captured`} className="num flex aspect-[1280/800] w-[72px] items-center justify-center gap-1 rounded-md border border-line-strong bg-s2 text-[12px] text-t1">{s.signedIn || open ? <Layers className="size-3" /> : <Lock className="size-3" />}{p.step_count}</span>
         ) : (
@@ -71,7 +83,7 @@ function Row({ p, fresh, onOpen }: { p: Product; fresh: boolean; onOpen: () => v
       </span>
       <span className="col-cat"><span className="pill">{CATEGORY_LABEL[p.category]}</span></span>
       <span className="col-rev"><span className="num block text-[13px] font-medium">{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <span className="flex items-center gap-1.5 text-[11px] text-t3">Range <Confidence level={p.revenue_confidence} /></span>}</span>
-      <span className="flex items-center gap-2"><GrowthValue value={p.activity_change_4w} /><span className="hidden md:block"><Sparkline data={p.activity_weekly} /></span></span>
+      <TrafficCell p={p} />
       <span className="num flex items-center gap-1.5 font-medium"><ChartNoAxesColumnIncreasing className={`hidden size-4 md:block ${p.active_ads ? "text-teal" : "text-t3"}`} />{p.active_ads ?? DASH}<Delta n={p.ads_delta_7d} /></span>
       <span className="col-yt"><span className="num flex items-center gap-1.5 font-medium"><VideoCountIcon className="size-4 text-t2" />{p.sponsors ?? DASH}</span></span>
       <span className="col-mon min-w-0"><span className="pill"><span className="truncate">{MODEL_LABEL[p.monetization]}</span></span></span>
@@ -123,7 +135,7 @@ function FirstRunSteps({ onFirstApp }: { onFirstApp?: () => void }) {
 }
 
 const SCOPE = {
-  radar: { title: "AI Product Radar", sub: "Discover emerging AI products, track their distribution, and reverse-engineer what's working.", empty: "No products are published yet. We're reviewing the first batch, and only products with approved evidence appear here." },
+  radar: { title: "Radar", sub: "See what's working in software. Every product's traffic, pricing, stack and distribution, tracked daily.", empty: "No products are published yet. We're reviewing the first batch, and only products with approved evidence appear here." },
   saved: { title: "Saved", sub: "Products you're keeping an eye on.", empty: "Nothing saved yet. Press S on any row, or use the Save button on an app's page." },
   history: { title: "History", sub: "The apps you've opened on this browser, most recent first.", empty: "Nothing here yet. Open an app and it will show up here." },
 };
@@ -340,7 +352,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
                 <span className="col-thumb">Screens</span>
                 <span className="col-cat">Category</span>
                 <SortHead id="revenue" sort={sort} dir={dir} onSort={onSort} className="col-rev"><span title="A manually entered range from listed sources. Not reported revenue.">Rev. range/mo</span></SortHead>
-                <SortHead id="activity" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">4w</span><span className="hidden md:inline" title="Change in ads and creators we observed. Not product or business growth.">Activity 4w</span></SortHead>
+                <SortHead id="traffic" sort={sort} dir={dir} onSort={onSort}><span title={TRAFFIC_TITLE}>Traffic</span></SortHead>
                 <SortHead id="ads" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">Ads</span><span className="hidden md:inline">Active ads</span></SortHead>
                 <SortHead id="sponsors" sort={sort} dir={dir} onSort={onSort} className="col-yt">Sponsors</SortHead>
                 <span className="col-mon">Monetization</span>
