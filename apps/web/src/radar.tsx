@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ArrowUpDown,ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, SlidersHorizontal, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { errorMessage, fetchRadar, useQuery, type Product } from "./api";
 import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, PRICE_TITLE, priceLabel, TIER_LABEL, TRAFFIC_TITLE, type Category } from "./data";
@@ -31,8 +31,12 @@ const COVERAGE = [
 const PRESETS = [
   { value: "", label: "All", sort: "", firstSeenDays: 0 },
   { value: "popular", label: "Most visited", sort: "traffic", firstSeenDays: 0 },
+  { value: "cheapest", label: "Cheapest", sort: "price", firstSeenDays: 0 },
   { value: "new", label: "New", sort: "first", firstSeenDays: 30 },
 ];
+// Columns whose first click sorts low to high. Everything else starts high to low.
+const ASC_FIRST: Record<string, true> = { price: true };
+const PRICE_SORT_NOTE = "Cheapest paid plan per month stated in USD. Free-only plans first; other currencies and unpriced last, with no conversion.";
 const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
   revenue: (p) => p.revenue_high_usd,
   activity: (p) => p.activity_change_4w,
@@ -42,6 +46,8 @@ const SORT_VALUE: Record<string, (p: Product) => number | string | null> = {
   sponsors: (p) => p.sponsors,
   first: (p) => p.first_seen,
   seen: (p) => p.last_seen,
+  // Same rule as the server: USD monthly entry, free-only as 0, anything else unknown.
+  price: (p) => (p.pricing?.entry ? (p.pricing.entry.currency === "USD" ? p.pricing.entry.monthlyAmount : null) : p.pricing?.freePlan ? 0 : null),
 };
 
 function Delta({ n }: { n: number | null }) {
@@ -120,8 +126,9 @@ function SortHead({ id, sort, dir, onSort, className, children }: { id: string; 
   const on = sort === id;
   return (
     <span className={className} aria-sort={on ? (dir === "asc" ? "ascending" : "descending") : "none"} role="columnheader">
-      <button onClick={() => onSort(id)} className={`flex items-center gap-1 whitespace-nowrap uppercase tracking-[0.05em] hover:text-t1 ${on ? "text-t1" : ""}`}>
-        {children}{on && (dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+      <button onClick={() => onSort(id)} className={`group flex items-center gap-1 whitespace-nowrap uppercase tracking-[0.05em] hover:text-t1 ${on ? "text-t1" : ""}`}>
+        {children}
+        {on ? (dir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ArrowUpDown aria-hidden className="size-3 opacity-35 transition-opacity group-hover:opacity-80" />}
       </button>
     </span>
   );
@@ -222,7 +229,8 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const presetId = scope === "radar" ? sp.get("preset") ?? "" : "";
   const preset = PRESETS.find((x) => x.value === presetId) ?? PRESETS[0];
   const sort = SORT_VALUE[sp.get("sort") ?? ""] ? sp.get("sort")! : preset.sort;
-  const dir: "asc" | "desc" = sp.get("dir") === "asc" ? "asc" : "desc";
+  const defaultDir = (id: string): "asc" | "desc" => (ASC_FIRST[id] ? "asc" : "desc");
+  const dir: "asc" | "desc" = sp.get("dir") === "asc" || sp.get("dir") === "desc" ? (sp.get("dir") as "asc" | "desc") : defaultDir(sort);
   const page = Math.max(1, Math.floor(Number(sp.get("page"))) || 1);
   const update = (changes: Record<string, string | null>, keepPage = false) => {
     const n = new URLSearchParams(sp);
@@ -232,7 +240,12 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
     if (!keepPage) n.delete("page");
     setSp(n, { replace: true, preventScrollReset: true });
   };
-  const onSort = (id: string) => update(sort !== id ? { sort: id, dir: null } : { sort: id, dir: dir === "desc" ? "asc" : null });
+  // First click uses the column's natural order; the next flips it. The URL only spells out a non-default direction.
+  const onSort = (id: string) => {
+    const next = sort !== id ? defaultDir(id) : dir === "asc" ? "desc" : "asc";
+    // A view that is only a sort no longer applies once a column takes over; "New" also filters, so it stays.
+    update({ sort: id, dir: next === defaultDir(id) ? null : next, ...(!preset.firstSeenDays && { preset: null }) });
+  };
 
   // Filtering and sorting run on the server. Search waits for a pause in typing.
   const query = useDebounced(q.trim());
@@ -399,6 +412,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
           <span className="num mr-1 text-[13px] text-t2" role="status">
             {firstLoad ? "Loading products..." : total ? <>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()} {total === 1 ? "product" : "products"}</> : "0 products"}
           </span>
+          {sort === "price" && <span className="order-last basis-full text-[12px] leading-[17px] text-t3">Sorted by price: {PRICE_SORT_NOTE.charAt(0).toLowerCase() + PRICE_SORT_NOTE.slice(1)}</span>}
           {chips.map((c) => <Chip key={c.key} label={c.label} onClear={() => update({ [c.key]: null })} />)}
           {chips.length > 1 && <button onClick={clearFilters} className="text-[12px] text-t2 underline underline-offset-2 hover:text-t1">Clear all</button>}
           {pages > 1 && (
@@ -438,7 +452,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
                 <SortHead id="traffic" sort={sort} dir={dir} onSort={onSort}><span title={TRAFFIC_TITLE}>Traffic</span></SortHead>
                 <SortHead id="ads" sort={sort} dir={dir} onSort={onSort}><span className="md:hidden">Ads</span><span className="hidden md:inline">Active ads</span></SortHead>
                 <SortHead id="sponsors" sort={sort} dir={dir} onSort={onSort} className="col-yt">Sponsors</SortHead>
-                <span className="col-mon" title={PRICE_TITLE}>Price</span>
+                <SortHead id="price" sort={sort} dir={dir} onSort={onSort} className="col-mon"><span title={`${PRICE_TITLE} ${PRICE_SORT_NOTE}`}>Price</span></SortHead>
                 <SortHead id="first" sort={sort} dir={dir} onSort={onSort} className="col-first">First seen</SortHead>
                 <SortHead id="seen" sort={sort} dir={dir} onSort={onSort} className="col-seen">Last seen</SortHead>
                 <span />
