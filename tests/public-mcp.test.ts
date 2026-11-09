@@ -63,12 +63,19 @@ test("public MCP connects without sign-in and keeps key checks", async () => {
       }) as Promise<{ isError?: boolean; content: { text: string }[] }>;
 
     const anonymous = await connect();
-    assert.equal((await anonymous.listTools()).tools.length, 7);
+    assert.equal((await anonymous.listTools()).tools.length, 5);
+    // Handshakes and tool lists spend no database writes; tool calls are limited per caller.
+    const limitRows = async () =>
+      (await DB.prepare(
+        "SELECT count(*) n FROM rate_limits WHERE key LIKE 'public-mcp%'",
+      ).first<{ n: number }>())!.n;
+    assert.equal(await limitRows(), 0);
     const overview = (await anonymous.callTool({
       name: "market_overview",
       arguments: {},
     })) as { isError?: boolean; content: { text: string }[] };
     assert.equal(JSON.parse(overview.content[0].text).scope.products, 0);
+    assert.equal(await limitRows(), 3);
     const search = (await anonymous.callTool({
       name: "search_products",
       arguments: { query: "paywall", limit: 1 },

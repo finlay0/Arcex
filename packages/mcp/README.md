@@ -1,4 +1,4 @@
-> Most people should use the hosted connection instead of this package: add `https://arcex-api.peak-era-avern.workers.dev/public/mcp` to your agent as a remote MCP server. This package isn't on npm. It's only for clients that can't use remote servers.
+> Most people should use the hosted connection instead of this package: add `https://api.arcex.dev/public/mcp` to your agent as a remote MCP server. This package isn't on npm. It's only for clients that can't use remote servers.
 
 # Arcex MCP
 

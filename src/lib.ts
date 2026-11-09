@@ -110,7 +110,10 @@ export async function rateLimit(
   if (!row || row.hits > max) fail(429, "Rate limit exceeded");
 }
 export const decode = <T>(v: string): T => JSON.parse(v) as T;
-export async function boundedText(response: Response, maximum = 1_000_000) {
+export async function boundedText(
+  response: { body: ReadableStream<Uint8Array> | null },
+  maximum = 1_000_000,
+) {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
