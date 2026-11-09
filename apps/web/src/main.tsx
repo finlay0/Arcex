@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppPage } from "./app-page";
 import { Developers } from "./developers";
+import { Market } from "./market";
 import { Radar } from "./radar";
 import { Shell } from "./shell";
 import { Tracking } from "./tracking";
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
       { path: "/", element: <Radar /> },
       { path: "/saved", element: <Radar key="saved" scope="saved" /> },
       { path: "/history", element: <Radar key="history" scope="history" /> },
+      { path: "/market", element: <Market /> },
       { path: "/updates", element: <Updates /> },
       { path: "/tracking", element: <Tracking /> },
       { path: "/developers", element: <Developers /> },

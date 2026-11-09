@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Crosshair, Eye, ImageOff, Lock, Mail, Share2, Sparkles, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type StackItem, type Step, type Traffic, type Usage, type Vault, summarizeOffers, type MarketOverview, type PricingSummary } from "./api";
-import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, PRICE_TITLE, priceLabel, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, PRICE_TITLE, priceLabel, shortDate, STACK_LABEL, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
 import { useSession } from "./shell";
 import { CodeLine, Confidence, ErrorPanel, GateModal, LimitModal, mcpPrompt, ProductIcon, useCopy } from "./ui";
 
@@ -106,7 +106,6 @@ function TrafficSection({ traffic }: { traffic?: Traffic }) {
   );
 }
 
-const STACK_LABEL: Record<string, string> = { framework: "Framework", site_builder: "Site builder", payments: "Payments", analytics: "Analytics", ad_pixel: "Ad pixels", support: "Support", auth: "Auth", backend: "Backend", marketing: "Marketing" };
 
 function StackSection({ stack }: { stack?: { meaning: string; items: StackItem[] } }) {
   const items = stack?.items ?? [];

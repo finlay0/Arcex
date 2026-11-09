@@ -134,8 +134,14 @@ export function summarizeOffers(offers: Offer[]): PricingSummary {
   };
 }
 
+type Share = { products: number; share: number };
 export type MarketOverview = {
   scope: { category: string | null; products: number };
+  note: string | null;
+  categories: (Share & { value: string })[];
+  traffic: { meaning: string; ranked: number; tiers: (Share & { tier: string })[] };
+  stack: { meaning: string; items: (Share & { technology: string; category: string })[] };
+  stores: { store: string; n: number }[];
   pricing: { products: number; freePlan: number; paidPlan: number; usageBased: number; customTier: number; medianEntryUsd: { monthly: number; basis: number } | null; meaning: string };
 };
 export type RevenueRange = { low_usd: number; high_usd: number; confidence: number; method_version: string; inputs: { basis: string; label: string; value: string; sourceUrl?: string }[]; meaning: string };
@@ -178,3 +184,6 @@ export function fetchProviders() {
   return providers;
 }
 export const signInUrl = (provider: string) => apiUrl(`/auth/${provider}/start?returnTo=${encodeURIComponent(location.pathname + location.search)}`);
+
+export type TrafficMover = { slug: string; name: string; category: Category; rankNow: number | null; rankThen: number | null; comparedOn: string; change: number; tierNow: string };
+export type MarketMovers = { meaning: string; historyStartsOn: string | null; since: string | null; until: string | null; items: TrafficMover[] };

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router";
-import { Bell, Bookmark, Cable, Check, CircleUser, Crosshair, History, Layers, Megaphone, Radio, Search, Trophy, type LucideIcon } from "lucide-react";
+import { BarChart3, Bell, Bookmark, Cable, Check, CircleUser, Crosshair, History, Layers, Megaphone, Radio, Search, Trophy, type LucideIcon } from "lucide-react";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -347,6 +347,7 @@ function TopNav() {
       {/* The rail carries navigation where it exists; this covers phones and the app page. */}
       <nav aria-label="Main" className={`flex items-center justify-self-center ${pathname.startsWith("/app/") ? "" : "lg:invisible"}`}>
         <NavLink to="/" end className={item}>Radar</NavLink>
+        <NavLink to="/market" className={item}>Market</NavLink>
         <NavLink to="/tracking" className={item}>Track</NavLink>
         <NavLink to="/updates" className={item}><span className="relative">New{s.unseen.length > 0 && <span aria-label={`${s.unseen.length} unseen changes`} className="absolute -right-2 top-0 size-1.5 rounded-full bg-arc" />}</span></NavLink>
       </nav>
@@ -376,6 +377,7 @@ function Rail() {
     <aside className="sticky top-[68px] hidden h-[calc(100dvh-68px)] w-[200px] shrink-0 flex-col border-r border-line bg-canvas/40 p-3 lg:flex 2xl:w-[232px] 2xl:p-4">
       <nav aria-label="Workspace" className="flex flex-col gap-1">
         <RailLink to="/" end icon={Radio} label="Radar" />
+        <RailLink to="/market" icon={BarChart3} label="Market" />
         <RailLink to="/updates" icon={Bell} label="What's New" badge={s.unseen.length} />
         <RailLink to="/tracking" icon={Crosshair} label="Tracking" />
         <div className="my-3 h-px bg-line" />

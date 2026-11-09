@@ -22,6 +22,7 @@ export const DASH = "—";
 export const compactRank = (rank: number) => "#" + (rank < 1000 ? rank : rank < 100_000 ? `${(rank / 1000).toFixed(1).replace(/.0$/, "")}K` : `${Math.round(rank / 1000)}K`);
 export const TIER_LABEL: Record<string, string> = { "top 1K": "Top 1K", "top 10K": "Top 10K", "top 100K": "Top 100K", "top 1M": "Top 1M", "outside top 1M": "Below top 1M" };
 export const TRAFFIC_TITLE = "Site popularity rank in the Tranco top-million list, checked daily. Lower is more popular. A popularity tier, not visitor counts or revenue.";
+export const STACK_LABEL: Record<string, string> = { framework: "Framework", site_builder: "Site builder", payments: "Payments", analytics: "Analytics", ad_pixel: "Ad pixels", support: "Support", auth: "Auth", backend: "Backend", marketing: "Marketing" };
 export const PRICE_TITLE = "From the product's public pricing page: the cheapest paid plan as listed, and whether a free plan exists.";
 
 /** The cheapest paid plan as the pricing page shows it, else the kind of plan it lists. */
