@@ -118,6 +118,14 @@ const RADAR_SORT: Record<string, string> = {
   sponsors: "m.sponsors",
   first: "m.first_seen",
   seen: "m.last_seen",
+  // Cheapest paid monthly-equivalent plan stated in USD, from the published snapshot the
+  // row shows. Free-only listings count as 0. No currency conversion, so other currencies
+  // and unpriced listings are NULL and sort last in both directions.
+  price: `(SELECT CASE WHEN count(CASE WHEN iv IN ('month','year') AND amt>0 THEN 1 END)=0
+      THEN CASE WHEN sum(iv='free' OR amt=0)>0 THEN 0 END
+      ELSE min(CASE WHEN iv IN ('month','year') AND amt>0 AND cur='USD' THEN amt/(CASE iv WHEN 'year' THEN 12.0 ELSE 1 END) END) END
+    FROM (SELECT json_extract(o.value,'$.interval') iv,CAST(json_extract(o.value,'$.amount') AS REAL) amt,json_extract(o.value,'$.currency') cur
+      FROM json_each(${LATEST_PRICING_OFFERS}) o))`,
   // Negated rank, so the default descending order puts the most popular site first.
   traffic:
     "-(SELECT t.rank FROM traffic_ranks t WHERE t.product_id=p.id AND t.source='tranco' ORDER BY t.observed_on DESC LIMIT 1)",

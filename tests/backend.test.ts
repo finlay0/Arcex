@@ -1843,6 +1843,12 @@ test("Arcex backend: permissions, publication, community, jobs and billing", asy
         "/api/v1/radar?limit=100",
       );
       assert.equal(radar.items.find((i) => i.slug === "mover-live")?.pricing, null);
+      // Nor does it place the product in a price sort: unpriced sorts last.
+      const cheapest = await json<{ items: { slug: string }[] }>(
+        "GET",
+        "/api/v1/radar?sort=price&dir=asc&limit=100",
+      );
+      assert.equal(cheapest.items.at(-1)?.slug, "mover-live");
     });
     await t.test(
       "daily traffic ranks are collector-only and dated today",
