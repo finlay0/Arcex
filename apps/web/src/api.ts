@@ -116,7 +116,28 @@ export type Change = { id: string; kind: ChangeKind; summary: string; observed_a
 export type Step = { id: string; evidence_id: string; position: number; title: string; stage: Stage; annotation: string; image_url: string | null };
 export type Signal = { id: string; kind: string; external_id: string; observed_at: string; source_url: string; detail: Record<string, unknown> };
 export type Evidence = { id: string; source_url: string; observed_at: string; kind: string; summary: string };
-export type Offer = { name: string; displayedPrice: string; limits: string[]; sourceUrl: string };
+export type Offer = { name: string; displayedPrice: string; limits: string[]; sourceUrl: string; amount?: string | null; currency?: string | null; interval?: string };
+
+/** Mirrors the API's Radar summary: the entry plan is only compared within one stated currency. */
+export function summarizeOffers(offers: Offer[]): PricingSummary {
+  const amount = (o: Offer) => (o.amount == null ? null : Number(o.amount));
+  const recurring = offers
+    .filter((o) => (o.interval === "month" || o.interval === "year") && (amount(o) ?? 0) > 0)
+    .map((o) => ({ o, monthly: o.interval === "year" ? amount(o)! / 12 : amount(o)! }));
+  const currency = recurring[0]?.o.currency ?? null;
+  const cheapest = recurring.filter((r) => (r.o.currency ?? null) === currency).sort((a, b) => a.monthly - b.monthly)[0];
+  return {
+    freePlan: offers.some((o) => o.interval === "free" || amount(o) === 0),
+    entry: cheapest ? { name: cheapest.o.name, displayedPrice: cheapest.o.displayedPrice, monthlyAmount: Math.round(cheapest.monthly * 100) / 100, currency } : null,
+    usageBased: offers.some((o) => o.interval === "usage"),
+    customTier: offers.some((o) => o.amount == null && (o.interval === "unknown" || o.interval === "month" || o.interval === "year")),
+  };
+}
+
+export type MarketOverview = {
+  scope: { category: string | null; products: number };
+  pricing: { products: number; freePlan: number; paidPlan: number; usageBased: number; customTier: number; medianEntryUsd: { monthly: number; basis: number } | null; meaning: string };
+};
 export type RevenueRange = { low_usd: number; high_usd: number; confidence: number; method_version: string; inputs: { basis: string; label: string; value: string; sourceUrl?: string }[]; meaning: string };
 export type Traffic = { source: string; meaning: string; latest: { observedOn: string; rank: number | null; tier: string } | null; history: { observed_on: string; rank: number | null }[] };
 export type StackItem = { technology: string; category: string; first_seen: string; removed_at: string | null };

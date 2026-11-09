@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Crosshair, Eye, ImageOff, Layers, Lock, Mail, Share2, Sparkles, Zap } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronLeft, ChevronRight, Crosshair, Eye, ImageOff, Lock, Mail, Share2, Sparkles, Zap } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type StackItem, type Step, type Traffic, type Usage, type Vault } from "./api";
-import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, priceLabel, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
+import { api, ApiError, apiUrl, errorMessage, fetchRadar, useQuery, vaultProduct, type BlueprintExport, type Evidence, type Product, type RevenueRange, type Signal, type StackItem, type Step, type Traffic, type Usage, type Vault, summarizeOffers, type MarketOverview, type PricingSummary } from "./api";
+import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, MODEL_LABEL, PRICE_TITLE, priceLabel, shortDate, STAGES, STAGE_LABEL, TIER_LABEL, TRAFFIC_TITLE } from "./data";
 import { useSession } from "./shell";
 import { CodeLine, Confidence, ErrorPanel, GateModal, LimitModal, mcpPrompt, ProductIcon, useCopy } from "./ui";
 
@@ -39,9 +39,9 @@ function SourceLink({ href, children }: { href: string; children: ReactNode }) {
 
 function Metric({ label, tag, children }: { label: string; tag?: string; children: ReactNode }) {
   return (
-    <div className="panel rounded-xl p-3.5">
+    <div className="panel min-w-0 rounded-xl p-3.5 xl:flex-1">
       <div className="flex items-center justify-between gap-2 text-[12px] text-t2">{label}{tag && <span className="text-[11px] text-t3">{tag}</span>}</div>
-      <div className="num mt-1.5 flex min-h-[28px] items-center gap-2 text-[20px] font-semibold leading-[28px] tracking-[-0.01em]">{children}</div>
+      <div className="num mt-1.5 flex min-h-[28px] min-w-0 flex-wrap items-center gap-x-2 text-[20px] font-semibold leading-[28px] tracking-[-0.01em]">{children}</div>
     </div>
   );
 }
@@ -51,21 +51,22 @@ function ThisWeek({ n }: { n: number | null }) {
   return <span className={`text-[13px] font-normal ${n > 0 ? "text-arc" : "text-t3"}`}>{n > 0 ? "+" : ""}{n} this week</span>;
 }
 
-function Overview({ p, adsSeen }: { p: Product; adsSeen: number }) {
+/** Only signals we actually have; the rest are listed once under "Not tracked yet". */
+function Overview({ p, adsSeen, pricing }: { p: Product; adsSeen: number; pricing: PricingSummary | null }) {
   const longest = p.longest_ad_days;
-  // Longest ad counts days an ad was seen active, so inactive sightings read as "none active".
-  const longestLabel = longest === null ? DASH : longest ? `${longest} days seen` : adsSeen ? "None active" : "None seen";
+  const price = priceLabel(pricing);
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Metric label="Revenue range/mo" tag="Manual"><span>{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <Confidence level={p.revenue_confidence} />}</Metric>
-        <Metric label="Traffic rank" tag="Daily">{p.traffic_tier ? <span title={TRAFFIC_TITLE}>{p.traffic_rank === null ? "1M+" : p.traffic_rank.toLocaleString()}<span className="ml-2 text-[13px] font-normal text-t3">{TIER_LABEL[p.traffic_tier] ?? p.traffic_tier}</span></span> : DASH}</Metric>
-        <Metric label="Active ads" tag="Observed">{p.active_ads ?? DASH}{adsSeen > 0 && <span className="text-[13px] font-normal text-t3">of {adsSeen} seen</span>}<ThisWeek n={p.ads_delta_7d} /></Metric>
-        <Metric label="Longest ad" tag="Observed">{longestLabel}</Metric>
-        <Metric label="Creator sponsors" tag="Observed">{p.sponsors ?? DASH}{p.creators !== null && <span className="text-[13px] font-normal text-t3">of {p.creators} {p.creators === 1 ? "creator" : "creators"}</span>}</Metric>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:flex">
+        {price && <Metric label="Starts at" tag="Observed"><span title={PRICE_TITLE} className="truncate">{price}</span>{pricing?.entry && pricing.freePlan && <span className="shrink-0 text-[13px] font-normal text-arc">Free plan</span>}</Metric>}
+        {p.traffic_tier && <Metric label="Traffic rank" tag="Daily"><span title={TRAFFIC_TITLE}>{p.traffic_rank === null ? "1M+" : p.traffic_rank.toLocaleString()}<span className="ml-2 text-[13px] font-normal text-t3">{TIER_LABEL[p.traffic_tier] ?? p.traffic_tier}</span></span></Metric>}
+        {p.revenue_low_usd !== null && <Metric label="Revenue range/mo" tag="Manual"><span>{formatRevenue(p.revenue_low_usd, p.revenue_high_usd)}</span>{p.revenue_confidence !== null && <Confidence level={p.revenue_confidence} />}</Metric>}
+        {p.active_ads !== null && <Metric label="Active ads" tag="Observed">{p.active_ads}{adsSeen > 0 && <span className="text-[13px] font-normal text-t3">of {adsSeen} seen</span>}<ThisWeek n={p.ads_delta_7d} /></Metric>}
+        {!!longest && <Metric label="Longest ad" tag="Observed">{longest} days seen</Metric>}
+        {p.sponsors !== null && <Metric label="Creator sponsors" tag="Observed">{p.sponsors}{p.creators !== null && <span className="text-[13px] font-normal text-t3">of {p.creators} {p.creators === 1 ? "creator" : "creators"}</span>}</Metric>}
         <Metric label="First seen" tag="Observed">{ago(p.first_seen)}</Metric>
       </div>
-      <p className="mt-2 text-[12px] leading-[17px] text-t3">Observed public signals, not product or business growth. A dash means not collected yet.</p>
+      <p className="mt-2 text-[12px] leading-[17px] text-t3">Observed public signals, not product or business growth.</p>
     </>
   );
 }
@@ -365,10 +366,38 @@ function RevenueNotes({ range }: { range: RevenueRange }) {
   );
 }
 
-function BusinessModel({ v, p, locked, onSignIn }: { v: Vault; p: Product; locked: boolean; onSignIn: () => void }) {
+const pct = (share: number) => `${Math.round(share * 100)}%`;
+
+/** Plan markers for this product, then how its category prices, from published products only. */
+function PricingContext({ p, summary }: { p: Product; summary: PricingSummary }) {
+  const scoped = p.category !== "other";
+  const market = useQuery((signal) => api<MarketOverview>(`/api/v1/market/overview${scoped ? `?category=${p.category}` : ""}`, { signal }), [p.category]);
+  const m = market.data?.pricing;
+  const markers = [
+    summary.freePlan && "Free plan",
+    summary.entry && `Paid from ${priceLabel({ ...summary, freePlan: false })}`,
+    summary.usageBased && "Usage-based",
+    summary.customTier && "Custom tier",
+  ].filter(Boolean) as string[];
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5">{markers.map((x) => <span key={x} className="pill">{x}</span>)}</div>
+      {m && m.products >= 5 && (
+        <p className="text-[13px] leading-[19px] text-t2">
+          Of {m.products} {scoped ? `products in ${CATEGORY_LABEL[p.category]}` : "tracked products"} with published pricing, {pct(m.freePlan)} list a free plan and {pct(m.customTier)} a custom tier.
+          {m.medianEntryUsd && m.medianEntryUsd.basis >= 3 && <> The middle entry price among those stating USD is <span className="num text-t1">${m.medianEntryUsd.monthly}/mo</span> ({m.medianEntryUsd.basis} products).</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BusinessModel({ v, p, locked, onSignIn, summary }: { v: Vault; p: Product; locked: boolean; onSignIn: () => void; summary: PricingSummary | null }) {
   const pricing = v.publicPricing;
   const paywall = v.paywall;
   return (
+    <>
+    {summary && <PricingContext p={p} summary={summary} />}
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="flex flex-col gap-4">
         <Observed>
@@ -408,23 +437,11 @@ function BusinessModel({ v, p, locked, onSignIn }: { v: Vault; p: Product; locke
         </Analysis>
       )}
     </div>
+    </>
   );
 }
 
 /** Shown in place of screens when we only track an app's public signals. */
-function NotCaptured({ p, requested, onRequest }: { p: Product; requested: boolean; onRequest: () => void }) {
-  return (
-    <div className="panel flex flex-col items-start gap-3 rounded-xl p-5 md:flex-row md:items-center">
-      <Layers className="size-5 shrink-0 text-t2" />
-      <div className="min-w-0 flex-1">
-        <h3 className="font-medium">We haven't captured {p.name}'s screens yet</h3>
-        <p className="mt-0.5 text-[13px] leading-[18px] text-t2">We track its public ads, creators and pricing. Request it and we'll prioritize its full walkthrough and blueprint.</p>
-      </div>
-      <button disabled={requested} onClick={onRequest} className="btn btn-primary shrink-0 disabled:opacity-60">{requested ? <><Check className="size-4" />Requested</> : "Request full breakdown"}</button>
-    </div>
-  );
-}
-
 function BlueprintSection({ v, openAgent }: { v: Vault; openAgent: () => void }) {
   const latest = v.blueprints[0];
   return (
@@ -552,6 +569,8 @@ export function AppPage() {
   const v = vault.data?.product.slug === slug ? vault.data : undefined;
   const p = useMemo(() => (v ? vaultProduct(v) : undefined), [v]);
   const adsSeen = useMemo(() => (v ? adGroups(v.signals).reduce((n, g) => n + g.versions, 0) : 0), [v]);
+  const pricingSummary = useMemo(() => (v?.publicPricing ? summarizeOffers(v.publicPricing.offers) : null), [v]);
+  const creatorCount = useMemo(() => (v ? new Set(v.signals.filter((x) => x.kind === "creator_mention").map((x) => x.external_id)).size : 0), [v]);
   const limitError = vault.error instanceof ApiError && vault.error.code === "daily_limit" ? vault.error : undefined;
   const limitUsage = limitError ? (limitError.body as unknown as Usage) : null;
 
@@ -658,6 +677,17 @@ export function AppPage() {
     if (showGate) back();
     setGateDismissed(true);
   };
+  // Sections with nothing to show fold into one list at the end instead of a page of empty panels.
+  const missing = [
+    !v.traffic?.latest && { id: "traffic", label: "Traffic", note: "No top-million rank yet. Products on shared hosting or app stores have no site of their own to rank." },
+    !v.stack?.items.length && { id: "stack", label: "Tech stack", note: "No known technologies detected in the public homepage code yet." },
+    !full && { id: "screens", label: "Screens", note: "Not captured yet. Request it and we'll prioritize its full walkthrough and blueprint." },
+    !locked && adsSeen === 0 && { id: "ads", label: "Ads", note: p.active_ads === null ? "Not collected yet." : "None seen in our scans. That doesn't prove it isn't advertising." },
+    !locked && creatorCount === 0 && { id: "creators", label: "Creators", note: p.creators === null ? "Not collected yet." : "No creator mentions found in our scans." },
+    !v.publicPricing && !v.paywall && !v.revenueRange && { id: "model", label: "Pricing", note: "No public pricing collected yet." },
+  ].filter(Boolean) as { id: string; label: string; note: string }[];
+  const folded = new Set(missing.map((x) => x.id));
+  const shownSections = [...SECTIONS.filter(([id]) => (full || id !== "blueprint") && !folded.has(id)), ...(missing.length ? [["not-tracked", "Not tracked"]] : [])];
 
   return (
     <main className="mx-auto max-w-[1500px] pb-24">
@@ -687,30 +717,24 @@ export function AppPage() {
       <p className="max-w-[900px] px-4 pt-3 leading-[21px] text-t2 lg:px-6">{p.description}</p>
 
       <nav aria-label="On this page" className="no-scrollbar sticky top-[68px] z-20 mt-4 flex gap-1 overflow-x-auto border-b border-line bg-canvas px-4 lg:px-6">
-        {SECTIONS.filter(([id]) => full || id !== "blueprint").map(([id, label]) => <a key={id} href={`#${id}`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); }} className="whitespace-nowrap px-3 py-2.5 text-t2 transition-colors hover:text-t1">{label}</a>)}
+        {shownSections.map(([id, label]) => <a key={id} href={`#${id}`} onClick={(e) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }); }} className="whitespace-nowrap px-3 py-2.5 text-t2 transition-colors hover:text-t1">{label}</a>)}
       </nav>
 
       <div className="flex flex-col gap-10 px-4 pt-6 lg:px-6">
         <section id="overview" className="scroll-mt-[120px]">
           <h2 className="sr-only">Overview</h2>
-          <Overview p={p} adsSeen={adsSeen} />
+          <Overview p={p} adsSeen={adsSeen} pricing={pricingSummary} />
         </section>
 
-        <section id="traffic" className="scroll-mt-[120px]">
+        {!folded.has("traffic") && <section id="traffic" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Traffic</h2>
           <TrafficSection traffic={v.traffic} />
-        </section>
-        <section id="stack" className="scroll-mt-[120px]">
+        </section>}
+        {!folded.has("stack") && <section id="stack" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Tech stack</h2>
           <StackSection stack={v.stack} />
-        </section>
+        </section>}
 
-        {!full && (
-          <section id="screens" className="scroll-mt-[120px]">
-            <h2 className={`${SECTION_TITLE} mb-3`}>Screens</h2>
-            <NotCaptured p={p} requested={requested} onRequest={() => (s.signedIn ? s.requestFull(p) : s.openSignIn())} />
-          </section>
-        )}
 
         {full && <section id="screens" className="scroll-mt-[120px]">
           <div className="flex items-baseline justify-between gap-3">
@@ -742,21 +766,34 @@ export function AppPage() {
           )}
         </section>}
 
-        <section id="ads" className="scroll-mt-[120px]">
+        {!folded.has("ads") && <section id="ads" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Ads</h2>
           {locked ? <LockedCard label="Sign in to see the ads" onSignIn={signIn} /> : <Ads v={v} p={p} />}
-        </section>
-        <section id="creators" className="scroll-mt-[120px]">
+        </section>}
+        {!folded.has("creators") && <section id="creators" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Creators</h2>
           {locked ? <LockedCard label="Sign in to see the creators" onSignIn={signIn} /> : <Creators v={v} p={p} />}
-        </section>
-        <section id="model" className="scroll-mt-[120px]">
+        </section>}
+        {!folded.has("model") && <section id="model" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Pricing</h2>
-          <BusinessModel v={v} p={p} locked={locked} onSignIn={signIn} />
-        </section>
+          <BusinessModel v={v} p={p} locked={locked} onSignIn={signIn} summary={pricingSummary} />
+        </section>}
         {full && <section id="blueprint" className="scroll-mt-[120px]">
           <h2 className={`${SECTION_TITLE} mb-3`}>Blueprint</h2>
           {locked ? <LockedCard label="Sign in to get the blueprint" onSignIn={signIn} /> : <BlueprintSection v={v} openAgent={openAgent} />}
+        </section>}
+
+        {missing.length > 0 && <section id="not-tracked" className="scroll-mt-[120px]">
+          <h2 className={`${SECTION_TITLE} mb-3`}>Not tracked yet</h2>
+          <div className="panel rounded-xl">
+            {missing.map((x) => (
+              <div key={x.id} className="flex flex-col gap-2 border-b border-line px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
+                <span className="w-28 shrink-0 font-medium">{x.label}</span>
+                <span className="min-w-0 flex-1 text-[13px] leading-[19px] text-t2">{x.note}</span>
+                {x.id === "screens" && <button disabled={requested} onClick={() => (s.signedIn ? s.requestFull(p) : s.openSignIn())} className="btn btn-ghost !h-9 shrink-0 self-start disabled:opacity-60 sm:self-auto">{requested ? <><Check className="size-4" />Requested</> : "Request full breakdown"}</button>}
+              </div>
+            ))}
+          </div>
         </section>}
 
         {!!similar.data?.length && (
