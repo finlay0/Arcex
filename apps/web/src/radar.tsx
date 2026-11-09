@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, ChartNoAxesColumnIncreasing, Check, ChevronLeft, ChevronRight, Circle, Layers, Lock, Search, SlidersHorizontal, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { errorMessage, fetchRadar, useQuery, type Product } from "./api";
 import { ago, CATEGORY_LABEL, compactRank, DASH, formatRevenue, PRICE_TITLE, priceLabel, TIER_LABEL, TRAFFIC_TITLE, type Category } from "./data";
 import { useOpenProduct, useSession } from "./shell";
@@ -135,6 +136,49 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   );
 }
 
+type FilterGroup = { key: string; label: string; value: string; options: { value: string; label: string }[] };
+
+/** Phones get every filter in one bottom sheet; results update behind it as options are tapped. */
+function FilterSheet({ groups, total, loading, onChange, onClear }: { groups: FilterGroup[]; total: number; loading: boolean; onChange: (key: string, value: string) => void; onClear: () => void }) {
+  const [open, setOpen] = useState(false);
+  const active = groups.filter((g) => g.value).length;
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger aria-label={`Filters${active ? `, ${active} on` : ""}`} className="field flex h-11 shrink-0 items-center gap-2 px-3 text-[13px] text-t1 md:hidden">
+        <SlidersHorizontal className="size-4 text-t2" />Filters
+        {active > 0 && <span className="num flex h-5 min-w-5 items-center justify-center rounded-full bg-arc px-1.5 text-[11px] font-semibold text-canvas">{active}</span>}
+      </DialogTrigger>
+      <DialogContent
+        overlayClassName="bg-black/60 backdrop-blur-[4px]"
+        className="top-auto bottom-0 left-0 flex max-h-[85dvh] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none rounded-t-2xl border-x-0 border-b-0 border-line-strong bg-s1 p-0 data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom sm:max-w-none"
+      >
+        <div className="px-5 pt-5 pb-2">
+          <DialogTitle className="text-[17px] font-semibold">Filters</DialogTitle>
+          <DialogDescription className="sr-only">Narrow the products on Radar. Results update as you choose.</DialogDescription>
+        </div>
+        <div className="flex-1 overflow-y-auto px-5 pb-4">
+          {groups.map((g) => (
+            <fieldset key={g.key} className="border-b border-line py-4 last:border-b-0">
+              <legend className="float-left mb-2.5 w-full text-[12px] uppercase tracking-[0.05em] text-t3">{g.label}</legend>
+              <div className="clear-left flex flex-wrap gap-2">
+                {g.options.map((o, i) => (
+                  <button key={o.value} aria-pressed={g.value === o.value} data-on={g.value === o.value} onClick={() => onChange(g.key, o.value)} className="chip !h-9">
+                    {i === 0 ? "Any" : o.label.replace(/^First Seen: /, "Last ")}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 border-t border-line px-5 pt-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+          <button disabled={!active} onClick={onClear} className="btn btn-ghost h-11 disabled:opacity-40">Clear all</button>
+          <button onClick={() => setOpen(false)} className="btn btn-primary h-11 flex-1">{loading ? "Updating..." : `Show ${total.toLocaleString()} ${total === 1 ? "product" : "products"}`}</button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function FirstRunSteps({ onFirstApp }: { onFirstApp?: () => void }) {
   const s = useSession();
   const steps = [
@@ -168,6 +212,7 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
   const [sp, setSp] = useSearchParams();
   const tableRef = useRef<HTMLDivElement>(null);
   const wide = useMedia("(min-width: 1280px)");
+  const wideFilters = useMedia("(min-width: 768px)");
   const cat = sp.get("cat") ?? "";
   const price = sp.get("price") ?? "";
   const signal = sp.get("signal") ?? "";
@@ -294,6 +339,13 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
     coverage && { label: COVERAGE.find((x) => x.value === coverage)?.label ?? coverage, key: "coverage" },
   ].filter(Boolean) as { label: string; key: string }[];
   const clearFilters = () => update(Object.fromEntries(chips.map((c) => [c.key, null])));
+  const filterGroups: FilterGroup[] = [
+    { key: "cat", label: "Category", value: cat, options: [{ value: "", label: "All Categories" }, ...(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))] },
+    { key: "price", label: "Price", value: price, options: PRICES },
+    { key: "signal", label: "Signals", value: signal, options: SIGNALS },
+    { key: "added", label: "First seen", value: added, options: ADDED },
+    { key: "coverage", label: "Coverage", value: coverage, options: COVERAGE },
+  ];
   // Columns with nothing collected on this page collapse instead of showing a dash per row.
   const emptyColumns = [
     !rows.some((p) => p.coverage === "full") && "thumb",
@@ -339,11 +391,9 @@ export function Radar({ scope = "radar" }: { scope?: keyof typeof SCOPE }) {
             <input id="radar-search" aria-label="Search products" maxLength={120} value={q} onChange={(e) => update({ q: e.target.value || null })} placeholder="Search products..." className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-t2" />
             <kbd className="hidden min-[1400px]:block">/</kbd>
           </label>
-          <FilterMenu label="Category" value={cat} onChange={(v) => update({ cat: v || null })} options={[{ value: "", label: "All Categories" }, ...(Object.keys(CATEGORY_LABEL) as Category[]).map((c) => ({ value: c, label: CATEGORY_LABEL[c] }))]} />
-          <FilterMenu label="Price" value={price} onChange={(v) => update({ price: v || null })} options={PRICES} />
-          <FilterMenu label="Signals" value={signal} onChange={(v) => update({ signal: v || null })} options={SIGNALS} />
-          <FilterMenu label="First seen" value={added} onChange={(v) => update({ added: v || null })} options={ADDED} />
-          <FilterMenu label="Coverage" value={coverage} onChange={(v) => update({ coverage: v || null })} options={COVERAGE} />
+          {wideFilters ? filterGroups.map((g) => <FilterMenu key={g.key} label={g.label} value={g.value} onChange={(v) => update({ [g.key]: v || null })} options={g.options} />) : (
+            <FilterSheet groups={filterGroups} total={total} loading={scope === "radar" ? remote.loading : false} onChange={(key, v) => update({ [key]: v || null })} onClear={() => update(Object.fromEntries(filterGroups.map((g) => [g.key, null])))} />
+          )}
         </div>
         <div className="mt-3 flex min-h-7 flex-wrap items-center gap-2">
           <span className="num mr-1 text-[13px] text-t2" role="status">
