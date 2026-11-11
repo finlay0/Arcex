@@ -22,6 +22,8 @@ Decision, November 4, 2026: the catalog has two levels. Signals-only products (t
 
 ## Access and business model
 
+**Decision, November 5, 2026: the paid tier is named Pro, not Insider.** Everyone who joins the waitlist before launch gets their first year of Pro free. Price and limits are unchanged by this decision; the app, API and Stripe still use the Insider name until they are renamed.
+
 **Decision, November 4, 2026: free core with an optional $12/mo Insider upsell.** Growth is the priority, so the core stays free and generous. Free accounts get 10 apps and 10 blueprint exports a day, and reopening an app they've already opened that day is free. Insider removes those daily caps and adds collections and Request X-Ray priority. This takes precedence over the pricing and quota proposals below.
 
 The latest explicit preference in the supplied discussion is a public Radar list with free sign-in when opening a full Vault entry. This supersedes earlier suggestions to expose the whole Vault publicly or gate only a later flow step. Actual UI implementation is excluded here.
