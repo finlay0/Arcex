@@ -1,8 +1,18 @@
 # Arcex
 
-This repository now contains the arcex.dev platform. The retired T3 desktop fork is not part of this product.
+This repository holds two things: the Arcex ADE (desktop AI development environment, the main product since November 10, 2026) and the arcex.dev platform (Radar, Vault, MCP), which is kept and may feed the ADE later.
 
-- Backend functionality only until Finlay asks for UI/UX.
+## ADE
+
+- Architecture and phases are in docs/ade-plan.md. Electron shell (apps/desktop), local Node engine (apps/engine), client talks to the engine only through the WebSocket contract. Windows first.
+- Agents connect through the Agent Client Protocol. Each provider runs as its vendor's own CLI with the user's own sign-in. Never read, store or proxy provider credentials.
+- The audience is vibe coders. Terminal, git and CLIs stay hidden by default and are opt-in views.
+- Production UI is designed and approved as mockups before it is built. Spike UI is throwaway.
+- This is a new build. Read T3 Code's source for how things work underneath, but do not fork it or copy its UI.
+- Keep the ADE folders self-contained: no imports from the platform's src/. They will move to a public repository before release.
+
+## Platform (src/, apps/web, packages/mcp)
+
 - Use D1 for relational records and the existing Supabase Free project for private evidence files. R2 stays disabled because the user requires zero overage charges. Never upgrade a plan or activate a metered fallback.
 - Production research runs in actual ChatGPT Work cloud tasks with Terra Medium. Local Terra browser agents only configure accounts. Finish upfront research before enabling daily 09:00 America/Halifax runs. Both existing schedules are paused; production COLLECTION_ENABLED is false.
 - Keep source observations, inference, and editorial claims separate. Ad observations do not prove revenue or continuous ad activity.
@@ -14,4 +24,4 @@ This repository now contains the arcex.dev platform. The retired T3 desktop fork
 - Preserve ownership, publication and Pro access checks across API and MCP. Use parameterized SQL and bounded input.
 - Validate with pnpm check and pnpm smoke against an isolated local database. Do not test billing against live accounts.
 - Keep checks and tests lean and proportional to actual risk. Do not add tests that merely restate implementation, duplicate existing coverage, or inflate counts. Preserve vital access, credential, publication, billing and cost protections. Once checks pass, repeat only for a relevant change or unresolved issue.
-- Do not create a separate platform repository or revive the T3 fork.
+- Do not create a separate platform repository.

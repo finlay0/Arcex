@@ -1,0 +1,29 @@
+/* Additions to the mockup stylesheet for real, editable controls. */
+.bar { -webkit-app-region: no-drag; }
+textarea, input { font: inherit; color: inherit; background: none; border: 0; outline: 0; padding: 0; width: 100%; resize: none; }
+textarea::placeholder, input::placeholder { color: var(--ink-3); }
+.idea textarea { font-size: 18px; line-height: 28px; min-height: 84px; display: block; }
+.composer textarea { font-size: 15.5px; line-height: 24px; display: block; max-height: 160px; }
+.mini input { height: 100%; font-size: 13px; }
+.folder { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail h2 { display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.said { white-space: pre-wrap; overflow-wrap: anywhere; }
+.you { white-space: pre-wrap; overflow-wrap: anywhere; }
+.oops { color: var(--stop); max-width: 60ch; }
+.empty { margin: auto; text-align: center; color: var(--ink-3); max-width: 34ch; display: grid; gap: 6px; position: relative; }
+.empty b { color: var(--ink-2); font-weight: 500; font-size: 15px; }
+.work .spin { width: 10px; height: 10px; margin: 2px; border-radius: 50%; background: var(--ink); animation: breathe 1.4s ease-in-out infinite; flex: none; }
+.work li.bad { color: var(--stop); }
+.pick { display: inline-flex; padding: 3px; border-radius: 11px; background: rgba(64,48,22,.08); margin-left: 6px; }
+.pick button { height: 26px; padding: 0 11px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.pick button[aria-pressed="true"] { background: var(--sheet-2); color: var(--ink); box-shadow: 0 1px 2px rgba(60,42,14,.2); }
+.busy { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; margin-left: 8px; }
+.answered { color: var(--ink-3); font-size: 13px; }
+.stage iframe { position: absolute; inset: 60px 12px 12px; width: calc(100% - 24px); height: calc(100% - 72px); border: 0; border-radius: 14px; background: #fff; box-shadow: var(--lift); }
+.pbar input { width: 250px; height: 28px; padding: 0 10px; font-size: 13px; }
+.tile .body .ask b { font-size: 14px; }
+.tile .body .ask { gap: 2px; }
+.diff .none, .changes .none { padding: 14px 16px; color: var(--ink-3); font: 13px/20px "Geist", sans-serif; }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--sheet-2); padding: 10px 16px; border-radius: 12px; font-size: 13px; box-shadow: var(--float); max-width: 70vw; }
+.lost { place-items: center; color: var(--ink-2); }
+body[data-view="lost"] .lost { display: grid; }

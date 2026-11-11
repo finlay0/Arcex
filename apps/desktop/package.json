@@ -1,0 +1,12 @@
+{
+  "name": "@arcex/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "45.3.0"
+  }
+}
