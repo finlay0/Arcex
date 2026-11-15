@@ -4,10 +4,15 @@ import { existsSync, mkdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { EventMessage, Item, Method, Project, ProviderId, Requests, Thread, ThreadState } from "@arcex/contracts";
-import { providerIds, startSession, type AgentSession } from "./agents.ts";
+import type { About, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
+import { BUILTIN, agentList, listModels, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
+import { providerStatus } from "./providers.ts";
+import { TOOLBOX } from "./toolbox.ts";
+
+/** The public Arcex research library. Search needs no key. */
+const RESEARCH_MCP = "https://api.arcex.dev/public/mcp";
 
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
@@ -21,27 +26,43 @@ type Live = {
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
 };
 
-const PROVIDER_NAME: Record<ProviderId, string> = { claude: "Claude", codex: "Codex" };
-const SIGN_IN: Record<ProviderId, string> = { claude: "claude auth login", codex: "codex login" };
 
 function text(value: unknown, name: string, max: number): string {
   if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error(`${name} must be 1 to ${max} characters`);
   return value.trim();
 }
 
+const FILLER = new Set(["a", "an", "the", "please", "can", "you", "could", "just", "some", "my", "our", "me"]);
+const CUT = new Set(["under", "in", "into", "to", "for", "so", "that", "with", "on", "from", "and", "when", "where", "which", "because", "then"]);
+
+/** A short working name from the first message. A stopgap until the background model names threads. */
 function titleFrom(prompt: string): string {
-  const line = prompt.split("\n")[0]!.replace(/[.!?]+$/, "");
-  return line.length <= 46 ? line : `${line.slice(0, 46).replace(/\s+\S*$/, "")}…`;
+  // Drop the polite lead-in so "I want to add payments" is named for the job, not for "I want".
+  const lead = /^\s*((i (want|need|would like)|i'd like)( you)?( to)?|can you|could you|please|let's|help me( to)?)\s+/i;
+  const words = prompt.split(/[\n.?!]/)[0]!.replace(lead, "").replace(lead, "").replace(/[.!?,:;]+/g, " ").split(/\s+/).filter((word) => word && !FILLER.has(word.toLowerCase()));
+  const kept: string[] = [];
+  for (const word of words) {
+    if (kept.length >= 2 && CUT.has(word.toLowerCase())) break;
+    kept.push(word);
+    if (kept.length === 4) break;
+  }
+  const title = kept.join(" ").slice(0, 34) || "New thread";
+  return title[0]!.toUpperCase() + title.slice(1);
 }
 
+/** "Pulse, a workout tracker" becomes "Pulse". Otherwise the first few words. */
 function nameFrom(goal: string): string {
-  const words = goal.replace(/[^\p{L}\p{N}\s]/gu, "").split(/\s+/).filter(Boolean).slice(0, 4).join(" ");
-  const name = words.slice(0, 32) || "New project";
+  const lead = goal.split(/[,.:;\n]| - | – /)[0]!.trim();
+  const name = lead.length >= 2 && lead.length <= 28 ? lead : titleFrom(goal);
   return name[0]!.toUpperCase() + name.slice(1);
 }
 
 /** Says what a tool call did in words a non-developer would use. The raw title stays in `detail`. */
 function describe(kind: string, title: string, files: string[]): string {
+  // Tools reached through a connector arrive with machine names such as mcp__arcex__search_toolbox.
+  const connector = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(title);
+  if (connector) return connector[1] === "arcex" ? "Checked the Arcex toolbox" : `Used ${connector[1]!.replace(/[-_]/g, " ")}`;
+  if (title === "ToolSearch") return "Looked for the right tool";
   const name = files[0] ? path.basename(files[0]) : null;
   const more = files.length > 1 ? ` and ${files.length - 1} more` : "";
   switch (kind) {
@@ -57,10 +78,19 @@ function describe(kind: string, title: string, files: string[]): string {
   }
 }
 
-export function createEngine(db: Db, emit: (message: EventMessage) => void) {
+export function createEngine(db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void) {
+  let settings = db.settings();
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
+  /** Model lists, read once per agent while the engine runs. */
+  const modelCache = new Map<string, Models>();
+  const nameOf = (agentId: string) => agentList(settings).find((agent) => agent.id === agentId)?.name ?? "The agent";
+  const pickedModel = (value: unknown): Thread["model"] => {
+    if (value === null || value === undefined) return null;
+    const model = value as { value?: unknown; name?: unknown };
+    return { value: text(model.value, "model", 200), name: text(model.name, "model name", 200) };
+  };
 
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
@@ -82,7 +112,7 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
   function setState(thread: ThreadRow, state: ThreadState) {
     thread.state = state;
     thread.updatedAt = Date.now();
-    db.touchThread(thread);
+    db.saveThread(thread);
     emit({ event: "thread", thread: publicThread(thread) });
   }
 
@@ -156,9 +186,23 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
     const live = liveOf(thread.id);
     if (live.session) return live.session;
     const session = await startSession({
-      provider: thread.provider,
+      agentId: thread.provider,
+      settings,
       cwd: project.cwd,
       resumeId: thread.sessionId,
+      mcpServers: [
+        {
+          name: "arcex",
+          command: process.execPath,
+          args: [connector.script],
+          env: [
+            { name: "ARCEX_TOOLBOX", value: connector.toolboxFile },
+            { name: "ARCEX_PROJECT_NAME", value: project.name },
+            { name: "ARCEX_PROJECT_GOAL", value: project.goal },
+          ],
+        },
+        ...(settings.research ? [{ type: "http" as const, name: "arcex-research", url: RESEARCH_MCP, headers: [] }] : []),
+      ],
       onUpdate: (update) => onUpdate(thread, project, update),
       onPermission: (request) => onPermission(thread, project, request),
       onExit: (detail) => {
@@ -169,11 +213,14 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
       },
     });
     live.session = session;
+    if (session.models) modelCache.set(thread.provider, session.models);
+    // A model the agent no longer offers is ignored, and the thread runs on the agent's default.
+    if (thread.model && thread.model.value !== session.models?.current) await session.setModel(thread.model.value).catch(() => {});
     if (thread.sessionId && !session.resumed) {
-      put(thread, { id: randomUUID(), kind: "say", text: `${PROVIDER_NAME[thread.provider]} started fresh and doesn't remember the earlier messages in this thread.` });
+      put(thread, { id: randomUUID(), kind: "say", text: `${nameOf(thread.provider)} started fresh and doesn't remember the earlier messages in this thread.` });
     }
     thread.sessionId = session.sessionId;
-    db.touchThread(thread);
+    db.saveThread(thread);
     return session;
   }
 
@@ -189,20 +236,89 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error);
       const friendly = /auth/i.test(message)
-        ? `${PROVIDER_NAME[thread.provider]} isn't signed in on this computer. Open a terminal, run "${SIGN_IN[thread.provider]}", then send your message again.`
-        : `${PROVIDER_NAME[thread.provider]} couldn't finish: ${message.slice(0, 400)}`;
+        ? `${nameOf(thread.provider)} isn't signed in on this computer. ${BUILTIN[thread.provider] ? `Open a terminal, run "${BUILTIN[thread.provider]!.signIn}", then send your message again.` : "Sign in with its own tool, then send your message again."}`
+        : `${nameOf(thread.provider)} couldn't finish: ${message.slice(0, 400)}`;
       put(thread, { id: randomUUID(), kind: "error", text: friendly });
     }
+    if (!threads.has(thread.id)) return;
     endSay(thread);
+    const changed = new Set<string>();
     for (const step of live.steps.values()) {
       if (step.item.status === "running") put(thread, { ...step.item, status: "done" });
+      if (["edit", "delete", "move"].includes(step.kind) && step.item.status !== "failed") step.item.files.forEach((file) => changed.add(file));
     }
+    if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     live.steps.clear();
     if (thread.state !== "failed") setState(thread, "idle");
   }
 
+  const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you";
+
+  /** Stops a thread's agent and forgets it in memory. The caller removes it from the database. */
+  function dropThread(thread: ThreadRow) {
+    const live = lives.get(thread.id);
+    if (live) {
+      const session = live.session;
+      live.session = null;
+      for (const ask of live.asks.values()) ask.resolve({ outcome: { outcome: "cancelled" } });
+      session?.close();
+      lives.delete(thread.id);
+    }
+    threads.delete(thread.id);
+  }
+
   const handlers: { [M in Method]: (params: Requests[M]["params"]) => Promise<Requests[M]["result"]> | Requests[M]["result"] } = {
-    "state.get": () => ({ providers: providerIds, projects: [...projects.values()], threads: [...threads.values()].map(publicThread) }),
+    "state.get": () => ({ agents: agentList(settings), projects: [...projects.values()], threads: [...threads.values()].map(publicThread), settings, about }),
+
+    "settings.set"(params) {
+      const next: Settings = { ...settings };
+      if (params.name !== undefined) next.name = String(params.name).trim().slice(0, 60);
+      if (params.theme !== undefined && ["light", "dark", "system"].includes(params.theme)) next.theme = params.theme;
+      if (params.defaultProvider !== undefined && agentList(settings).some((agent) => agent.id === params.defaultProvider)) next.defaultProvider = params.defaultProvider;
+      if (params.defaultModel !== undefined) next.defaultModel = pickedModel(params.defaultModel);
+      if (params.sendWith !== undefined && ["enter", "ctrl-enter"].includes(params.sendWith)) next.sendWith = params.sendWith;
+      if (params.showDetails !== undefined) next.showDetails = params.showDetails === true;
+      if (params.notify !== undefined) next.notify = params.notify === true;
+      if (params.research !== undefined) next.research = params.research === true;
+      settings = next;
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+
+    async "agents.models"(params) {
+      const agentId = text(params.agentId, "agent", 80);
+      if (!agentList(settings).some((agent) => agent.id === agentId)) throw new Error("unknown agent");
+      if (params.refresh === true) modelCache.delete(agentId);
+      const cached = modelCache.get(agentId);
+      if (cached) return cached;
+      const models = await listModels(agentId, settings, about.dataDir);
+      modelCache.set(agentId, models);
+      return models;
+    },
+
+    "agents.add"(params) {
+      const name = text(params.name, "name", 40);
+      const command = text(params.command, "command", 300);
+      if (settings.agents.length >= 20) throw new Error("that is the most agents Arcex keeps");
+      settings = { ...settings, agents: [...settings.agents, { id: `custom-${randomUUID().slice(0, 8)}`, name, command }] };
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+
+    "agents.remove"(params) {
+      const agents = settings.agents.filter((agent) => agent.id !== params.agentId);
+      const dropped = settings.defaultProvider === params.agentId;
+      settings = { ...settings, agents, ...(dropped ? { defaultProvider: "claude", defaultModel: null } : {}) };
+      modelCache.delete(String(params.agentId));
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+
+    "providers.status": () => providerStatus(settings),
+    "toolbox.list": () => TOOLBOX,
 
     async "project.create"(params) {
       const goal = text(params.goal, "what you're building", 2000);
@@ -211,10 +327,10 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
       if (params.cwd !== undefined) {
         cwd = path.resolve(text(params.cwd, "folder", 1000));
         if (!path.isAbsolute(params.cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("that folder doesn't exist");
-        name = path.basename(cwd);
+        name = nameFrom(goal);
       } else {
         name = nameFrom(goal);
-        const root = path.join(os.homedir(), "Arcex Projects");
+        const root = about.projectsDir;
         const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project";
         cwd = path.join(root, slug);
         for (let n = 2; existsSync(cwd); n++) cwd = path.join(root, `${slug}-${n}`);
@@ -237,9 +353,27 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
         url = parsed.href;
       }
       project.previewUrl = url;
-      db.setPreview(project.id, url);
+      db.saveProject(project);
       emit({ event: "project", project });
       return project;
+    },
+
+    "project.update"(params) {
+      const project = projectOf(params.projectId);
+      if (params.name !== undefined) project.name = text(params.name, "name", 60);
+      if (params.goal !== undefined) project.goal = text(params.goal, "what you're building", 2000);
+      db.saveProject(project);
+      emit({ event: "project", project });
+      return project;
+    },
+
+    "project.remove"(params) {
+      const project = projectOf(params.projectId);
+      for (const thread of [...threads.values()].filter((t) => t.projectId === project.id)) dropThread(thread);
+      db.removeProject(project.id);
+      projects.delete(project.id);
+      emit({ event: "gone", kind: "project", id: project.id });
+      return { ok: true };
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
@@ -247,17 +381,43 @@ export function createEngine(db: Db, emit: (message: EventMessage) => void) {
 
     "thread.create"(params) {
       const project = projectOf(params.projectId);
-      if (!providerIds.includes(params.provider)) throw new Error("unknown agent");
+      if (!agentList(settings).some((agent) => agent.id === params.provider)) throw new Error("unknown agent");
+      const model = pickedModel(params.model);
       const prompt = text(params.text, "message", 20_000);
       const now = Date.now();
       const thread: ThreadRow = {
-        id: randomUUID(), projectId: project.id, provider: params.provider, title: titleFrom(prompt),
-        state: "starting", sessionId: null, createdAt: now, updatedAt: now,
+        id: randomUUID(), projectId: project.id, provider: params.provider, model, title: titleFrom(prompt),
+        state: "starting", archived: false, sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
       threads.set(thread.id, thread);
       void run(thread, prompt);
       return publicThread(thread);
+    },
+
+    async "thread.update"(params) {
+      const thread = threadOf(params.threadId);
+      if (params.title !== undefined) thread.title = text(params.title, "name", 80);
+      if (params.model !== undefined) {
+        if (busyState(thread)) throw new Error("wait for this thread to finish before changing its model");
+        thread.model = pickedModel(params.model);
+        if (thread.model) await lives.get(thread.id)?.session?.setModel(thread.model.value);
+      }
+      if (params.archived !== undefined) {
+        if (params.archived === true && busyState(thread)) throw new Error("wait for this thread to finish before archiving it");
+        thread.archived = params.archived === true;
+      }
+      db.saveThread(thread);
+      emit({ event: "thread", thread: publicThread(thread) });
+      return publicThread(thread);
+    },
+
+    "thread.remove"(params) {
+      const thread = threadOf(params.threadId);
+      dropThread(thread);
+      db.removeThread(thread.id);
+      emit({ event: "gone", kind: "thread", id: thread.id });
+      return { ok: true };
     },
 
     "thread.items": (params) => db.items(threadOf(params.threadId).id),

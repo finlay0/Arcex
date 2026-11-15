@@ -93,13 +93,12 @@ Needed asset: a vector version of the mark for the app icon. The repo only has P
 ## Product principles (Finlay, November 10, 2026)
 
 - **For vibe coders, not developers.** Terminal, git, worktrees and provider CLIs run underneath and stay out of sight by default. Each is available as an opt-in view. The default surface is threads and the project.
-- **Many threads at once.** An optional tiled view shows several threads side by side (around six), resizing to fit the window, so parallel agents can be watched together. The single-thread view stays the default.
 - **Voice control** is a planned input, so thread actions must be addressable by command, not only by pointer.
 - **The UI gets designed before it gets built.** It should not resemble T3 Code, Codex or Cursor, and it must use the Arcex aesthetic as a system, not paste the banner artwork onto a standard layout.
 
 ## Phases
 
-**UI design track (starts alongside Phase 0, finishes before Phase 2).** Layout model, the tiled multi-thread view, how hidden developer surfaces are revealed, the project overview, and the light theme, worked out as mockups and approved before any production UI is written. Phase 0 and Phase 1 use throwaway UI and do not wait on it.
+**UI design track (starts alongside Phase 0, finishes before Phase 2).** Layout model, how hidden developer surfaces are revealed, the project overview, and the light theme, worked out as mockups and approved before any production UI is written. Phase 0 and Phase 1 use throwaway UI and do not wait on it.
 
 **Phase 0. Spike (prove the provider path).** Electron shell, engine, ACP client. One project, one Claude thread and one Codex thread, both streaming, with permission prompts and file diffs showing. Throwaway UI. Also answers the subscription credit question above. If ACP falls short for either provider, we learn it here.
 
@@ -122,20 +121,24 @@ Run it with `pnpm --filter @arcex/desktop dev`. Drive it without a window with `
 - **Lesson:** the Claude adapter moved from `@zed-industries/claude-agent-acp` (deprecated, rejected a current settings value) to `@agentclientprotocol/claude-agent-acp`. Adapter versions need pinning and a regular update check.
 - **For the product:** agents show raw shell commands as tool call titles. The client must translate these into plain language for this audience, and "Authentication required" must become a guided sign-in step.
 
-## Build status (November 10, 2026)
-
-The spike UI is gone. The real pieces now exist:
+## Build status (November 14, 2026)
 
 - `packages/contracts`: the typed requests and events between engine and client.
-- `apps/engine`: projects, threads and timelines saved in SQLite (`%APPDATA%/Arcex/arcex.db`, or `ARCEX_DATA_DIR`). Agent tool calls are turned into plain-language steps with the raw detail kept alongside. Approval requests, a git-based list of changes, and reopening a saved agent conversation after a restart are in.
-- `apps/ide`: the React client in the approved design, with Start, Focus and Board on live data, the changes drawer, and a preview pane that shows an address you give it.
-- `apps/desktop`: loads the client the engine serves and adds a native folder picker.
+- `apps/engine`: projects, threads, timelines and settings saved in SQLite (`%APPDATA%/Arcex/arcex.db`, or `ARCEX_DATA_DIR`). Agent tool calls become plain-language steps with the raw detail kept alongside. Also: approval requests, a result line per turn, a git-based list of changes, reopening a saved agent conversation after a restart, renaming, archiving and deleting threads, renaming and removing projects, and a check of whether each agent's own tool is installed and signed in.
+- `apps/ide`: the React client. Layout follows a conventional ADE, per Finlay on November 14: sidebar with projects and threads, conversation in the centre, details panel on the right, settings as a full screen. Light and dark themes in plain warm neutrals. The earlier paper-and-curves mockups were dropped.
+- `apps/desktop`: frameless Electron window that loads the client the engine serves, with a folder picker and title-bar buttons that follow the theme. Setting `ARCEX_SHOT=<file.png>` (optionally with `ARCEX_SHOT_JS`) saves a picture of the window and quits, for checking the desktop build.
 
 Run it: `pnpm --filter @arcex/ide build`, then `pnpm --filter @arcex/desktop dev`.
 
-Checked by hand with real agents: creating a project from an existing folder, a Claude thread and a Codex thread running at once, both views updating live, the changes drawer showing real diffs, and Claude recalling its earlier work after an engine restart.
+Checked by hand with real agents: creating a project, Claude and Codex threads running at once, live updates, real diffs in the details panel, Claude recalling earlier work after an engine restart, and the settings, rename, archive and search flows.
 
-Not built yet: goals broken into milestones and the evidence behind them (the Compass), thread recaps, voice, the embedded browser with element picking (the preview is a plain frame), ask-first permission modes (the approval card exists but no agent has triggered it), restore points, packaging and updates.
+Also built on November 14: the Toolbox (a curated list of tools with trade-offs and no prices, in `apps/engine/src/toolbox.ts`), a connector (`apps/engine/src/connector.mjs`, an MCP server handed to every agent session) through which agents read the project goal and search the toolbox, and a switch in Settings that lets agents search the hosted Arcex research library.
+
+Agents and models (November 14): any agent that speaks the Agent Client Protocol can be used. Claude and Codex ship with Arcex; OpenCode and Gemini are started from their own installed tools; the user can add more by name and command in Settings. Each agent reports its own model list, which the model menu under the message box reads without sending a message. The choice is saved per thread and applied with `session/set_config_option`. The right panel has a Browser tab that shows the running app and offers addresses the agents mentioned.
+
+On hold by decision: the background model for recaps and the Compass. It must work on install without spending the user's agent usage unasked, without a manual model install, and without loading the machine. The approach is to be agreed before anything is built.
+
+Not built yet: goals broken into milestones and the evidence behind them (the Compass), generated thread names and recaps, voice, the embedded browser with element picking (the preview is a plain frame), ask-first permission modes (the approval card exists but no agent has triggered it), restore points, packaging and updates, automated tests for the engine.
 
 ## Decisions and risks to settle
 

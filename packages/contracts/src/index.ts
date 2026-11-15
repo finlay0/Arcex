@@ -1,7 +1,14 @@
 // The boundary between the Arcex engine and every client (desktop now; web and mobile later).
 // Types only. The engine validates what it receives.
 
-export type ProviderId = "claude" | "codex";
+/** An agent's id: "claude", "codex", "opencode", "gemini", or one the user added. */
+export type ProviderId = string;
+
+/** A coding agent Arcex can start. Every agent speaks the Agent Client Protocol. */
+export type Agent = { id: string; name: string; builtin: boolean; /** The command that starts it, when it is not shipped with Arcex. */ command: string | null };
+
+/** One model an agent offers, as the agent itself describes it. */
+export type ModelOption = { value: string; name: string; description: string };
 
 export type Project = {
   id: string;
@@ -20,8 +27,12 @@ export type Thread = {
   id: string;
   projectId: string;
   provider: ProviderId;
+  /** The model picked for this thread. Null means the agent's own default. */
+  model: { value: string; name: string } | null;
   title: string;
   state: ThreadState;
+  /** Archived threads are hidden from the sidebar and the board but keep their history. */
+  archived: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -43,18 +54,68 @@ export type Item =
       files: string[];
     }
   | { id: string; kind: "ask"; title: string; detail: string; options: AskOption[]; answer: string | null }
-  | { id: string; kind: "error"; text: string };
+  | { id: string; kind: "error"; text: string }
+  /** Closes a turn that changed files. Paths are relative to the project folder. */
+  | { id: string; kind: "result"; files: string[] };
 
 export type Change = { path: string; status: "added" | "changed" | "removed"; added: number; removed: number };
 
+/** One entry in the curated toolbox. No prices: they change too often to be trusted. */
+export type Tool = { id: string; name: string; category: string; what: string; goodFor: string; tradeoffs: string; url: string };
+
+/** Preferences saved by the engine, so every client of the same engine agrees. */
+export type Settings = {
+  /** The user's name, shown in the app only. There are no Arcex accounts. */
+  name: string;
+  theme: "light" | "dark" | "system";
+  defaultProvider: ProviderId;
+  /** The model new threads start with, for the default agent. Null means the agent's own default. */
+  defaultModel: { value: string; name: string } | null;
+  /** Agents the user added: a name and the command that starts it in ACP mode. */
+  agents: { id: string; name: string; command: string }[];
+  sendWith: "enter" | "ctrl-enter";
+  /** Open the details panel when the app starts. */
+  showDetails: boolean;
+  /** Tell the user when a thread finishes or needs them while the window is in the background. */
+  notify: boolean;
+  /** Let agents search the Arcex research library of real products. */
+  research: boolean;
+};
+
+/** Whether an agent's own command-line tool is installed and signed in on this computer. */
+export type ProviderStatus = {
+  id: ProviderId;
+  name: string;
+  installed: boolean;
+  /** Null when the tool is installed but did not say. */
+  signedIn: boolean | null;
+  version: string | null;
+  /** The command the user runs in a terminal to sign in. Arcex never handles the sign-in itself. */
+  signInCommand: string;
+};
+
+export type About = { version: string; dataDir: string; projectsDir: string };
+
 /** Client to engine. Every request gets exactly one response with the same id. */
 export type Requests = {
-  "state.get": { params: Record<string, never>; result: { providers: ProviderId[]; projects: Project[]; threads: Thread[] } };
+  "state.get": { params: Record<string, never>; result: { agents: Agent[]; projects: Project[]; threads: Thread[]; settings: Settings; about: About } };
+  "settings.set": { params: Partial<Settings>; result: Settings };
+  "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
+  /** The models an agent offers. Reading them starts the agent briefly but sends no message. */
+  "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null } };
+  "agents.add": { params: { name: string; command: string }; result: Settings };
+  "agents.remove": { params: { agentId: string }; result: Settings };
+  "toolbox.list": { params: Record<string, never>; result: Tool[] };
   "project.create": { params: { goal: string; cwd?: string }; result: Project };
+  "project.update": { params: { projectId: string; name?: string; goal?: string }; result: Project };
+  /** Forgets the project and its threads. The folder and its files are left alone. */
+  "project.remove": { params: { projectId: string }; result: { ok: true } };
   "project.setPreview": { params: { projectId: string; url: string | null }; result: Project };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
-  "thread.create": { params: { projectId: string; provider: ProviderId; text: string }; result: Thread };
+  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; text: string }; result: Thread };
+  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null }; result: Thread };
+  "thread.remove": { params: { threadId: string }; result: { ok: true } };
   "thread.items": { params: { threadId: string }; result: Item[] };
   "thread.prompt": { params: { threadId: string; text: string }; result: { ok: true } };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };
@@ -69,4 +130,6 @@ export type ResponseMessage = { id: number; result: unknown } | { id: number; er
 export type EventMessage =
   | { event: "project"; project: Project }
   | { event: "thread"; thread: Thread }
-  | { event: "item"; threadId: string; item: Item };
+  | { event: "item"; threadId: string; item: Item }
+  | { event: "settings"; settings: Settings; agents: Agent[] }
+  | { event: "gone"; kind: "project" | "thread"; id: string };

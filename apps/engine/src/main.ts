@@ -1,5 +1,5 @@
 // Engine entry point: serves the built client and one WebSocket that speaks @arcex/contracts.
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer, type WebSocket } from "ws";
 import { openDb } from "./db.ts";
 import { createEngine } from "./engine.ts";
+import { TOOLBOX } from "./toolbox.ts";
 
 const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ide/dist");
 const dataDir = process.env.ARCEX_DATA_DIR ?? path.join(process.env.APPDATA ?? os.homedir(), "Arcex");
@@ -16,7 +17,13 @@ const TYPES: Record<string, string> = {
 };
 
 const sockets = new Set<WebSocket>();
-const engine = createEngine(openDb(dataDir), (message) => {
+const about = { version: "0.1.0", dataDir, projectsDir: path.join(os.homedir(), "Arcex Projects") };
+// The connector runs as its own process, so it reads the toolbox from a file.
+mkdirSync(dataDir, { recursive: true });
+const toolboxFile = path.join(dataDir, "toolbox.json");
+writeFileSync(toolboxFile, JSON.stringify(TOOLBOX));
+const connector = { script: path.join(path.dirname(fileURLToPath(import.meta.url)), "connector.mjs"), toolboxFile };
+const engine = createEngine(openDb(dataDir), about, connector, (message) => {
   const data = JSON.stringify(message);
   for (const socket of sockets) socket.send(data);
 });

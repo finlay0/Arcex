@@ -1,5 +1,5 @@
 // Desktop shell: starts the engine, then shows the client the engine serves.
-const { app, BrowserWindow, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 
@@ -32,8 +32,11 @@ app.whenReady().then(async () => {
     height: 900,
     minWidth: 1100,
     minHeight: 680,
-    backgroundColor: "#e9dfcd",
+    backgroundColor: "#f3f0e8",
     title: "Arcex",
+    // The client draws the title bar. Windows keeps its own minimise, maximise and close buttons on top of it.
+    titleBarStyle: "hidden",
+    titleBarOverlay: { color: "#f3f0e8", symbolColor: "#1b1916", height: 44 },
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") },
   });
   win.setMenuBarVisibility(false);
@@ -42,9 +45,29 @@ app.whenReady().then(async () => {
     const result = await dialog.showOpenDialog(win, { title: "Choose your project folder", properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
-  // Links the agents or the app produce open in the user's browser, never inside the shell.
-  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  ipcMain.on("set-theme", (_event, theme) => {
+    const dark = theme === "dark";
+    win.setTitleBarOverlay({ color: dark ? "#171614" : "#f3f0e8", symbolColor: dark ? "#f1ece1" : "#1b1916" });
+    win.setBackgroundColor(dark ? "#171614" : "#f3f0e8");
+  });
+  // Web links open in the user's own browser, never inside the app window. Only http and https are passed on.
+  const openOutside = (url) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+  };
+  ipcMain.on("open-external", (_event, url) => openOutside(url));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openOutside(url);
+    return { action: "deny" };
+  });
   await win.loadURL(url);
+  // ARCEX_SHOT=<file.png> saves a picture of the window and quits. Used to check the desktop build.
+  if (process.env.ARCEX_SHOT) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    // ARCEX_SHOT_JS runs first, to move the app to the screen being checked.
+    if (process.env.ARCEX_SHOT_JS) await win.webContents.executeJavaScript(process.env.ARCEX_SHOT_JS);
+    require("node:fs").writeFileSync(process.env.ARCEX_SHOT, (await win.webContents.capturePage()).toPNG());
+    app.quit();
+  }
 });
 
 app.on("window-all-closed", () => app.quit());

@@ -1,16 +1,18 @@
 import { useSyncExternalStore } from "react";
-import type { EventMessage, Item, Method, Project, ProviderId, Requests, ResponseMessage, Thread } from "@arcex/contracts";
+import type { About, Agent, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, Thread } from "@arcex/contracts";
 
 export type State = {
   status: "connecting" | "ready" | "lost";
-  providers: ProviderId[];
+  agents: Agent[];
   projects: Project[];
   threads: Thread[];
+  settings: Settings | null;
+  about: About | null;
   /** Timelines that have been loaded. Live items for other threads are ignored until they are loaded. */
   items: Record<string, Item[]>;
 };
 
-let state: State = { status: "connecting", providers: [], projects: [], threads: [], items: {} };
+let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {} };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => {
   state = { ...state, ...next };
@@ -40,14 +42,18 @@ socket.onopen = async () => set({ status: "ready", ...(await call("state.get", {
 socket.onclose = () => set({ status: "lost" });
 socket.onmessage = ({ data }) => {
   const message = JSON.parse(data as string) as ResponseMessage | EventMessage;
-  if ("id" in message) {
+  if (!("event" in message)) {
     const waiting = pending.get(message.id);
     pending.delete(message.id);
     if ("error" in message) waiting?.reject(new Error(message.error));
     else waiting?.resolve(message.result);
   } else if (message.event === "project") set({ projects: upsert(state.projects, message.project) });
   else if (message.event === "thread") set({ threads: upsert(state.threads, message.thread) });
-  else if (message.event === "item") {
+  else if (message.event === "settings") set({ settings: message.settings, agents: message.agents });
+  else if (message.event === "gone") {
+    if (message.kind === "thread") set({ threads: state.threads.filter((t) => t.id !== message.id) });
+    else set({ projects: state.projects.filter((p) => p.id !== message.id), threads: state.threads.filter((t) => t.projectId !== message.id) });
+  } else if (message.event === "item") {
     const loaded = state.items[message.threadId];
     if (loaded) set({ items: { ...state.items, [message.threadId]: upsert(loaded, message.item) } });
   }

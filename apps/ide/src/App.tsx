@@ -1,626 +1,453 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import type { Change, Item, Project, ProviderId, Thread } from "@arcex/contracts";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ProviderStatus, Thread } from "@arcex/contracts";
+import type { Choice } from "./ModelPicker.tsx";
+import { SettingsView, initials, type Section } from "./Settings.tsx";
+import { Icon, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, openEmpty, useStore } from "./store.ts";
+import { ToolboxView } from "./Toolbox.tsx";
+import { Conversation, NewProject, Panel, type PanelTab } from "./views.tsx";
 
-declare global {
-  interface Window {
-    /** Present only inside the desktop shell. */
-    arcex?: { pickFolder(): Promise<string | null> };
-  }
-}
+/** What the main column is showing. */
+type Screen =
+  | { kind: "thread"; threadId: string | null }
+  | { kind: "new-project" }
+  | { kind: "toolbox" }
+  | { kind: "settings"; section: Section };
 
-type View = "start" | "focus" | "board";
-const NAMES: Record<ProviderId, string> = { claude: "Claude", codex: "Codex" };
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+const remembered = (key: string) => localStorage.getItem(key);
 
-const Icon = ({ name, size }: { name: string; size?: number }) => (
-  <svg className="i" style={size ? { width: size, height: size } : undefined} aria-hidden="true">
-    <use href={`#${name}`} />
-  </svg>
-);
-const Seal = ({ provider }: { provider: ProviderId }) => (
-  <span className={provider === "claude" ? "seal" : "seal b"}>{provider === "claude" ? "C" : "X"}</span>
-);
-
-/** A finished thread is only "reported": nothing has checked the work yet. */
-function StateMark({ thread }: { thread: Thread }) {
-  const [cls, label] =
-    thread.state === "needs_you" ? ["needs", "Needs you"]
-    : thread.state === "working" || thread.state === "starting" ? ["working", "Working"]
-    : thread.state === "failed" ? ["blocked", "Stopped"]
-    : ["reported", "Finished"];
-  return <span className={`st ${cls}`}>{label}</span>;
-}
-
-const busy = (thread: Thread) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you";
-
-function onEnter(send: () => void) {
-  return (event: KeyboardEvent) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      send();
-    }
-  };
+/** A small menu that opens under its button and closes on any outside click. Risky items ask twice. */
+function Menu({ label, items }: { label: string; items: { label: string; danger?: boolean; run(): void }[] }) {
+  const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return setArmed(null);
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+  return (
+    <span className="menuwrap">
+      <button
+        className="icon more"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(!open);
+        }}
+      >
+        <Icon name="dots" />
+      </button>
+      {open && (
+        <span className="menu" role="menu">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              role="menuitem"
+              className={item.danger ? "danger" : undefined}
+              onClick={(event) => {
+                // Choosing an item must not also trigger whatever the menu sits on.
+                event.stopPropagation();
+                if (item.danger && armed !== item.label) return setArmed(item.label);
+                setOpen(false);
+                item.run();
+              }}
+            >
+              {item.danger && armed === item.label ? "Click again to confirm" : item.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function App() {
   const store = useStore();
-  const [view, setView] = useState<View>("start");
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const settings = store.settings;
+  // The project a new thread will go into. Never guessed: it is the one last worked in, or nothing.
+  const [projectId, setProjectId] = useState<string | null>(() => remembered("arcex:project"));
+  const [screen, setScreenRaw] = useState<Screen>({ kind: "thread", threadId: null });
+  const [last, setLast] = useState<Screen>({ kind: "thread", threadId: null });
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(JSON.parse(remembered("arcex:expanded") ?? "[]") as string[]));
+  const [sidebar, setSidebar] = useState(true);
+  const [panel, setPanel] = useState<boolean | null>(null);
+  const [tab, setTab] = useState<PanelTab>("details");
+  const [query, setQuery] = useState("");
+  const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [status, setStatus] = useState<ProviderStatus[] | null>(null);
+  const [choice, setChoice] = useState<Choice | null>(null);
+  // Text placed in the new-thread box by another screen, such as the toolbox.
+  const [seed, setSeed] = useState("");
+  const search = useRef<HTMLInputElement>(null);
 
-  const project = store.projects.find((p) => p.id === projectId) ?? null;
-  const threads = useMemo(() => store.threads.filter((t) => t.projectId === projectId), [store.threads, projectId]);
-  const shown: View | "lost" = store.status === "lost" ? "lost" : project ? view : "start";
+  const overlay = screen.kind === "settings" || screen.kind === "toolbox";
+  /** Moves to a screen, remembering where to come back to from Settings or the Toolbox. */
+  const setScreen = (next: Screen) => {
+    if (screen.kind === "thread" || screen.kind === "new-project") setLast(screen);
+    setScreenRaw(next);
+  };
+  const back = () => setScreenRaw(last);
+
+  const live = useMemo(() => store.threads.filter((t) => !t.archived), [store.threads]);
+  const thread = screen.kind === "thread" ? live.find((t) => t.id === screen.threadId) ?? null : null;
+  const project = store.projects.find((p) => p.id === (thread?.projectId ?? projectId)) ?? null;
+  const threads = useMemo(() => live.filter((t) => t.projectId === project?.id), [live, project?.id]);
+  const view: Screen = store.projects.length === 0 && screen.kind === "thread" ? { kind: "new-project" } : screen;
+  const panelOpen = panel ?? settings?.showDetails ?? true;
+  const picked: Choice = choice ?? { agentId: settings?.defaultProvider ?? "claude", model: settings?.defaultModel ?? null };
+
+  setAgents(store.agents);
+  if (settings) prefs.sendWith = settings.sendWith;
+
+  // Theme, including following the system setting.
+  const [systemIsDark, setSystemIsDark] = useState(systemDark.matches);
+  useEffect(() => {
+    const onChange = () => setSystemIsDark(systemDark.matches);
+    systemDark.addEventListener("change", onChange);
+    return () => systemDark.removeEventListener("change", onChange);
+  }, []);
+  const theme = settings?.theme === "system" ? (systemIsDark ? "dark" : "light") : settings?.theme ?? "light";
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.arcex?.setTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
-    document.body.dataset.view = shown;
-  }, [shown]);
+    if (project) localStorage.setItem("arcex:project", project.id);
+  }, [project?.id]);
+  useEffect(() => localStorage.setItem("arcex:expanded", JSON.stringify([...expanded])), [expanded]);
   useEffect(() => {
-    for (const thread of threads) void loadItems(thread.id);
+    for (const t of threads) void loadItems(t.id);
   }, [threads]);
+  useEffect(() => {
+    if (store.status === "ready") call("providers.status", {}).then(setStatus).catch(() => {});
+  }, [store.status, store.agents.length]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 6000);
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const fail = (error: unknown) => setToast(error instanceof Error ? error.message : String(error));
-  const open = (id: string) => {
-    setProjectId(id);
-    setThreadId(null);
-    setView("focus");
-  };
-  const startThread = async (provider: ProviderId, text: string) => {
-    if (!project) return;
-    try {
-      const thread = await call("thread.create", { projectId: project.id, provider, text });
-      openEmpty(thread.id);
-      void loadItems(thread.id);
-      setThreadId(thread.id);
-    } catch (error) {
-      fail(error);
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
+  const backRef = useRef(back);
+  backRef.current = back;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && overlayRef.current && !document.querySelector(".mpop, .menu")) return backRef.current();
+      if (!event.ctrlKey && !event.metaKey) return;
+      if (event.key === "b") setSidebar((open) => !open);
+      else if (event.key === "j") setPanel((open) => !(open ?? true));
+      else if (event.key === "n") setScreenRaw({ kind: "thread", threadId: null });
+      else if (event.key === ",") setScreenRaw((current) => (current.kind === "settings" ? current : { kind: "settings", section: "general" }));
+      else if (event.key === "k") {
+        setSidebar(true);
+        setTimeout(() => search.current?.focus());
+      } else return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Tell the user when a thread finishes or needs them while they are looking elsewhere.
+  const lastStates = useRef(new Map<string, Thread["state"]>());
+  useEffect(() => {
+    for (const t of store.threads) {
+      const before = lastStates.current.get(t.id);
+      lastStates.current.set(t.id, t.state);
+      if (!before || before === t.state || !settings?.notify || document.hasFocus()) continue;
+      const wasBusy = before === "working" || before === "starting";
+      const body = t.state === "needs_you" ? "Needs your OK to continue" : t.state === "idle" && wasBusy ? "Finished" : t.state === "failed" ? "Stopped with a problem" : null;
+      if (body && "Notification" in window && Notification.permission === "granted") new Notification(t.title, { body });
     }
-  };
+  }, [store.threads, settings?.notify]);
+
+  const fail = (error: unknown) => setToast(error instanceof Error ? error.message : String(error));
   const actions: Actions = {
     fail,
-    startThread,
     prompt: (id, text) => call("thread.prompt", { threadId: id, text }).catch(fail),
     cancel: (id) => call("thread.cancel", { threadId: id }).catch(fail),
     answer: (id, itemId, optionId) => call("ask.answer", { threadId: id, itemId, optionId }).catch(fail),
   };
-
-  return (
-    <>
-      <div style={{ position: "absolute", width: 0, height: 0 }} dangerouslySetInnerHTML={{ __html: sprite }} />
-      <div className="bar">
-        <div className="left">
-          <img src="./mark.png" alt="Arcex" />
-          {project && (
-            <button className="crumb" onClick={() => setProjectId(null)}>
-              {project.name} <Icon name="chev" size={13} />
-            </button>
-          )}
-        </div>
-        <div className="seg" role="group" aria-label="View">
-          {(["focus", "board"] as const).map((v) => (
-            <button key={v} aria-pressed={view === v} onClick={() => setView(v)}>
-              {v === "focus" ? "Focus" : "Board"}
-            </button>
-          ))}
-        </div>
-        <div className="right" />
-      </div>
-
-      <main className="lost">
-        <p>Arcex lost its connection to the engine. Close and reopen the app.</p>
-      </main>
-      <Start projects={store.projects} threads={store.threads} open={open} fail={fail} ready={store.status === "ready"} />
-      {project && (
-        <>
-          <Focus
-            project={project}
-            threads={threads}
-            thread={threads.find((t) => t.id === threadId) ?? null}
-            items={store.items}
-            select={setThreadId}
-            actions={actions}
-          />
-          <Board
-            threads={threads}
-            items={store.items}
-            actions={actions}
-            openThread={(id) => {
-              setThreadId(id);
-              setView("focus");
-            }}
-          />
-        </>
-      )}
-      {toast && <div className="toast" role="alert">{toast}</div>}
-    </>
-  );
-}
-
-type Actions = {
-  fail(error: unknown): void;
-  startThread(provider: ProviderId, text: string): Promise<void>;
-  prompt(threadId: string, text: string): Promise<unknown>;
-  cancel(threadId: string): Promise<unknown>;
-  answer(threadId: string, itemId: string, optionId: string | null): Promise<unknown>;
-};
-
-/* ───────── Start ───────── */
-
-function Start(props: { projects: Project[]; threads: Thread[]; ready: boolean; open(id: string): void; fail(error: unknown): void }) {
-  const [goal, setGoal] = useState("");
-  const [folder, setFolder] = useState<string | null>(null);
-  const [working, setWorking] = useState(false);
-
-  const pick = async () => {
-    const chosen = window.arcex ? await window.arcex.pickFolder() : window.prompt("Full path of the project folder");
-    if (chosen) setFolder(chosen);
+  const openThread = (t: Thread) => setScreen({ kind: "thread", threadId: t.id });
+  const newThreadIn = (id: string | null) => {
+    if (id) setProjectId(id);
+    setScreen({ kind: "thread", threadId: null });
   };
-  const create = async () => {
-    if (!goal.trim() || working || !props.ready) return;
-    setWorking(true);
+  const startThread = async (text: string) => {
+    if (!project) return;
     try {
-      const project = await call("project.create", folder ? { goal, cwd: folder } : { goal });
-      setGoal("");
-      setFolder(null);
-      props.open(project.id);
+      const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, text });
+      // The next new thread starts with whatever was used last.
+      void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
+      openEmpty(created.id);
+      setSeed("");
+      setExpanded((open) => new Set(open).add(project.id));
+      setScreen({ kind: "thread", threadId: created.id });
     } catch (error) {
-      props.fail(error);
+      fail(error);
     }
-    setWorking(false);
   };
+  const threadMenu = (t: Thread) => [
+    {
+      label: "Rename",
+      run: () => {
+        setSidebar(true);
+        setExpanded((open) => new Set(open).add(t.projectId));
+        setRenaming(t.id);
+      },
+    },
+    { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
+    { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
+  ];
+
+  if (store.status === "lost") return <div className="lost">Arcex lost its connection to the engine. Close and reopen the app.</div>;
+  if (!settings || !store.about) return <div className="lost" />;
+
+  const showPanel = panelOpen && !!thread && !!project && view.kind === "thread";
+  const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
+  const needle = query.trim().toLowerCase();
 
   return (
-    <main className="start">
-      <div className="inner">
-        <img src="./mark.png" alt="" />
-        <h1 className="serif">What are you building?</h1>
-        <p className="sub">Describe it the way you'd tell a friend. Arcex keeps track of it and puts your agents to work.</p>
-        <div className="idea">
-          <textarea
-            autoFocus
-            value={goal}
-            maxLength={2000}
-            placeholder="A fitness app where people log workouts and keep a streak"
-            onChange={(event) => setGoal(event.target.value)}
-            onKeyDown={onEnter(create)}
-          />
-          <div className="row">
-            <button className="chiplink" onClick={pick}>
-              <Icon name="folder" /> <span className="folder">{folder ?? "Continue something I've started"}</span>
-            </button>
-            {folder && (
-              <button className="tool" aria-label="Start fresh instead" onClick={() => setFolder(null)}>
+    <div className={["app", window.arcex && "desktop", showPanel && "has-panel"].filter(Boolean).join(" ")}>
+      <div style={{ position: "absolute", width: 0, height: 0 }} dangerouslySetInnerHTML={{ __html: sprite }} />
+
+      <aside className={sidebar ? "sidebar" : "sidebar shut"}>
+        <div className="brand">
+          <img className="mark lockup" src="./lockup.png" alt="Arcex" />
+          <span className="fill" />
+          <button className="icon" aria-label="Hide sidebar" onClick={() => setSidebar(false)}>
+            <Icon name="sidebar" />
+          </button>
+        </div>
+        <nav className="nav">
+          <button className="row" aria-current={view.kind === "thread" && !thread} onClick={() => newThreadIn(null)}>
+            <Icon name="edit" /> New thread <kbd>Ctrl N</kbd>
+          </button>
+          <button className="row" aria-current={view.kind === "toolbox"} onClick={() => setScreen({ kind: "toolbox" })}>
+            <Icon name="box" /> Toolbox
+          </button>
+          <label className="row find">
+            <Icon name="search" />
+            <input ref={search} value={query} placeholder="Find a thread" aria-label="Find a thread" onChange={(event) => setQuery(event.target.value)} />
+            {query ? (
+              <button className="icon" aria-label="Clear" onClick={() => setQuery("")}>
                 <Icon name="x" />
               </button>
+            ) : (
+              <kbd>Ctrl K</kbd>
             )}
-            <span style={{ flex: 1 }} />
-            <button className="round ink" aria-label="Start the project" onClick={create} disabled={working}>
-              <Icon name="arrow" />
-            </button>
-          </div>
-        </div>
-        {props.projects.length > 0 && (
-          <div className="recent">
-            {props.projects.slice(0, 3).map((project) => {
-              const mine = props.threads.filter((t) => t.projectId === project.id);
-              const waiting = mine.filter((t) => t.state === "needs_you").length;
-              const active = mine.filter((t) => t.state === "working" || t.state === "starting").length;
-              return (
-                <button key={project.id} onClick={() => props.open(project.id)}>
-                  <b>{project.name}</b>
-                  <small>
-                    {mine.length === 0 ? "No threads yet" : `${mine.length} thread${mine.length === 1 ? "" : "s"}`}
-                    {waiting ? ` · ${waiting} need${waiting === 1 ? "s" : ""} you` : active ? ` · ${active} working` : ""}
-                  </small>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </main>
-  );
-}
-
-/* ───────── Timeline ───────── */
-
-type Row = { type: "item"; item: Item } | { type: "steps"; id: string; steps: Extract<Item, { kind: "step" }>[] };
-
-/** Consecutive steps are shown as one short list. */
-function rows(items: Item[]): Row[] {
-  const out: Row[] = [];
-  for (const item of items) {
-    const last = out[out.length - 1];
-    if (item.kind === "step") {
-      if (last?.type === "steps") last.steps.push(item);
-      else out.push({ type: "steps", id: item.id, steps: [item] });
-    } else out.push({ type: "item", item });
-  }
-  return out;
-}
-
-function Steps({ steps }: { steps: Extract<Item, { kind: "step" }>[] }) {
-  return (
-    <div className="work">
-      <ul>
-        {steps.map((step) => (
-          <li key={step.id} className={step.status === "failed" ? "bad" : undefined} title={step.detail}>
-            {step.status === "running" ? <span className="spin" /> : <Icon name={step.status === "failed" ? "x" : "check"} />}
-            {step.label}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function AskCard({ thread, item, actions, compact }: { thread: Thread; item: Extract<Item, { kind: "ask" }>; actions: Actions; compact?: boolean }) {
-  if (item.answer) return <p className="answered">{item.title}: you chose "{item.answer}"</p>;
-  return (
-    <div className="ask">
-      <div className="eyebrow">Needs your OK</div>
-      <b>{NAMES[thread.provider]} wants to: {item.title.toLowerCase()}</b>
-      {!compact && item.detail && item.detail !== item.title && <p title={item.detail}>{item.detail.slice(0, 160)}</p>}
-      {!compact && <AskButtons thread={thread} item={item} actions={actions} />}
-    </div>
-  );
-}
-
-function AskButtons({ thread, item, actions }: { thread: Thread; item: Extract<Item, { kind: "ask" }>; actions: Actions }) {
-  return (
-    <div className="row">
-      {item.options.map((option) => (
-        <button
-          key={option.id}
-          className={option.kind.startsWith("allow") ? "btn ink" : "btn line"}
-          onClick={(event) => {
-            event.stopPropagation();
-            void actions.answer(thread.id, item.id, option.id);
-          }}
-        >
-          {option.name}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/* ───────── Focus ───────── */
-
-function Focus(props: {
-  project: Project;
-  threads: Thread[];
-  thread: Thread | null;
-  items: Record<string, Item[]>;
-  select(id: string | null): void;
-  actions: Actions;
-}) {
-  const { project, thread, actions } = props;
-  const items = thread ? props.items[thread.id] ?? [] : [];
-  const [draft, setDraft] = useState("");
-  const [provider, setProvider] = useState<ProviderId>("claude");
-  const [hood, setHood] = useState(false);
-  const scroller = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [items, thread?.id]);
-
-  const send = () => {
-    const text = draft.trim();
-    if (!text || (thread && busy(thread))) return;
-    setDraft("");
-    if (thread) void actions.prompt(thread.id, text);
-    else void actions.startThread(provider, text);
-  };
-
-  return (
-    <main className="focus">
-      <aside className="rail">
-        <div className="eyebrow">Building</div>
-        <h2 className="serif">{project.goal}</h2>
-        <div className="tlist">
-          <div className="head">
-            <span className="eyebrow">Threads</span>
-            <button className="tool" aria-label="New thread" style={{ width: 26, height: 26 }} onClick={() => props.select(null)}>
+          </label>
+        </nav>
+        <div className="tree">
+          <div className="label heading">
+            Projects
+            <button className="icon" aria-label="New project" onClick={() => setScreen({ kind: "new-project" })}>
               <Icon name="plus" />
             </button>
           </div>
-          {props.threads.map((t) => (
-            <button key={t.id} className="trow" aria-current={t.id === thread?.id} onClick={() => props.select(t.id)}>
-              <Seal provider={t.provider} />
-              <b>{t.title}</b>
-              <StateMark thread={t} />
-            </button>
-          ))}
+          {store.projects.length === 0 && <div className="none flat">Start your first project to see it here.</div>}
+          {store.projects.map((p) => {
+            const all = live.filter((t) => t.projectId === p.id).sort((a, b) => b.updatedAt - a.updatedAt);
+            const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : all;
+            if (needle && mine.length === 0) return null;
+            const open = needle ? true : expanded.has(p.id) || p.id === thread?.projectId;
+            const attention = all.some((t) => t.state === "needs_you") ? "dot needs" : all.some(busy) ? "dot working" : null;
+            return (
+              <div key={p.id} className={open ? "group open" : "group"}>
+                <div className="row phead">
+                  <button
+                    className="ptoggle"
+                    aria-expanded={open}
+                    onClick={() =>
+                      setExpanded((current) => {
+                        const next = new Set(current);
+                        if (open) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      })
+                    }
+                  >
+                    <Icon name="chev" /> <span className="trunc">{p.name}</span>
+                    {!open && attention && <span className={attention} />}
+                    {!open && !attention && all.length > 0 && <span className="when">{all.length}</span>}
+                  </button>
+                  <button className="icon padd" aria-label={`New thread in ${p.name}`} onClick={() => newThreadIn(p.id)}>
+                    <Icon name="plus" />
+                  </button>
+                </div>
+                {open && mine.length === 0 && (
+                  <button className="none link" onClick={() => newThreadIn(p.id)}>
+                    Start the first thread
+                  </button>
+                )}
+                {open &&
+                  mine.map((t) => {
+                    const dot = dotClass(t);
+                    if (renaming === t.id) {
+                      return (
+                        <input
+                          key={t.id}
+                          className="rename"
+                          autoFocus
+                          defaultValue={t.title}
+                          maxLength={80}
+                          aria-label="Thread name"
+                          onFocus={(event) => event.currentTarget.select()}
+                          onBlur={(event) => {
+                            const name = event.currentTarget.value.trim();
+                            if (name && name !== t.title) call("thread.update", { threadId: t.id, title: name }).catch(fail);
+                            setRenaming(null);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                            if (event.key === "Escape") setRenaming(null);
+                          }}
+                        />
+                      );
+                    }
+                    return (
+                      <div key={t.id} className="row thread" role="button" tabIndex={0} aria-current={t.id === thread?.id} title={stateLabel(t) || undefined} onClick={() => openThread(t)} onKeyDown={(event) => event.key === "Enter" && openThread(t)}>
+                        <span className="trunc">{t.title}</span>
+                        {dot ? <span className={dot} /> : <span className="when">{ago(t.updatedAt)}</span>}
+                        <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
+                      </div>
+                    );
+                  })}
+              </div>
+            );
+          })}
+          {needle && !live.some((t) => t.title.toLowerCase().includes(needle)) && <div className="none flat">No thread matches "{query}".</div>}
         </div>
-        <button className="hood" onClick={() => setHood(!hood)}>
-          <Icon name="layers" /> Under the hood
-        </button>
+        <div className="foot">
+          <button className="row me" aria-current={view.kind === "settings" && view.section === "profile"} onClick={() => setScreen({ kind: "settings", section: "profile" })}>
+            <span className="avatar">{initials(settings.name)}</span>
+            <span className="trunc">{settings.name || "Set up your profile"}</span>
+          </button>
+          <button className="icon" aria-label="Settings" aria-pressed={view.kind === "settings" && view.section !== "profile"} onClick={() => setScreen({ kind: "settings", section: "general" })}>
+            <Icon name="gear" />
+          </button>
+        </div>
       </aside>
 
-      <section className="sheet">
-        <div className="thead">
-          <h1 className="serif">{thread ? thread.title : "New thread"}</h1>
-          <p>{thread ? `With ${NAMES[thread.provider]}` : `Works inside ${project.name}`}</p>
+      <section className="main">
+        <header className="top">
+          {!sidebar && (
+            <button className="icon" aria-label="Show sidebar" onClick={() => setSidebar(true)}>
+              <Icon name="sidebar" />
+            </button>
+          )}
+          {overlay && (
+            <button className="backbtn" onClick={back}>
+              <Icon name="back" /> Back <kbd>Esc</kbd>
+            </button>
+          )}
+          {thread && project && (
+            <>
+              <span className="sub trunc">{project.name}</span>
+              <span className="slash">/</span>
+            </>
+          )}
+          <h1 className="trunc">{title}</h1>
+          {thread && <Menu label="Thread options" items={threadMenu(thread)} />}
+          <span className="fill" />
+          {thread && busy(thread) && <span className="tag live">{stateLabel(thread)}</span>}
           {thread && (
-            <span className="who">
-              <Seal provider={thread.provider} /> {NAMES[thread.provider]}
+            <span className="tag">
+              {nameOf(thread.provider)}
+              {thread.model ? ` · ${thread.model.name}` : ""}
             </span>
           )}
-        </div>
-        <div className="msgs" ref={scroller}>
-          {!thread && (
-            <div className="empty">
-              <b>Tell an agent what to do</b>
-              <span>Start as many threads as you like. Each one works on its own piece of {project.name}.</span>
-            </div>
+          {thread && (
+            <>
+              <button
+                className="icon"
+                aria-pressed={panelOpen && tab === "browser"}
+                aria-label="Browser"
+                onClick={() => {
+                  setPanel(!(panelOpen && tab === "browser"));
+                  setTab("browser");
+                }}
+              >
+                <Icon name="globe" />
+              </button>
+              <button
+                className="icon"
+                aria-pressed={panelOpen && tab === "details"}
+                aria-label="Details"
+                onClick={() => {
+                  setPanel(!(panelOpen && tab === "details"));
+                  setTab("details");
+                }}
+              >
+                <Icon name="panel" />
+              </button>
+            </>
           )}
-          {thread &&
-            rows(items).map((row) =>
-              row.type === "steps" ? <Steps key={row.id} steps={row.steps} />
-              : row.item.kind === "user" ? <div key={row.item.id} className="you">{row.item.text}</div>
-              : row.item.kind === "say" ? <p key={row.item.id} className="said">{row.item.text}</p>
-              : row.item.kind === "ask" ? <AskCard key={row.item.id} thread={thread} item={row.item} actions={actions} />
-              : row.item.kind === "error" ? <p key={row.item.id} className="said oops">{row.item.text}</p>
-              : null,
-            )}
-        </div>
-        <div className="composer">
-          <textarea
-            rows={1}
-            value={draft}
-            maxLength={20000}
-            placeholder={thread ? `Tell ${NAMES[thread.provider]} what to change` : "What should this thread work on?"}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onEnter(send)}
+        </header>
+
+        {view.kind === "settings" ? (
+          <SettingsView
+            section={view.section}
+            go={(section) => setScreenRaw({ kind: "settings", section })}
+            settings={settings}
+            about={store.about}
+            agents={store.agents}
+            projects={store.projects}
+            threads={store.threads}
+            recheck={() => void call("providers.status", {}).then(setStatus).catch(() => {})}
+            fail={fail}
           />
-          <div className="row">
-            {!thread && (
-              <div className="pick" role="group" aria-label="Agent">
-                {(Object.keys(NAMES) as ProviderId[]).map((id) => (
-                  <button key={id} aria-pressed={provider === id} onClick={() => setProvider(id)}>
-                    {NAMES[id]}
-                  </button>
-                ))}
-              </div>
-            )}
-            {thread && busy(thread) && (
-              <span className="busy">
-                <span className="st working">{thread.state === "needs_you" ? "Waiting for you" : `${NAMES[thread.provider]} is working`}</span>
-                <button className="quiet" onClick={() => void actions.cancel(thread.id)}>Stop</button>
-              </span>
-            )}
-            <span className="gap" />
-            <button className="round ink" aria-label="Send" onClick={send} disabled={!!thread && busy(thread)}>
-              <Icon name="up" />
-            </button>
-          </div>
-        </div>
+        ) : view.kind === "toolbox" ? (
+          <ToolboxView
+            fail={fail}
+            use={(tool) => {
+              setSeed(`Set up ${tool.name} in this project. First tell me in plain words what it will add and anything I need to sign up for, then do it.`);
+              setScreen({ kind: "thread", threadId: null });
+            }}
+          />
+        ) : view.kind === "new-project" ? (
+          <NewProject
+            first={store.projects.length === 0}
+            ready={store.status === "ready"}
+            fail={fail}
+            created={(p) => {
+              setExpanded((open) => new Set(open).add(p.id));
+              newThreadIn(p.id);
+            }}
+          />
+        ) : (
+          <Conversation
+            key={thread?.id ?? `new:${seed}`}
+            seed={thread ? "" : seed}
+            projects={store.projects}
+            project={project}
+            thread={thread}
+            items={thread ? store.items[thread.id] ?? [] : []}
+            agents={store.agents}
+            status={status}
+            choice={picked}
+            setChoice={setChoice}
+            pickProject={setProjectId}
+            newProject={() => setScreen({ kind: "new-project" })}
+            manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
+            actions={actions}
+            start={startThread}
+            name={settings.name}
+          />
+        )}
       </section>
 
-      <Preview project={project} fail={actions.fail} />
-      {hood && <Hood project={project} threads={props.threads} close={() => setHood(false)} fail={actions.fail} />}
-    </main>
-  );
-}
-
-function Preview({ project, fail }: { project: Project; fail(error: unknown): void }) {
-  const [address, setAddress] = useState(project.previewUrl ?? "");
-  const [nonce, setNonce] = useState(0);
-  useEffect(() => setAddress(project.previewUrl ?? ""), [project.id, project.previewUrl]);
-
-  const save = () => {
-    const value = address.trim();
-    const url = value === "" ? null : /^https?:\/\//.test(value) ? value : `http://${value}`;
-    call("project.setPreview", { projectId: project.id, url }).catch(fail);
-  };
-
-  return (
-    <section className="stage">
-      <div className="pbar">
-        <span className="name">{project.previewUrl && <span className="live" />}</span>
-        <input
-          value={address}
-          placeholder="Your app's address, like localhost:3000"
-          aria-label="Preview address"
-          onChange={(event) => setAddress(event.target.value)}
-          onKeyDown={onEnter(save)}
-          onBlur={save}
-        />
-        <button className="tool" aria-label="Reload" onClick={() => setNonce(nonce + 1)}>
-          <Icon name="reload" />
-        </button>
-      </div>
-      {project.previewUrl ? (
-        <iframe key={nonce} src={project.previewUrl} title="App preview" />
-      ) : (
-        <div className="empty">
-          <b>Your app shows up here</b>
-          <span>Once it's running, paste its address above to watch it change as the agents work.</span>
-        </div>
+      {showPanel && project && (
+        <Panel key={project.id} project={project} threads={threads} items={store.items} tab={tab} setTab={setTab} fail={fail} close={() => setPanel(false)} />
       )}
-    </section>
-  );
-}
-
-function Hood({ project, threads, close, fail }: { project: Project; threads: Thread[]; close(): void; fail(error: unknown): void }) {
-  const [changes, setChanges] = useState<Change[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [diff, setDiff] = useState("");
-  // Refresh whenever a thread finishes a turn.
-  const settled = threads.map((t) => `${t.id}:${t.state}`).join();
-
-  useEffect(() => {
-    call("project.changes", { projectId: project.id })
-      .then((list) => {
-        setChanges(list);
-        setSelected((current) => (list.some((c) => c.path === current) ? current : list[0]?.path ?? null));
-      })
-      .catch(fail);
-  }, [project.id, settled]);
-  useEffect(() => {
-    if (!selected) return setDiff("");
-    call("project.diff", { projectId: project.id, path: selected }).then((result) => setDiff(result.text)).catch(() => setDiff(""));
-  }, [project.id, selected, settled]);
-
-  const lines = diff.split("\n").filter((line) => !/^(diff --git|index |--- |\+\+\+ |new file|deleted file)/.test(line));
-  return (
-    <section className="hoodp" style={{ display: "grid" }} aria-label="Under the hood">
-      <div className="htabs">
-        <button className="tab" aria-selected="true">What changed</button>
-        <span style={{ flex: 1 }} />
-        <button className="tool" aria-label="Close" onClick={close}>
-          <Icon name="x" />
-        </button>
-      </div>
-      <div className="hbody">
-        <div className="changes">
-          {changes?.length === 0 && <div className="none">Nothing has changed since the last save point.</div>}
-          {changes?.map((change) => (
-            <button key={change.path} className="chg" aria-current={change.path === selected} onClick={() => setSelected(change.path)}>
-              <b>{change.path.split("/").pop()}</b>
-              <small>{change.status === "added" ? "New file" : change.status === "removed" ? "Removed" : change.path}</small>
-              <em>
-                +{change.added} <i>−{change.removed}</i>
-              </em>
-            </button>
-          ))}
-        </div>
-        <div className="diff">
-          {selected ? (
-            lines.map((line, index) => (
-              <div key={index} className={`l ${line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx"}`}>{line || " "}</div>
-            ))
-          ) : (
-            <div className="none">Pick a file to see exactly what changed in it.</div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ───────── Board ───────── */
-
-function Board(props: { threads: Thread[]; items: Record<string, Item[]>; actions: Actions; openThread(id: string | null): void }) {
-  const { threads, actions } = props;
-  const [chosen, setChosen] = useState<string | null>(null);
-  // The thread that needs you takes the large tile unless you picked one yourself.
-  const big = threads.find((t) => t.id === chosen)?.id ?? threads.find((t) => t.state === "needs_you")?.id ?? threads[0]?.id;
-  const count = (states: Thread["state"][]) => threads.filter((t) => states.includes(t.state)).length;
-  const promote = (id: string) => {
-    const apply = () => setChosen(id);
-    if (document.startViewTransition) document.startViewTransition(apply);
-    else apply();
-  };
-
-  return (
-    <main className="board">
-      <div className="tiles">
-        {threads.length === 0 && (
-          <div className="empty" style={{ gridColumn: "1 / -1", gridRow: "1 / -1" }}>
-            <b>No threads yet</b>
-            <span>Start one and it appears here. Every thread you run shows up side by side.</span>
-          </div>
-        )}
-        {threads.map((thread) => (
-          <Tile
-            key={thread.id}
-            thread={thread}
-            items={props.items[thread.id] ?? []}
-            big={thread.id === big}
-            actions={actions}
-            open={() => props.openThread(thread.id)}
-            promote={() => promote(thread.id)}
-          />
-        ))}
-      </div>
-      <div className="dock">
-        <div className="tally">
-          {count(["needs_you"]) > 0 && <span className="st needs">{count(["needs_you"])} need you</span>}
-          {count(["working", "starting"]) > 0 && <span className="st working">{count(["working", "starting"])} working</span>}
-          {count(["idle"]) > 0 && <span className="st reported">{count(["idle"])} finished</span>}
-        </div>
-        <span />
-        <button className="btn line end" onClick={() => props.openThread(null)}>
-          <Icon name="plus" /> New thread
-        </button>
-      </div>
-    </main>
-  );
-}
-
-function Tile(props: { thread: Thread; items: Item[]; big: boolean; actions: Actions; open(): void; promote(): void }) {
-  const { thread, actions } = props;
-  const [draft, setDraft] = useState("");
-  const recent = props.items.slice(props.big ? -12 : -5);
-  const pendingAsk = props.items.findLast((item) => item.kind === "ask" && !item.answer) as Extract<Item, { kind: "ask" }> | undefined;
-  const running = props.items.findLast((item) => item.kind === "step" && item.status === "running") as Extract<Item, { kind: "step" }> | undefined;
-  const cls = ["tile", props.big && "big", thread.state === "needs_you" && "attn", thread.state === "idle" && !props.big && "rest"].filter(Boolean).join(" ");
-
-  const send = () => {
-    const text = draft.trim();
-    if (!text || busy(thread)) return;
-    setDraft("");
-    void actions.prompt(thread.id, text);
-  };
-  const body: ReactNode[] = [];
-  for (const item of recent) {
-    if (item.kind === "user") body.push(<p key={item.id} className="q">{item.text.slice(0, 200)}</p>);
-    else if (item.kind === "say") body.push(<p key={item.id} className="a">{item.text.length > 320 ? `${item.text.slice(0, 320)}…` : item.text}</p>);
-    else if (item.kind === "error") body.push(<p key={item.id} className="a oops">{item.text}</p>);
-    else if (item.kind === "ask" && !item.answer) body.push(<AskCard key={item.id} thread={thread} item={item} actions={actions} compact />);
-  }
-
-  return (
-    <article className={cls} style={{ viewTransitionName: `tile-${thread.id}` }} onClick={props.open}>
-      <header>
-        <Seal provider={thread.provider} />
-        <b>{thread.title}</b>
-        <StateMark thread={thread} />
-        <button
-          className="grow"
-          aria-label="Make this thread larger"
-          onClick={(event) => {
-            event.stopPropagation();
-            props.promote();
-          }}
-        >
-          <Icon name="grow" />
-        </button>
-      </header>
-      <div className="body">
-        {body}
-        {!pendingAsk && busy(thread) && (
-          <div className="now">
-            <span>{running?.label ?? "Getting started"}</span>
-          </div>
-        )}
-      </div>
-      <footer onClick={(event) => event.stopPropagation()}>
-        {pendingAsk ? (
-          <AskButtons thread={thread} item={pendingAsk} actions={actions} />
-        ) : (
-          <div className="mini">
-            <input
-              value={draft}
-              placeholder={busy(thread) ? "Working…" : "Reply or redirect"}
-              disabled={busy(thread)}
-              aria-label={`Reply to ${thread.title}`}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={onEnter(send)}
-            />
-          </div>
-        )}
-      </footer>
-    </article>
+      {toast && <div className="toast" role="alert">{toast}</div>}
+    </div>
   );
 }

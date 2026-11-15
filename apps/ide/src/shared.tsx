@@ -1,0 +1,72 @@
+import { useEffect, useRef, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
+import type { Agent, Thread } from "@arcex/contracts";
+
+declare global {
+  interface Window {
+    /** Present only inside the desktop shell. */
+    arcex?: { pickFolder(): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void };
+  }
+}
+
+/** Agent names by id. App keeps this in step with the engine so any component can name an agent. */
+export const agentNames = new Map<string, string>();
+export const nameOf = (agentId: string) => agentNames.get(agentId) ?? "Agent";
+export function setAgents(agents: Agent[]) {
+  agentNames.clear();
+  for (const agent of agents) agentNames.set(agent.id, agent.name);
+}
+export const STARTERS = ["Explain how this project works", "Find and fix a bug", "Add a new feature", "Make it look better"];
+
+/** The saved preferences the input helpers need. App keeps this in step with the engine. */
+export const prefs: { sendWith: "enter" | "ctrl-enter" } = { sendWith: "enter" };
+
+export type Actions = {
+  fail(error: unknown): void;
+  prompt(threadId: string, text: string): Promise<unknown>;
+  cancel(threadId: string): Promise<unknown>;
+  answer(threadId: string, itemId: string, optionId: string | null): Promise<unknown>;
+};
+
+export const Icon = ({ name }: { name: string }) => (
+  <svg className="i" aria-hidden="true">
+    <use href={`#${name}`} />
+  </svg>
+);
+
+export const busy = (thread: Thread) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you";
+export const stateLabel = (thread: Thread) =>
+  thread.state === "needs_you" ? "Needs you" : busy(thread) ? "Working" : thread.state === "failed" ? "Stopped" : "";
+export const dotClass = (thread: Thread) =>
+  thread.state === "needs_you" ? "dot needs" : busy(thread) ? "dot working" : thread.state === "failed" ? "dot failed" : null;
+export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** "now", "5m", "3h", "2d": how long since a thread last moved. */
+export function ago(time: number): string {
+  const minutes = Math.floor((Date.now() - time) / 60_000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}h`;
+  return `${Math.floor(minutes / (60 * 24))}d`;
+}
+
+/** Sends on Enter, or on Ctrl+Enter when the user chose that. Shift+Enter always makes a new line. */
+export function onEnter(send: () => void) {
+  return (event: KeyboardEvent) => {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (prefs.sendWith === "ctrl-enter" && !event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    send();
+  };
+}
+
+/** A textarea that grows with what is typed, up to the height its CSS allows. */
+export function AutoText(props: TextareaHTMLAttributes<HTMLTextAreaElement> & { value: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [props.value]);
+  return <textarea ref={ref} {...props} />;
+}
