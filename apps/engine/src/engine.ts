@@ -1,6 +1,6 @@
 // Projects, threads and their timelines. Clients only see what this module emits.
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
@@ -374,6 +374,20 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       projects.delete(project.id);
       emit({ event: "gone", kind: "project", id: project.id });
       return { ok: true };
+    },
+
+    "project.files"(params) {
+      const project = projectOf(params.projectId);
+      const dir = path.resolve(project.cwd, typeof params.dir === "string" ? params.dir.slice(0, 1000) : "");
+      // Stay inside the project folder.
+      if (dir !== project.cwd && !dir.startsWith(project.cwd + path.sep)) throw new Error("that folder is outside the project");
+      // Folders nobody browses by hand, and that can hold tens of thousands of entries.
+      const hidden = new Set([".git", "node_modules", ".next", "dist", ".turbo", ".cache"]);
+      return readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => !hidden.has(entry.name) && (entry.isDirectory() || entry.isFile()))
+        .map((entry) => ({ name: entry.name, kind: entry.isDirectory() ? ("folder" as const) : ("file" as const) }))
+        .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1))
+        .slice(0, 300);
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),

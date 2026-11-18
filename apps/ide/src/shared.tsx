@@ -15,7 +15,12 @@ export function setAgents(agents: Agent[]) {
   agentNames.clear();
   for (const agent of agents) agentNames.set(agent.id, agent.name);
 }
-export const STARTERS = ["Explain how this project works", "Find and fix a bug", "Add a new feature", "Make it look better"];
+export const STARTERS = [
+  { icon: "code", text: "Add a new feature" },
+  { icon: "flask", text: "Find and fix a bug" },
+  { icon: "spark", text: "Make it look better" },
+  { icon: "sliders", text: "Explain how this project works" },
+];
 
 /** The saved preferences the input helpers need. App keeps this in step with the engine. */
 export const prefs: { sendWith: "enter" | "ctrl-enter" } = { sendWith: "enter" };

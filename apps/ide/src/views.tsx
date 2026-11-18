@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Agent, Change, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
+import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
 import { ModelPicker, type Choice } from "./ModelPicker.tsx";
+import { Art } from "./Art.tsx";
 import { Md } from "./md.tsx";
-import { AutoText, Icon, STARTERS, busy, nameOf, onEnter, plural, prefs, type Actions } from "./shared.tsx";
+import { AutoText, Icon, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, type Actions } from "./shared.tsx";
 import { call } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -32,8 +33,10 @@ export function NewProject(props: { first: boolean; ready: boolean; created(proj
 
   return (
     <div className="hero">
+      <Art />
       <div className="inner">
-        <h2>What are you building?</h2>
+        <img className="mark logo" src="./mark.png" alt="" />
+        <h2>What are we building?</h2>
         <p className="lead">
           {props.first ? "Describe it the way you'd tell a friend. Arcex sets up the project and puts your agents to work." : "Describe the new project in a sentence or two."}
         </p>
@@ -301,7 +304,7 @@ export function Conversation(props: {
           </button>
         ) : (
           <button className="send" aria-label="Send" onClick={send} disabled={!draft.trim() || (!thread && !project)}>
-            <Icon name="up" />
+            <Icon name="send" />
           </button>
         )}
       </div>
@@ -317,7 +320,9 @@ export function Conversation(props: {
   if (!thread) {
     return (
       <div className="hero">
+        <Art />
         <div className="inner">
+          <img className="mark logo" src="./mark.png" alt="" />
           <h2>What should happen next{props.name ? `, ${props.name.split(" ")[0]}` : ""}?</h2>
           <p className="lead">
             {project ? `A thread is one agent working on one piece of ${project.name}. Run several at once.` : "Pick the project this thread belongs to, then say what you want done."}
@@ -325,9 +330,9 @@ export function Conversation(props: {
           {composer}
           {notice}
           <div className="starters">
-            {STARTERS.map((text) => (
-              <button key={text} className="starter" onClick={() => setDraft(text)}>
-                {text}
+            {STARTERS.map((starter) => (
+              <button key={starter.text} className="starter" onClick={() => setDraft(starter.text)}>
+                <Icon name={starter.icon} /> {starter.text}
               </button>
             ))}
           </div>
@@ -380,10 +385,13 @@ export function Panel(props: {
   items: Record<string, Item[]>;
   tab: PanelTab;
   setTab(tab: PanelTab): void;
+  open(thread: Thread): void;
   fail(error: unknown): void;
   close(): void;
 }) {
   const { project, threads, fail } = props;
+  const recent = [...threads].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
+  const settled = threads.map((t) => `${t.id}:${t.state}`).join();
   const [wide, setWide] = useState(false);
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
   const found = useMemo(() => {
@@ -422,24 +430,35 @@ export function Panel(props: {
         <Browser project={project} found={found} fail={fail} />
       ) : (
         <div className="pbody">
-          <section className="sec">
-            <header><span className="label">Building</span></header>
-            <p className="goal">{project.goal}</p>
-            <div className="kv" title={project.cwd}>
-              <Icon name="folder" /> <span className="trunc">{project.cwd}</span>
-            </div>
-            <div className="kv">
-              <Icon name="edit" />
-              <span>
-                {threads.length === 0 ? "No threads yet" : plural(threads.length, "thread")}
-                {threads.some(busy) && ` · ${threads.filter(busy).length} working`}
-              </span>
-            </div>
-          </section>
+          <div className="phero" title={project.cwd}>
+            <Icon name="folder" />
+            <b className="trunc">{project.name}</b>
+            <span>
+              <span className={threads.some((t) => t.state === "needs_you") ? "dot needs" : threads.some(busy) ? "dot working" : "dot ok"} />
+              {threads.some((t) => t.state === "needs_you") ? "Needs you" : threads.some(busy) ? `${plural(threads.filter(busy).length, "agent")} working` : "Project active"}
+            </span>
+          </div>
+          <div className="goalcard">
+            <span className="label">Building</span>
+            <p>{project.goal}</p>
+          </div>
+          <Files project={project} refresh={settled} fail={fail} />
           <Changes project={project} threads={threads} fail={fail} />
+          {recent.length > 0 && (
+            <section className="sec">
+              <header><b>Recent activity</b></header>
+              {recent.map((t) => (
+                <button key={t.id} className="act" onClick={() => props.open(t)}>
+                  {busy(t) && t.state !== "needs_you" ? <span className="spin" /> : <Icon name={t.state === "needs_you" || t.state === "failed" ? "x" : "circlecheck"} />}
+                  <span className="trunc">{t.title}</span>
+                  <span className="when">{t.state === "needs_you" ? "Needs you" : busy(t) ? "Now" : `${ago(t.updatedAt)} ago`}</span>
+                </button>
+              ))}
+            </section>
+          )}
           {!project.previewUrl && found.length > 0 && (
             <section className="sec">
-              <header><span className="label">Running app</span></header>
+              <header><b>Running app</b></header>
               <button
                 className="btn"
                 onClick={() => {
@@ -454,6 +473,57 @@ export function Panel(props: {
         </div>
       )}
     </aside>
+  );
+}
+
+/** The project's folders and files. Folders open in place; nothing here edits anything. */
+function Files({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
+  const [entries, setEntries] = useState<Record<string, FileEntry[]>>({});
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const load = (dir: string) =>
+    call("project.files", { projectId: project.id, dir }).then((list) => setEntries((current) => ({ ...current, [dir]: list }))).catch(fail);
+
+  // Reload what is showing whenever a thread finishes a turn, since agents add and remove files.
+  useEffect(() => {
+    void load("");
+    for (const dir of open) void load(dir);
+  }, [project.id, refresh]);
+
+  const toggle = (dir: string) => {
+    const next = new Set(open);
+    if (next.has(dir)) next.delete(dir);
+    else {
+      next.add(dir);
+      void load(dir);
+    }
+    setOpen(next);
+  };
+  const list = (dir: string) =>
+    (entries[dir] ?? []).map((entry) => {
+      const path = dir ? `${dir}/${entry.name}` : entry.name;
+      if (entry.kind === "file") {
+        return (
+          <div key={path} className="file" title={path}>
+            <Icon name="file" /> <span className="trunc">{entry.name}</span>
+          </div>
+        );
+      }
+      return (
+        <div key={path}>
+          <button className="file" aria-expanded={open.has(path)} onClick={() => toggle(path)}>
+            <svg className="i chev" aria-hidden="true"><use href="#chev" /></svg>
+            <Icon name="folder" /> <span className="trunc">{entry.name}</span>
+          </button>
+          {open.has(path) && <div className="nest">{entries[path] ? (entries[path].length ? list(path) : <p className="muted">Empty</p>) : <p className="muted">Loading…</p>}</div>}
+        </div>
+      );
+    });
+
+  return (
+    <section className="sec">
+      <header><b>Files</b></header>
+      {!entries[""] ? <p className="muted">Loading…</p> : entries[""].length === 0 ? <p className="muted">This folder is empty so far.</p> : <div className="files">{list("")}</div>}
+    </section>
   );
 }
 
@@ -478,7 +548,7 @@ function Changes({ project, threads, fail }: { project: Project; threads: Thread
   return (
     <section className="sec">
       <header>
-        <span className="label">Changes</span>
+        <b>Changes</b>
         {changes && changes.length > 0 && <span className="stat">+{added} <i>−{removed}</i></span>}
       </header>
       {!changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">Nothing has changed since the last save point.</p> : (

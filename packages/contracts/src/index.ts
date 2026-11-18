@@ -58,6 +58,9 @@ export type Item =
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | { id: string; kind: "result"; files: string[] };
 
+/** One entry in a project folder. */
+export type FileEntry = { name: string; kind: "folder" | "file" };
+
 export type Change = { path: string; status: "added" | "changed" | "removed"; added: number; removed: number };
 
 /** One entry in the curated toolbox. No prices: they change too often to be trusted. */
@@ -111,6 +114,8 @@ export type Requests = {
   /** Forgets the project and its threads. The folder and its files are left alone. */
   "project.remove": { params: { projectId: string }; result: { ok: true } };
   "project.setPreview": { params: { projectId: string; url: string | null }; result: Project };
+  /** Lists one folder of the project. `dir` is relative to the project folder; empty means the top. */
+  "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
   "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; text: string }; result: Thread };

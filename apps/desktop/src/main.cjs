@@ -32,11 +32,11 @@ app.whenReady().then(async () => {
     height: 900,
     minWidth: 1100,
     minHeight: 680,
-    backgroundColor: "#f3f0e8",
+    backgroundColor: "#0b0b0c",
     title: "Arcex",
     // The client draws the title bar. Windows keeps its own minimise, maximise and close buttons on top of it.
     titleBarStyle: "hidden",
-    titleBarOverlay: { color: "#f3f0e8", symbolColor: "#1b1916", height: 44 },
+    titleBarOverlay: { color: "#0e0e10", symbolColor: "#f4f4f5", height: 63 },
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") },
   });
   win.setMenuBarVisibility(false);
@@ -47,8 +47,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.on("set-theme", (_event, theme) => {
     const dark = theme === "dark";
-    win.setTitleBarOverlay({ color: dark ? "#171614" : "#f3f0e8", symbolColor: dark ? "#f1ece1" : "#1b1916" });
-    win.setBackgroundColor(dark ? "#171614" : "#f3f0e8");
+    win.setTitleBarOverlay({ color: dark ? "#0e0e10" : "#fafafa", symbolColor: dark ? "#f4f4f5" : "#111113" });
+    win.setBackgroundColor(dark ? "#0b0b0c" : "#f1f1f2");
   });
   // Web links open in the user's own browser, never inside the app window. Only http and https are passed on.
   const openOutside = (url) => {

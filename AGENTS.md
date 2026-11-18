@@ -7,7 +7,7 @@ This repository holds two things: the Arcex ADE (desktop AI development environm
 - Architecture and phases are in docs/ade-plan.md. Electron shell (apps/desktop), local Node engine (apps/engine), client talks to the engine only through the WebSocket contract. Windows first.
 - Agents connect through the Agent Client Protocol. Each provider runs as its vendor's own CLI with the user's own sign-in. Never read, store or proxy provider credentials.
 - The audience is vibe coders. Terminal, git and CLIs stay hidden by default and are opt-in views.
-- The UI starts from a conventional ADE layout: sidebar with projects and threads, conversation in the centre, details panel on the right. Use the brand as plain warm neutrals and black ink. No paper textures or decorative shapes.
+- The UI starts from a conventional ADE layout: sidebar with projects and threads, conversation in the centre, details panel on the right. The look is dark and monochrome: near-black surfaces, white ink, one green status colour, and curved silver light art behind start and empty screens only. Dark is the default theme. No blue accents or neon glows.
 - This is a new build. Read T3 Code's source for how things work underneath, but do not fork it or copy its UI.
 - Keep the ADE folders self-contained: no imports from the platform's src/. They will move to a public repository before release.
 

@@ -25,4 +25,12 @@
   <symbol id="phone" viewBox="0 0 24 24"><rect x="7" y="2.500" width="10" height="19" rx="2.500"/><path d="M11 18.500h2"/></symbol>
   <symbol id="out" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></symbol>
   <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="M3.500 12h17M12 3.500c2.500 2.300 3.800 5.200 3.800 8.500S14.500 18.200 12 20.500M12 3.500C9.500 5.800 8.200 8.700 8.200 12s1.300 6.200 3.800 8.500"/></symbol>
+  <symbol id="code" viewBox="0 0 24 24"><path d="m8.500 7-5 5 5 5M15.500 7l5 5-5 5"/></symbol>
+  <symbol id="flask" viewBox="0 0 24 24"><path d="M9.500 3h5M10 3v6.500L4.800 18a2 2 0 0 0 1.700 3h11a2 2 0 0 0 1.700-3L14 9.500V3M7.500 15h9"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="M11 4c.6 4 2 5.400 6 6-4 .6-5.400 2-6 6-.6-4-2-5.400-6-6 4-.6 5.400-2 6-6ZM18.500 15c.3 1.800.900 2.400 2.700 2.700-1.800.3-2.400.9-2.700 2.700-.3-1.800-.9-2.400-2.700-2.700 1.800-.3 2.400-.9 2.700-2.700Z"/></symbol>
+  <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+  <symbol id="chat" viewBox="0 0 24 24"><path d="M5 5.500h14a1.500 1.500 0 0 1 1.500 1.500v9a1.500 1.500 0 0 1-1.500 1.500h-7L8 21v-3.500H5A1.500 1.500 0 0 1 3.500 16V7A1.500 1.500 0 0 1 5 5.500Z"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12 3.500 8.500 4.500L12 12.500 3.500 8ZM3.500 12l8.500 4.500 8.500-4.500M3.500 16l8.500 4.500 8.500-4.500"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M5 4.500 20 12 5 19.500 7.500 12Z"/></symbol>
+  <symbol id="circlecheck" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.500"/><path d="m8.500 12.200 2.400 2.400 4.600-5"/></symbol>
 </svg>

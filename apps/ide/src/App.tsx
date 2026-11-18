@@ -210,28 +210,31 @@ export function App() {
   if (store.status === "lost") return <div className="lost">Arcex lost its connection to the engine. Close and reopen the app.</div>;
   if (!settings || !store.about) return <div className="lost" />;
 
-  const showPanel = panelOpen && !!thread && !!project && view.kind === "thread";
+  const showPanel = panelOpen && !!project && view.kind === "thread";
+  const ready = status?.filter((agent) => agent.installed && agent.signedIn === true).length ?? 0;
   const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
   const needle = query.trim().toLowerCase();
 
   return (
-    <div className={["app", window.arcex && "desktop", showPanel && "has-panel"].filter(Boolean).join(" ")}>
+    <div className={window.arcex ? "app desktop" : "app"}>
       <div style={{ position: "absolute", width: 0, height: 0 }} dangerouslySetInnerHTML={{ __html: sprite }} />
 
       <aside className={sidebar ? "sidebar" : "sidebar shut"}>
         <div className="brand">
           <img className="mark lockup" src="./lockup.png" alt="Arcex" />
-          <span className="fill" />
-          <button className="icon" aria-label="Hide sidebar" onClick={() => setSidebar(false)}>
-            <Icon name="sidebar" />
-          </button>
         </div>
         <nav className="nav">
-          <button className="row" aria-current={view.kind === "thread" && !thread} onClick={() => newThreadIn(null)}>
-            <Icon name="edit" /> New thread <kbd>Ctrl N</kbd>
+          <button className="newbtn" onClick={() => newThreadIn(null)}>
+            <Icon name="plus" /> New thread <kbd>Ctrl N</kbd>
           </button>
           <button className="row" aria-current={view.kind === "toolbox"} onClick={() => setScreen({ kind: "toolbox" })}>
-            <Icon name="box" /> Toolbox
+            <Icon name="box" /> Tools
+          </button>
+          <button className="row" aria-current={view.kind === "settings" && view.section === "agents"} onClick={() => setScreen({ kind: "settings", section: "agents" })}>
+            <Icon name="layers" /> Agents
+          </button>
+          <button className="row" aria-current={view.kind === "settings" && view.section !== "agents"} onClick={() => setScreen({ kind: "settings", section: "general" })}>
+            <Icon name="gear" /> Settings
           </button>
           <label className="row find">
             <Icon name="search" />
@@ -274,7 +277,7 @@ export function App() {
                       })
                     }
                   >
-                    <Icon name="chev" /> <span className="trunc">{p.name}</span>
+                    <Icon name="chev" /> <Icon name="folder" /> <span className="trunc">{p.name}</span>
                     {!open && attention && <span className={attention} />}
                     {!open && !attention && all.length > 0 && <span className="when">{all.length}</span>}
                   </button>
@@ -314,6 +317,7 @@ export function App() {
                     }
                     return (
                       <div key={t.id} className="row thread" role="button" tabIndex={0} aria-current={t.id === thread?.id} title={stateLabel(t) || undefined} onClick={() => openThread(t)} onKeyDown={(event) => event.key === "Enter" && openThread(t)}>
+                        <Icon name="chat" />
                         <span className="trunc">{t.title}</span>
                         {dot ? <span className={dot} /> : <span className="when">{ago(t.updatedAt)}</span>}
                         <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
@@ -326,29 +330,24 @@ export function App() {
           {needle && !live.some((t) => t.title.toLowerCase().includes(needle)) && <div className="none flat">No thread matches "{query}".</div>}
         </div>
         <div className="foot">
-          <button className="row me" aria-current={view.kind === "settings" && view.section === "profile"} onClick={() => setScreen({ kind: "settings", section: "profile" })}>
-            <span className="avatar">{initials(settings.name)}</span>
-            <span className="trunc">{settings.name || "Set up your profile"}</span>
-          </button>
-          <button className="icon" aria-label="Settings" aria-pressed={view.kind === "settings" && view.section !== "profile"} onClick={() => setScreen({ kind: "settings", section: "general" })}>
-            <Icon name="gear" />
+          <button className="row" onClick={() => setScreen({ kind: "settings", section: "agents" })}>
+            <span className={!status ? "dot working" : ready > 0 ? "dot ok" : "dot needs"} />
+            {!status ? "Checking agents" : ready === 0 ? "No agent ready" : ready === 1 ? "1 agent ready" : `${ready} agents ready`}
           </button>
         </div>
       </aside>
 
       <section className="main">
         <header className="top">
-          {!sidebar && (
-            <button className="icon" aria-label="Show sidebar" onClick={() => setSidebar(true)}>
-              <Icon name="sidebar" />
-            </button>
-          )}
+          <button className="icon" aria-pressed={sidebar} aria-label={sidebar ? "Hide sidebar" : "Show sidebar"} onClick={() => setSidebar(!sidebar)}>
+            <Icon name="sidebar" />
+          </button>
           {overlay && (
             <button className="backbtn" onClick={back}>
               <Icon name="back" /> Back <kbd>Esc</kbd>
             </button>
           )}
-          {thread && project && (
+          {project && view.kind === "thread" && (
             <>
               <span className="sub trunc">{project.name}</span>
               <span className="slash">/</span>
@@ -364,7 +363,7 @@ export function App() {
               {thread.model ? ` · ${thread.model.name}` : ""}
             </span>
           )}
-          {thread && (
+          {project && view.kind === "thread" && (
             <>
               <button
                 className="icon"
@@ -390,7 +389,12 @@ export function App() {
               </button>
             </>
           )}
+          <button className="avabtn" aria-label="Profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
+            <span className="avatar">{initials(settings.name)}</span>
+          </button>
         </header>
+        <div className="body">
+          <div className="stage">
 
         {view.kind === "settings" ? (
           <SettingsView
@@ -442,11 +446,13 @@ export function App() {
             name={settings.name}
           />
         )}
+          </div>
+          {showPanel && project && (
+            <Panel key={project.id} project={project} threads={threads} items={store.items} tab={tab} setTab={setTab} open={openThread} fail={fail} close={() => setPanel(false)} />
+          )}
+        </div>
       </section>
 
-      {showPanel && project && (
-        <Panel key={project.id} project={project} threads={threads} items={store.items} tab={tab} setTab={setTab} fail={fail} close={() => setPanel(false)} />
-      )}
       {toast && <div className="toast" role="alert">{toast}</div>}
     </div>
   );

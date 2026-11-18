@@ -5,7 +5,7 @@ import type { Item, Project, Settings, Thread } from "@arcex/contracts";
 
 export type ThreadRow = Thread & { sessionId: string | null };
 
-export const DEFAULT_SETTINGS: Settings = { name: "", theme: "light", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false };
+export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false };
 
 export function openDb(dataDir: string) {
   mkdirSync(dataDir, { recursive: true });

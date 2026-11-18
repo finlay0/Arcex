@@ -303,7 +303,7 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
             >
               {state && (
                 <span className={ready ? "pillstate ok" : "pillstate warn"}>
-                  {!agent.builtin ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : "Ready"}
+                  {!agent.builtin ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : state.signedIn === true ? "Ready" : "Installed"}
                 </span>
               )}
               {!agent.builtin && <Confirm label="Remove" sure="Remove agent" run={() => call("agents.remove", { agentId: agent.id }).catch(fail)} />}
