@@ -4,7 +4,7 @@ import type { Choice } from "./ModelPicker.tsx";
 import { SettingsView, initials, type Section } from "./Settings.tsx";
 import { Icon, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
-import { call, loadItems, openEmpty, useStore } from "./store.ts";
+import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { Conversation, NewProject, Panel, type PanelTab } from "./views.tsx";
 
@@ -22,8 +22,11 @@ const remembered = (key: string) => localStorage.getItem(key);
 function Menu({ label, items }: { label: string; items: { label: string; danger?: boolean; run(): void }[] }) {
   const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (!open) return setArmed(null);
+    menu.current?.querySelector("button")?.focus();
     const close = () => setOpen(false);
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
@@ -32,7 +35,10 @@ function Menu({ label, items }: { label: string; items: { label: string; danger?
     <span className="menuwrap">
       <button
         className="icon more"
+        ref={trigger}
         aria-label={label}
+        title={label}
+        aria-haspopup="menu"
         aria-expanded={open}
         onClick={(event) => {
           event.stopPropagation();
@@ -42,7 +48,20 @@ function Menu({ label, items }: { label: string; items: { label: string; danger?
         <Icon name="dots" />
       </button>
       {open && (
-        <span className="menu" role="menu">
+        <span className="menu" role="menu" ref={menu} onBlur={(event) => {
+          if (event.relatedTarget && event.relatedTarget !== trigger.current && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        }} onKeyDown={(event) => {
+          const buttons = [...event.currentTarget.querySelectorAll("button")];
+          const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setOpen(false);
+            trigger.current?.focus();
+          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            buttons[(focused + buttons.length + (event.key === "ArrowDown" ? 1 : -1)) % buttons.length]?.focus();
+          }
+        }}>
           {items.map((item) => (
             <button
               key={item.label}
@@ -53,6 +72,7 @@ function Menu({ label, items }: { label: string; items: { label: string; danger?
                 event.stopPropagation();
                 if (item.danger && armed !== item.label) return setArmed(item.label);
                 setOpen(false);
+                trigger.current?.focus();
                 item.run();
               }}
             >
@@ -83,6 +103,7 @@ export function App() {
   const [choice, setChoice] = useState<Choice | null>(null);
   // Text placed in the new-thread box by another screen, such as the toolbox.
   const [seed, setSeed] = useState("");
+  const [unassignedDraft, setUnassignedDraft] = useState("");
   const search = useRef<HTMLInputElement>(null);
 
   const overlay = screen.kind === "settings" || screen.kind === "toolbox";
@@ -99,7 +120,13 @@ export function App() {
   const threads = useMemo(() => live.filter((t) => t.projectId === project?.id), [live, project?.id]);
   const view: Screen = store.projects.length === 0 && screen.kind === "thread" ? { kind: "new-project" } : screen;
   const panelOpen = panel ?? settings?.showDetails ?? true;
-  const picked: Choice = choice ?? { agentId: settings?.defaultProvider ?? "claude", model: settings?.defaultModel ?? null };
+  const preferred = status?.find((agent) => agent.id === settings?.defaultProvider);
+  const alternative = preferred && (!preferred.installed || preferred.signedIn === false)
+    ? status?.find((agent) => agent.installed && agent.signedIn === true)
+    : undefined;
+  const picked: Choice = choice && store.agents.some((agent) => agent.id === choice.agentId)
+    ? choice
+    : { agentId: alternative?.id ?? settings?.defaultProvider ?? "claude", model: alternative ? null : settings?.defaultModel ?? null };
 
   setAgents(store.agents);
   if (settings) prefs.sendWith = settings.sendWith;
@@ -111,7 +138,7 @@ export function App() {
     systemDark.addEventListener("change", onChange);
     return () => systemDark.removeEventListener("change", onChange);
   }, []);
-  const theme = settings?.theme === "system" ? (systemIsDark ? "dark" : "light") : settings?.theme ?? "light";
+  const theme = settings?.theme === "system" ? (systemIsDark ? "dark" : "light") : settings?.theme ?? "dark";
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     window.arcex?.setTheme(theme);
@@ -122,8 +149,8 @@ export function App() {
   }, [project?.id]);
   useEffect(() => localStorage.setItem("arcex:expanded", JSON.stringify([...expanded])), [expanded]);
   useEffect(() => {
-    for (const t of threads) void loadItems(t.id);
-  }, [threads]);
+    for (const t of threads) void loadItems(t.id).catch(() => {});
+  }, [threads, store.status]);
   useEffect(() => {
     if (store.status === "ready") call("providers.status", {}).then(setStatus).catch(() => {});
   }, [store.status, store.agents.length]);
@@ -137,14 +164,18 @@ export function App() {
   overlayRef.current = overlay;
   const backRef = useRef(back);
   backRef.current = back;
+  const screenRef = useRef(setScreen);
+  screenRef.current = setScreen;
+  const detailsDefault = useRef(settings?.showDetails ?? true);
+  detailsDefault.current = settings?.showDetails ?? true;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && overlayRef.current && !document.querySelector(".mpop, .menu")) return backRef.current();
       if (!event.ctrlKey && !event.metaKey) return;
       if (event.key === "b") setSidebar((open) => !open);
-      else if (event.key === "j") setPanel((open) => !(open ?? true));
-      else if (event.key === "n") setScreenRaw({ kind: "thread", threadId: null });
-      else if (event.key === ",") setScreenRaw((current) => (current.kind === "settings" ? current : { kind: "settings", section: "general" }));
+      else if (event.key === "j") setPanel((open) => !(open ?? detailsDefault.current));
+      else if (event.key === "n") screenRef.current({ kind: "thread", threadId: null });
+      else if (event.key === ",") screenRef.current({ kind: "settings", section: "general" });
       else if (event.key === "k") {
         setSidebar(true);
         setTimeout(() => search.current?.focus());
@@ -162,8 +193,8 @@ export function App() {
       const before = lastStates.current.get(t.id);
       lastStates.current.set(t.id, t.state);
       if (!before || before === t.state || !settings?.notify || document.hasFocus()) continue;
-      const wasBusy = before === "working" || before === "starting";
-      const body = t.state === "needs_you" ? "Needs your OK to continue" : t.state === "idle" && wasBusy ? "Finished" : t.state === "failed" ? "Stopped with a problem" : null;
+      const wasBusy = before === "working" || before === "starting" || before === "needs_you" || before === "stopping";
+      const body = t.state === "needs_you" ? "Needs your OK to continue" : t.state === "idle" && wasBusy ? "Finished" : t.state === "failed" || t.state === "interrupted" ? stateLabel(t) : null;
       if (body && "Notification" in window && Notification.permission === "granted") new Notification(t.title, { body });
     }
   }, [store.threads, settings?.notify]);
@@ -171,28 +202,38 @@ export function App() {
   const fail = (error: unknown) => setToast(error instanceof Error ? error.message : String(error));
   const actions: Actions = {
     fail,
-    prompt: (id, text) => call("thread.prompt", { threadId: id, text }).catch(fail),
+    prompt: (id, text) => call("thread.prompt", { threadId: id, text }),
     cancel: (id) => call("thread.cancel", { threadId: id }).catch(fail),
     answer: (id, itemId, optionId) => call("ask.answer", { threadId: id, itemId, optionId }).catch(fail),
   };
-  const openThread = (t: Thread) => setScreen({ kind: "thread", threadId: t.id });
+  const openThread = (t: Thread) => {
+    setProjectId(t.projectId);
+    setExpanded((open) => new Set(open).add(t.projectId));
+    setScreen({ kind: "thread", threadId: t.id });
+  };
   const newThreadIn = (id: string | null) => {
-    if (id) setProjectId(id);
+    if (id) pickProject(id);
     setScreen({ kind: "thread", threadId: null });
   };
-  const startThread = async (text: string) => {
-    if (!project) return;
-    try {
-      const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, text });
-      // The next new thread starts with whatever was used last.
-      void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
-      openEmpty(created.id);
-      setSeed("");
-      setExpanded((open) => new Set(open).add(project.id));
-      setScreen({ kind: "thread", threadId: created.id });
-    } catch (error) {
-      fail(error);
+  const pickProject = (id: string) => {
+    if (unassignedDraft) {
+      const existing = store.drafts[id];
+      if (existing && existing.length + unassignedDraft.length + 2 > 20_000) {
+        fail("This project already has a long draft. Send or clear it before moving the other draft here.");
+        return;
+      }
+      saveDraft({ projectId: id }, [existing, unassignedDraft].filter(Boolean).join("\n\n"));
+      setUnassignedDraft("");
     }
+    setProjectId(id);
+  };
+  const startThread = async (text: string) => {
+    if (!project) throw new Error("Choose a project for this thread.");
+    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, text });
+    void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
+    setSeed("");
+    setExpanded((open) => new Set(open).add(project.id));
+    setScreen({ kind: "thread", threadId: created.id });
   };
   const threadMenu = (t: Thread) => [
     {
@@ -207,11 +248,15 @@ export function App() {
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
   ];
 
-  if (store.status === "lost") return <div className="lost">Arcex lost its connection to the engine. Close and reopen the app.</div>;
-  if (!settings || !store.about) return <div className="lost" />;
+  // A dropped engine is reconnected on its own. A brief drop shows a small note; only a long one asks for attention.
+  const connectionNotice = store.status === "lost"
+    ? <div className="connection problem" role="status"><span className="dot needs" />Still reconnecting to the Arcex engine. Your work is saved. <button className="btn" onClick={() => void reconnect().catch(fail)}>Try now</button></div>
+    : store.status === "reconnecting" ? <div className="connection" role="status"><span className="dot working" />Reconnecting…</div> : null;
+  if (!settings || !store.about) return <div className="lost">{store.status === "lost" ? connectionNotice : <span className="starting" role="status">Starting Arcex…</span>}{toast && <p role="alert">{toast}</p>}</div>;
 
   const showPanel = panelOpen && !!project && view.kind === "thread";
   const ready = status?.filter((agent) => agent.installed && agent.signedIn === true).length ?? 0;
+  const unchecked = status?.some((agent) => agent.installed && agent.signedIn === null);
   const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
   const needle = query.trim().toLowerCase();
 
@@ -238,7 +283,7 @@ export function App() {
           </button>
           <label className="row find">
             <Icon name="search" />
-            <input ref={search} value={query} placeholder="Find a thread" aria-label="Find a thread" onChange={(event) => setQuery(event.target.value)} />
+            <input ref={search} value={query} placeholder="Find active thread titles" aria-label="Find active thread titles" onChange={(event) => setQuery(event.target.value)} />
             {query ? (
               <button className="icon" aria-label="Clear" onClick={() => setQuery("")}>
                 <Icon name="x" />
@@ -251,7 +296,7 @@ export function App() {
         <div className="tree">
           <div className="label heading">
             Projects
-            <button className="icon" aria-label="New project" onClick={() => setScreen({ kind: "new-project" })}>
+            <button className="icon" aria-label="New project" title="New project" onClick={() => setScreen({ kind: "new-project" })}>
               <Icon name="plus" />
             </button>
           </div>
@@ -260,7 +305,7 @@ export function App() {
             const all = live.filter((t) => t.projectId === p.id).sort((a, b) => b.updatedAt - a.updatedAt);
             const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : all;
             if (needle && mine.length === 0) return null;
-            const open = needle ? true : expanded.has(p.id) || p.id === thread?.projectId;
+            const open = Boolean(needle) || expanded.has(p.id);
             const attention = all.some((t) => t.state === "needs_you") ? "dot needs" : all.some(busy) ? "dot working" : null;
             return (
               <div key={p.id} className={open ? "group open" : "group"}>
@@ -281,7 +326,7 @@ export function App() {
                     {!open && attention && <span className={attention} />}
                     {!open && !attention && all.length > 0 && <span className="when">{all.length}</span>}
                   </button>
-                  <button className="icon padd" aria-label={`New thread in ${p.name}`} onClick={() => newThreadIn(p.id)}>
+                  <button className="icon padd" aria-label={`New thread in ${p.name}`} title={`New thread in ${p.name}`} onClick={() => newThreadIn(p.id)}>
                     <Icon name="plus" />
                   </button>
                 </div>
@@ -316,10 +361,12 @@ export function App() {
                       );
                     }
                     return (
-                      <div key={t.id} className="row thread" role="button" tabIndex={0} aria-current={t.id === thread?.id} title={stateLabel(t) || undefined} onClick={() => openThread(t)} onKeyDown={(event) => event.key === "Enter" && openThread(t)}>
-                        <Icon name="chat" />
-                        <span className="trunc">{t.title}</span>
-                        {dot ? <span className={dot} /> : <span className="when">{ago(t.updatedAt)}</span>}
+                      <div key={t.id} className="row thread" aria-current={t.id === thread?.id}>
+                        <button className="thread-select" aria-current={t.id === thread?.id} title={stateLabel(t) || t.title} onClick={() => openThread(t)}>
+                          <Icon name="chat" />
+                          <span className="trunc">{t.title}</span>
+                          {dot ? <span className={dot} aria-label={stateLabel(t)} role="img" /> : <span className="when">{ago(t.updatedAt)}</span>}
+                        </button>
                         <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
                       </div>
                     );
@@ -332,14 +379,14 @@ export function App() {
         <div className="foot">
           <button className="row" onClick={() => setScreen({ kind: "settings", section: "agents" })}>
             <span className={!status ? "dot working" : ready > 0 ? "dot ok" : "dot needs"} />
-            {!status ? "Checking agents" : ready === 0 ? "No agent ready" : ready === 1 ? "1 agent ready" : `${ready} agents ready`}
+            {!status ? "Checking agents" : ready === 0 ? (unchecked ? "Check agent setup" : "No agent ready") : ready === 1 ? "1 agent ready" : `${ready} agents ready`}
           </button>
         </div>
       </aside>
 
       <section className="main">
         <header className="top">
-          <button className="icon" aria-pressed={sidebar} aria-label={sidebar ? "Hide sidebar" : "Show sidebar"} onClick={() => setSidebar(!sidebar)}>
+          <button className="icon" aria-pressed={sidebar} aria-label={sidebar ? "Hide sidebar" : "Show sidebar"} title={sidebar ? "Hide sidebar" : "Show sidebar"} onClick={() => setSidebar(!sidebar)}>
             <Icon name="sidebar" />
           </button>
           {overlay && (
@@ -356,11 +403,10 @@ export function App() {
           <h1 className="trunc">{title}</h1>
           {thread && <Menu label="Thread options" items={threadMenu(thread)} />}
           <span className="fill" />
-          {thread && busy(thread) && <span className="tag live">{stateLabel(thread)}</span>}
+          {thread && stateLabel(thread) && <span className="tag live" role="status">{stateLabel(thread)}</span>}
           {thread && (
             <span className="tag">
               {nameOf(thread.provider)}
-              {thread.model ? ` · ${thread.model.name}` : ""}
             </span>
           )}
           {project && view.kind === "thread" && (
@@ -369,6 +415,7 @@ export function App() {
                 className="icon"
                 aria-pressed={panelOpen && tab === "browser"}
                 aria-label="Browser"
+                title="Browser"
                 onClick={() => {
                   setPanel(!(panelOpen && tab === "browser"));
                   setTab("browser");
@@ -380,6 +427,7 @@ export function App() {
                 className="icon"
                 aria-pressed={panelOpen && tab === "details"}
                 aria-label="Details"
+                title="Details"
                 onClick={() => {
                   setPanel(!(panelOpen && tab === "details"));
                   setTab("details");
@@ -389,12 +437,13 @@ export function App() {
               </button>
             </>
           )}
-          <button className="avabtn" aria-label="Profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
+          <button className="avabtn" aria-label="Profile" title="Profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
             <span className="avatar">{initials(settings.name)}</span>
           </button>
         </header>
         <div className="body">
           <div className="stage">
+          {connectionNotice}
 
         {view.kind === "settings" ? (
           <SettingsView
@@ -412,24 +461,25 @@ export function App() {
           <ToolboxView
             fail={fail}
             use={(tool) => {
-              setSeed(`Set up ${tool.name} in this project. First tell me in plain words what it will add and anything I need to sign up for, then do it.`);
+              setSeed(`Explain what ${tool.name} would add to this project, what I would need to sign up for, and the trade-offs. Wait for my approval before setting it up.`);
               setScreen({ kind: "thread", threadId: null });
             }}
           />
         ) : view.kind === "new-project" ? (
           <NewProject
-            first={store.projects.length === 0}
             ready={store.status === "ready"}
             fail={fail}
             created={(p) => {
+              if (p.goal && !seed && !unassignedDraft) saveDraft({ projectId: p.id }, p.goal);
               setExpanded((open) => new Set(open).add(p.id));
               newThreadIn(p.id);
             }}
           />
         ) : (
           <Conversation
-            key={thread?.id ?? `new:${seed}`}
+            key={thread?.id ?? `new:${project?.id ?? ""}`}
             seed={thread ? "" : seed}
+            consumeSeed={() => setSeed("")}
             projects={store.projects}
             project={project}
             thread={thread}
@@ -438,17 +488,21 @@ export function App() {
             status={status}
             choice={picked}
             setChoice={setChoice}
-            pickProject={setProjectId}
+            pickProject={pickProject}
             newProject={() => setScreen({ kind: "new-project" })}
             manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
             actions={actions}
             start={startThread}
             name={settings.name}
+            drafts={store.drafts}
+            unassignedDraft={unassignedDraft}
+            setUnassignedDraft={setUnassignedDraft}
+            connected={store.status === "ready"}
           />
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} tab={tab} setTab={setTab} open={openThread} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>

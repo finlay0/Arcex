@@ -1,30 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
 import { ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Md } from "./md.tsx";
-import { AutoText, Icon, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, type Actions } from "./shared.tsx";
-import { call } from "./store.ts";
+import { AutoText, Icon, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { call, clearSentDraft, saveDraft } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
 
 /* ───────── New project ───────── */
 
-export function NewProject(props: { first: boolean; ready: boolean; created(project: Project): void; fail(error: unknown): void }) {
+export function NewProject(props: { ready: boolean; created(project: Project): void; fail(error: unknown): void }) {
   const [goal, setGoal] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
 
   const pick = async () => {
-    const chosen = window.arcex ? await window.arcex.pickFolder() : window.prompt("Full path of the project folder");
-    if (chosen) setFolder(chosen);
+    try {
+      const chosen = window.arcex ? await window.arcex.pickFolder() : window.prompt("Full path of the project folder");
+      if (chosen) setFolder(chosen);
+    } catch (error) {
+      props.fail(error);
+    }
   };
   const create = async () => {
-    if (!goal.trim() || working || !props.ready) return;
+    if ((!folder && !goal.trim()) || working || !props.ready) return;
     setWorking(true);
     try {
-      props.created(await call("project.create", folder ? { goal, cwd: folder } : { goal }));
+      props.created(await call("project.create", folder ? { goal: goal.trim(), cwd: folder } : { goal }));
     } catch (error) {
       props.fail(error);
     }
@@ -36,22 +40,24 @@ export function NewProject(props: { first: boolean; ready: boolean; created(proj
       <Art />
       <div className="inner">
         <img className="mark logo" src="./mark.png" alt="" />
-        <h2>What are we building?</h2>
+        <h2>{folder ? "Open an existing project" : "What are we building?"}</h2>
         <p className="lead">
-          {props.first ? "Describe it the way you'd tell a friend. Arcex sets up the project and puts your agents to work." : "Describe the new project in a sentence or two."}
+          {folder ? "Use the folder as it is. You can add a project goal now or later."
+            : "Describe your idea. Arcex creates a folder in Arcex Projects, then lets you review your first message before sending."}
         </p>
         <div className="composer">
           <AutoText
             autoFocus
             value={goal}
+            aria-label={folder ? "Project goal (optional)" : "Project idea"}
             maxLength={2000}
-            placeholder="A fitness app where people log workouts and keep a streak"
+            placeholder={folder ? "What are you building? (optional)" : "A fitness app where people log workouts and keep a streak"}
             onChange={(event) => setGoal(event.target.value)}
             onKeyDown={onEnter(create)}
           />
           <div className="tools">
-            <button className="chip" onClick={pick} title={folder ?? undefined}>
-              <Icon name="folder" /> <span className="trunc">{folder ?? "Use a folder I already have"}</span>
+            <button className="chip" onClick={pick} title={folder ?? undefined} disabled={working}>
+              <Icon name="folder" /> <span className="trunc">{folder ?? "Open a folder"}</span>
             </button>
             {folder && (
               <button className="icon" aria-label="Start with a new folder instead" onClick={() => setFolder(null)}>
@@ -59,8 +65,8 @@ export function NewProject(props: { first: boolean; ready: boolean; created(proj
               </button>
             )}
             <span className="fill" />
-            <button className="send" aria-label="Create project" onClick={create} disabled={working || !goal.trim()}>
-              <Icon name="up" />
+            <button className="btn primary" onClick={create} disabled={!props.ready || working || (!folder && !goal.trim())}>
+              {working ? "Opening…" : folder ? "Open project" : "Create project"}
             </button>
           </div>
         </div>
@@ -104,8 +110,8 @@ function AskButtons({ thread, item, actions }: { thread: Thread; item: Ask; acti
   );
 }
 
-function AskCard({ thread, item, actions }: { thread: Thread; item: Ask; actions: Actions }) {
-  if (item.answer) return <p className="answered">{item.title}: you chose "{item.answer}"</p>;
+function AskCard({ thread, item, actions, active }: { thread: Thread; item: Ask; actions: Actions; active: boolean }) {
+  if (item.answer || !active) return <p className="answered">{item.title} · {item.answer ?? "Request closed"}</p>;
   return (
     <div className="ask">
       <span className="label">Needs your OK</span>
@@ -145,7 +151,7 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
       {turn.user !== null && <div className="you"><Md text={turn.user} /></div>}
       {turn.parts.map((part) =>
         part.kind === "say" ? <Reply key={part.id} text={part.text} />
-        : part.kind === "ask" ? <AskCard key={part.id} thread={thread} item={part} actions={actions} />
+        : part.kind === "ask" ? <AskCard key={part.id} thread={thread} item={part} actions={actions} active={live && thread.state === "needs_you"} />
         : part.kind === "error" ? <p key={part.id} className="oops">{part.text}</p>
         : (
           <p key={part.id} className="outcome">
@@ -156,7 +162,7 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
       {live && thread.state !== "needs_you" && (
         <div className="live">
           <span className="dot working" />
-          <span>{running?.label ?? "Getting started"}</span>
+          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? stateLabel(thread)}</span>
         </div>
       )}
       {!live && turn.steps.length > 0 && (
@@ -164,8 +170,8 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
           <summary>{plural(turn.steps.length, "step")}</summary>
           <ul>
             {turn.steps.map((step) => (
-              <li key={step.id} className={step.status === "failed" ? "bad" : undefined} title={step.detail}>
-                <Icon name={step.status === "failed" ? "x" : "check"} /> {step.label}
+              <li key={step.id} className={step.status !== "done" ? "bad" : undefined} title={step.detail}>
+                <Icon name={step.status === "done" ? "check" : "x"} /> {step.label}{step.status === "running" || step.status === "interrupted" ? " · Unconfirmed" : ""}
               </li>
             ))}
           </ul>
@@ -241,11 +247,29 @@ export function Conversation(props: {
   start(text: string): Promise<void>;
   name: string;
   seed: string;
+  consumeSeed(): void;
+  drafts: Record<string, string>;
+  unassignedDraft: string;
+  setUnassignedDraft(value: string): void;
+  connected: boolean;
 }) {
   const { project, thread, actions } = props;
   const list = useMemo(() => turns(props.items), [props.items]);
-  const [draft, setDraft] = useState(props.seed);
+  const target = project ? { projectId: project.id, threadId: thread?.id } : null;
+  const draftKey = thread?.id ?? project?.id;
+  const draft = draftKey ? props.drafts[draftKey] ?? "" : props.unassignedDraft;
+  const setDraft = (value: string) => target ? saveDraft(target, value) : props.setUnassignedDraft(value);
+  useEffect(() => {
+    if (target && props.seed) {
+      const seeded = [draft, props.seed].filter(Boolean).join("\n\n");
+      if (seeded.length <= 20_000) saveDraft(target, seeded);
+      else actions.fail("The tool request didn't fit in this draft. Shorten the draft and try again.");
+      props.consumeSeed();
+    }
+  }, [draftKey, props.seed]);
   const [away, setAway] = useState(false);
+  const [sending, setSending] = useState(false);
+  const pendingSend = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const working = !!thread && busy(thread);
 
@@ -258,17 +282,22 @@ export function Conversation(props: {
   const agentId = thread ? thread.provider : props.choice.agentId;
   const health = props.status?.find((entry) => entry.id === agentId);
   const notReady = health && (!health.installed || health.signedIn === false);
+  const canSend = Boolean(target && props.connected && !notReady && !working && !sending && draft.trim());
 
-  const send = () => {
-    const text = draft.trim();
-    if (!text || working) return;
-    if (thread) {
-      setDraft("");
+  const send = async () => {
+    if (!canSend || !target || pendingSend.current) return;
+    pendingSend.current = true;
+    setSending(true);
+    try {
+      if (thread) await actions.prompt(thread.id, draft);
+      else await props.start(draft);
+      clearSentDraft(target, draft);
       setAway(false);
-      void actions.prompt(thread.id, text);
-    } else if (project) {
-      setDraft("");
-      void props.start(text);
+    } catch (error) {
+      actions.fail(error);
+    } finally {
+      pendingSend.current = false;
+      setSending(false);
     }
   };
 
@@ -278,6 +307,7 @@ export function Conversation(props: {
         autoFocus
         rows={thread ? 1 : 2}
         value={draft}
+        aria-label={thread ? `Reply to ${nameOf(thread.provider)}` : "First message"}
         maxLength={20000}
         placeholder={thread ? `Reply to ${nameOf(thread.provider)}` : "Describe what you want done"}
         onChange={(event) => setDraft(event.target.value)}
@@ -289,7 +319,7 @@ export function Conversation(props: {
           agents={props.agents}
           nameOf={nameOf}
           lockAgent={!!thread}
-          disabled={working}
+          disabled={working || sending || !props.connected}
           manage={props.manageAgents}
           value={thread ? { agentId: thread.provider, model: thread.model } : props.choice}
           onChange={(choice) => {
@@ -299,11 +329,11 @@ export function Conversation(props: {
         />
         <span className="fill" />
         {working ? (
-          <button className="send" aria-label="Stop" onClick={() => void actions.cancel(thread.id)}>
+          <button className="send" aria-label={thread.state === "stopping" ? "Stopping" : "Stop"} title="Stop" disabled={!props.connected || thread.state === "stopping"} onClick={() => void actions.cancel(thread.id)}>
             <Icon name="stop" />
           </button>
         ) : (
-          <button className="send" aria-label="Send" onClick={send} disabled={!draft.trim() || (!thread && !project)}>
+          <button className="send" aria-label={sending ? "Sending" : "Send"} title="Send" onClick={() => void send()} disabled={!canSend}>
             <Icon name="send" />
           </button>
         )}
@@ -340,6 +370,7 @@ export function Conversation(props: {
       </div>
     );
   }
+  const lastPrompt = list.at(-1)?.user;
   return (
     <div className="convo">
       <div
@@ -354,6 +385,11 @@ export function Conversation(props: {
           {list.map((turn, index) => (
             <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} actions={actions} />
           ))}
+          {thread.state === "interrupted" && <p className="oops">This turn was interrupted. Check the project for partial changes before you retry.</p>}
+          {thread.state === "stopped" && <p className="muted">Turn stopped. Any changes already made may still be in the project.</p>}
+          {(thread.state === "failed" || thread.state === "interrupted") && lastPrompt && !draft && (
+            <button className="btn" onClick={() => setDraft(lastPrompt)}>Copy last message into composer</button>
+          )}
         </div>
       </div>
       <div className="dockbar">
@@ -383,6 +419,7 @@ export function Panel(props: {
   project: Project;
   threads: Thread[];
   items: Record<string, Item[]>;
+  connected: boolean;
   tab: PanelTab;
   setTab(tab: PanelTab): void;
   open(thread: Thread): void;
@@ -391,8 +428,9 @@ export function Panel(props: {
 }) {
   const { project, threads, fail } = props;
   const recent = [...threads].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
-  const settled = threads.map((t) => `${t.id}:${t.state}`).join();
+  const settled = `${props.connected}:${threads.map((t) => `${t.id}:${t.state}`).join()}`;
   const [wide, setWide] = useState(false);
+  const tabsId = useId();
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
   const found = useMemo(() => {
     const urls: string[] = [];
@@ -408,11 +446,16 @@ export function Panel(props: {
   return (
     <aside className={wide || props.tab === "browser" ? "panel wide" : "panel"}>
       <div className="ptop">
-        <div className="tabs" role="tablist">
+        <div className="tabs" role="tablist" aria-label="Project panel" onKeyDown={(event) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = event.key === "Home" ? "details" : event.key === "End" ? "browser" : props.tab === "details" ? "browser" : "details";
+          props.setTab(next);
+          document.getElementById(`${tabsId}-${next}`)?.focus();
+        }}>
           {(["details", "browser"] as const).map((id) => (
-            <button key={id} role="tab" aria-selected={props.tab === id} onClick={() => props.setTab(id)}>
+            <button key={id} id={`${tabsId}-${id}`} role="tab" aria-controls={`${tabsId}-panel`} aria-selected={props.tab === id} tabIndex={props.tab === id ? 0 : -1} onClick={() => props.setTab(id)}>
               {id === "details" ? "Details" : "Browser"}
-              {id === "browser" && project.previewUrl && <span className="pulse" />}
             </button>
           ))}
         </div>
@@ -426,6 +469,7 @@ export function Panel(props: {
           <Icon name="x" />
         </button>
       </div>
+      <div className="panel-content" id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${props.tab}`}>
       {props.tab === "browser" ? (
         <Browser project={project} found={found} fail={fail} />
       ) : (
@@ -440,18 +484,18 @@ export function Panel(props: {
           </div>
           <div className="goalcard">
             <span className="label">Building</span>
-            <p>{project.goal}</p>
+            <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
-          <Files project={project} refresh={settled} fail={fail} />
-          <Changes project={project} threads={threads} fail={fail} />
+          <Files project={project} refresh={settled} />
+          <Changes project={project} refresh={settled} />
           {recent.length > 0 && (
             <section className="sec">
               <header><b>Recent activity</b></header>
               {recent.map((t) => (
                 <button key={t.id} className="act" onClick={() => props.open(t)}>
-                  {busy(t) && t.state !== "needs_you" ? <span className="spin" /> : <Icon name={t.state === "needs_you" || t.state === "failed" ? "x" : "circlecheck"} />}
+                  {busy(t) && t.state !== "needs_you" ? <span className="spin" /> : <Icon name={t.state === "idle" ? "circlecheck" : "x"} />}
                   <span className="trunc">{t.title}</span>
-                  <span className="when">{t.state === "needs_you" ? "Needs you" : busy(t) ? "Now" : `${ago(t.updatedAt)} ago`}</span>
+                  <span className="when">{stateLabel(t) || ago(t.updatedAt)}</span>
                 </button>
               ))}
             </section>
@@ -472,16 +516,19 @@ export function Panel(props: {
           )}
         </div>
       )}
+      </div>
     </aside>
   );
 }
 
 /** The project's folders and files. Folders open in place; nothing here edits anything. */
-function Files({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
-  const [entries, setEntries] = useState<Record<string, FileEntry[]>>({});
+function Files({ project, refresh }: { project: Project; refresh: string }) {
+  const [entries, setEntries] = useState<Record<string, FileEntry[] | string>>({});
   const [open, setOpen] = useState<Set<string>>(new Set());
   const load = (dir: string) =>
-    call("project.files", { projectId: project.id, dir }).then((list) => setEntries((current) => ({ ...current, [dir]: list }))).catch(fail);
+    call("project.files", { projectId: project.id, dir })
+      .then((list) => setEntries((current) => ({ ...current, [dir]: list })))
+      .catch(() => setEntries((current) => ({ ...current, [dir]: "Couldn't read this folder." })));
 
   // Reload what is showing whenever a thread finishes a turn, since agents add and remove files.
   useEffect(() => {
@@ -498,8 +545,12 @@ function Files({ project, refresh, fail }: { project: Project; refresh: string; 
     }
     setOpen(next);
   };
-  const list = (dir: string) =>
-    (entries[dir] ?? []).map((entry) => {
+  const list = (dir: string): React.ReactNode => {
+    const result = entries[dir];
+    if (result === undefined) return <p className="muted">Loading…</p>;
+    if (typeof result === "string") return <p className="muted">{result} <button className="link" onClick={() => void load(dir)}>Retry</button></p>;
+    if (!result.length) return <p className="muted">This folder is empty.</p>;
+    return result.map((entry) => {
       const path = dir ? `${dir}/${entry.name}` : entry.name;
       if (entry.kind === "file") {
         return (
@@ -514,44 +565,63 @@ function Files({ project, refresh, fail }: { project: Project; refresh: string; 
             <svg className="i chev" aria-hidden="true"><use href="#chev" /></svg>
             <Icon name="folder" /> <span className="trunc">{entry.name}</span>
           </button>
-          {open.has(path) && <div className="nest">{entries[path] ? (entries[path].length ? list(path) : <p className="muted">Empty</p>) : <p className="muted">Loading…</p>}</div>}
+          {open.has(path) && <div className="nest">{list(path)}</div>}
         </div>
       );
     });
+  };
 
   return (
     <section className="sec">
       <header><b>Files</b></header>
-      {!entries[""] ? <p className="muted">Loading…</p> : entries[""].length === 0 ? <p className="muted">This folder is empty so far.</p> : <div className="files">{list("")}</div>}
+      <div className="files">{list("")}</div>
     </section>
   );
 }
 
-function Changes({ project, threads, fail }: { project: Project; threads: Thread[]; fail(error: unknown): void }) {
+function Changes({ project, refresh }: { project: Project; refresh: string }) {
   const [changes, setChanges] = useState<Change[] | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
-  const [diff, setDiff] = useState<string | null>(null);
-  // Refresh whenever a thread finishes a turn.
-  const settled = threads.map((t) => `${t.id}:${t.state}`).join();
+  const [diff, setDiff] = useState<{ text: string; error?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    call("project.changes", { projectId: project.id }).then(setChanges).catch(fail);
-  }, [project.id, settled]);
+    let current = true;
+    setProblem(null);
+    call("project.changes", { projectId: project.id })
+      .then((result) => { if (current) setChanges(result); })
+      .catch((error: Error) => {
+        if (current) {
+          setChanges(null);
+          setProblem(error.message);
+        }
+      });
+    return () => { current = false; };
+  }, [project.id, refresh, attempt]);
   useEffect(() => {
     setDiff(null);
-    if (open) call("project.diff", { projectId: project.id, path: open }).then((result) => setDiff(result.text)).catch(() => setDiff(""));
-  }, [project.id, open, settled]);
+    if (!open) return;
+    let current = true;
+    call("project.diff", { projectId: project.id, path: open })
+      .then((result) => { if (current) setDiff(result); })
+      .catch(() => { if (current) setDiff({ text: "Couldn't load this diff.", error: true }); });
+    return () => { current = false; };
+  }, [project.id, open, refresh, attempt]);
 
   const added = changes?.reduce((sum, change) => sum + change.added, 0) ?? 0;
   const removed = changes?.reduce((sum, change) => sum + change.removed, 0) ?? 0;
-  const lines = (diff ?? "").split("\n").filter((line) => !/^(diff --git|index |--- |\+\+\+ |new file|deleted file|@@ )/.test(line));
+  const lines = diff?.text.startsWith("diff --git ")
+    ? diff.text.slice(diff.text.indexOf("\n@@ ") < 0 ? diff.text.length : diff.text.indexOf("\n@@ ") + 1).split("\n").filter((line) => !line.startsWith("@@ "))
+    : diff?.text.split("\n") ?? [];
   return (
     <section className="sec">
       <header>
-        <b>Changes</b>
+        <b>Uncommitted changes</b>
         {changes && changes.length > 0 && <span className="stat">+{added} <i>−{removed}</i></span>}
       </header>
-      {!changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">Nothing has changed since the last save point.</p> : (
+      {problem ? <p className="muted">{problem} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
+        : !changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">No uncommitted changes in this folder.</p> : (
         <div className="files">
           {changes.map((change) => (
             <div key={change.path}>
@@ -562,7 +632,8 @@ function Changes({ project, threads, fail }: { project: Project; threads: Thread
               </button>
               {open === change.path && (
                 <div className="diff">
-                  {diff === null ? <div className="l ctx">Loading…</div> : lines.map((line, index) => (
+                  {diff === null ? <div className="l ctx">Loading…</div> : diff.error ? <p className="muted">{diff.text} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
+                    : !lines.some(Boolean) ? <div className="l ctx">No text diff available.</div> : lines.map((line, index) => (
                     <div key={index} className={`l ${line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx"}`}>{line || " "}</div>
                   ))}
                 </div>
@@ -601,7 +672,6 @@ function Browser({ project, found, fail }: { project: Project; found: string[]; 
           <Icon name="reload" />
         </button>
         <label className="field">
-          {project.previewUrl && <span className="pulse" />}
           <input
             value={address}
             placeholder="Address of your running app, like localhost:3000"
@@ -617,6 +687,9 @@ function Browser({ project, found, fail }: { project: Project; found: string[]; 
           <Icon name="out" />
         </button>
       </div>
+      {project.previewUrl && (
+        <p className="preview-help">If the preview is blank, check that the app is running or <button className="link" onClick={outside}>open it in your browser</button>.</p>
+      )}
       {project.previewUrl ? (
         <div className={phone ? "bstage phone" : "bstage"}>
           <iframe key={nonce} src={project.previewUrl} title="Your running app" />
@@ -625,13 +698,13 @@ function Browser({ project, found, fail }: { project: Project; found: string[]; 
         <div className="bempty">
           <b>See your app while you build it</b>
           <p>When an agent starts your app, its address shows up here. You can also type one above.</p>
-          {found.map((url) => (
-            <button key={url} className="btn" onClick={() => go(url)}>
-              Open {url.replace(/^https?:\/\//, "")}
-            </button>
-          ))}
         </div>
       )}
+      {found.some((url) => url !== project.previewUrl) && <div className="preview-links" aria-label="Suggested preview addresses">
+        {found.filter((url) => url !== project.previewUrl).map((url) => (
+          <button key={url} className="btn" onClick={() => go(url)}>Open {url.replace(/^https?:\/\//, "")}</button>
+        ))}
+      </div>}
     </div>
   );
 }

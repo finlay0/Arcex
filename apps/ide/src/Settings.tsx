@@ -143,7 +143,7 @@ export function SettingsView(props: {
                 <Row title="Open the details panel at start" hint="The panel on the right with changes and the preview.">
                   <Switch on={settings.showDetails} onChange={(showDetails) => set({ showDetails })} label="Open the details panel at start" />
                 </Row>
-                <Row title="Research library" hint="Lets your agents search Arcex's library of real products, their onboarding and pricing, when you ask. Searches go to arcex.dev.">
+                <Row title="Research library" hint="New agent sessions can search the library at arcex.dev when you ask. Already running sessions keep their current access.">
                   <Switch on={settings.research} onChange={(research) => set({ research })} label="Research library" />
                 </Row>
                 <Row title="Notify me" hint="When a thread finishes or needs your OK while Arcex is in the background.">
@@ -257,6 +257,13 @@ export function SettingsView(props: {
   );
 }
 
+const setupGuides: Record<string, string> = {
+  claude: "https://code.claude.com/docs/en/setup",
+  codex: "https://learn.chatgpt.com/docs/codex/cli",
+  opencode: "https://opencode.ai/docs/",
+  gemini: "https://geminicli.com/docs/get-started/",
+};
+
 function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; fail(error: unknown): void }) {
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -288,7 +295,8 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
       </p>
       {agents.map((agent) => {
         const state = status?.find((entry) => entry.id === agent.id);
-        const ready = state?.installed && state.signedIn !== false;
+        const ready = state?.installed && state.signedIn === true;
+        const setup = Object.hasOwn(setupGuides, agent.id) ? setupGuides[agent.id] : undefined;
         return (
           <div key={agent.id} className="card">
             <Row
@@ -302,19 +310,26 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
               }
             >
               {state && (
-                <span className={ready ? "pillstate ok" : "pillstate warn"}>
-                  {!agent.builtin ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : state.signedIn === true ? "Ready" : "Installed"}
+                  <span className={ready ? "pillstate ok" : "pillstate warn"}>
+                  {!agent.builtin ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : state.signedIn === true ? "Ready" : "Sign-in unchecked"}
                 </span>
               )}
               {!agent.builtin && <Confirm label="Remove" sure="Remove agent" run={() => call("agents.remove", { agentId: agent.id }).catch(fail)} />}
             </Row>
+            {state && setup && (!state.installed || state.signedIn === null) && (
+              <Row title={!state.installed ? "Install the agent" : "Check sign-in"} hint={!state.installed ? "Follow the provider’s setup guide, then return here to check again." : "Check your sign-in using the provider’s own tool."}>
+                <button className="btn" onClick={() => {
+                  if (window.arcex) window.arcex.openExternal(setup);
+                  else window.open(setup, "_blank", "noopener");
+                }}>Open setup guide <Icon name="out" /></button>
+              </Row>
+            )}
             {state && agent.builtin && state.installed && state.signedIn === false && state.signInCommand && (
               <Row title="Sign in" hint="Run this in a terminal, finish in your browser, then check again.">
                 <button
                   className="btn mono"
                   onClick={() => {
-                    void navigator.clipboard.writeText(state.signInCommand);
-                    setCopied(agent.id);
+                    void navigator.clipboard.writeText(state.signInCommand).then(() => setCopied(agent.id)).catch(fail);
                   }}
                 >
                   {copied === agent.id ? "Copied" : state.signInCommand}

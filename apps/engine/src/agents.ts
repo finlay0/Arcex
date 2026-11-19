@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
@@ -45,13 +45,14 @@ function launchOf(agentId: string, settings: Settings): Launch {
 export type Models = { options: ModelOption[]; current: string | null };
 
 /** Agents describe their models as a "model" choice among the session's options. */
-function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): Models | null {
+function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Models & { configId: string }) | null {
   const option = response.configOptions?.find((entry) => entry.type === "select" && (entry.category === "model" || entry.id === "model"));
   if (!option || option.type !== "select") return null;
   const flat = (option.options as unknown as ({ value?: string; name?: string; description?: string | null; options?: unknown[] })[]).flatMap(
     (entry) => (Array.isArray(entry.options) ? (entry.options as typeof option.options as unknown as { value: string; name: string; description?: string | null }[]) : [entry]),
   );
   return {
+    configId: option.id,
     options: flat.filter((entry) => typeof entry.value === "string").map((entry) => ({ value: entry.value!, name: entry.name ?? entry.value!, description: entry.description ?? "" })),
     current: typeof option.currentValue === "string" ? option.currentValue : null,
   };
@@ -62,6 +63,7 @@ export type AgentSession = {
   /** False when a saved conversation could not be reopened and a fresh one was started instead. */
   resumed: boolean;
   models: Models | null;
+  defaultModel: string | null;
   setModel(value: string): Promise<void>;
   prompt(text: string): Promise<acp.PromptResponse>;
   cancel(): Promise<void>;
@@ -74,14 +76,37 @@ export async function startSession(options: {
   settings: Settings;
   cwd: string;
   resumeId: string | null;
+  signal?: AbortSignal;
   /** MCP servers the agent may use in this session. Web-based ones are dropped if the agent cannot reach them. */
   mcpServers: acp.McpServer[];
   onUpdate(update: acp.SessionUpdate): void;
   onPermission(request: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse>;
   onExit(detail: string): void;
 }): Promise<AgentSession> {
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(new Error("the agent took too long to start. Check its setup and try again.")), 20_000);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal;
+  try {
+    return await connectSession(options, signal);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function connectSession(options: Parameters<typeof startSession>[0], signal: AbortSignal): Promise<AgentSession> {
+  signal.throwIfAborted();
   const launch = launchOf(options.agentId, options.settings);
   const child: ChildProcess = spawn(launch.command, launch.args, { cwd: options.cwd, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
+  const terminate = () => {
+    child.stdin?.destroy();
+    if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
+    if (process.platform === "win32") {
+      const taskkill = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+      execFile(taskkill, ["/pid", String(child.pid), "/t", "/f"], { windowsHide: true }, (error) => {
+        if (error && child.exitCode === null && child.signalCode === null) child.kill();
+      });
+    } else child.kill();
+  };
   let stderrTail = "";
   child.stderr!.on("data", (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-2000);
@@ -91,6 +116,12 @@ export async function startSession(options: {
     child.once("exit", (code) => reject(new Error(`stopped before it was ready (${code}). ${stderrTail.trim().slice(-300)}`)));
   });
   failed.catch(() => {});
+  let onAbort = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  const wait = <T>(request: Promise<T>) => Promise.race([request, failed, aborted]);
 
   const stream = acp.ndJsonStream(
     Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
@@ -109,22 +140,21 @@ export async function startSession(options: {
   const agent = connection.agent;
 
   try {
-    const init = await Promise.race([
+    const init = await wait(
       agent.request("initialize", {
         protocolVersion: acp.PROTOCOL_VERSION,
         clientCapabilities: {},
         clientInfo: { name: "arcex", title: "Arcex", version: "0.1.0" },
       }),
-      failed,
-    ]);
+    );
     const canHttp = init.agentCapabilities?.mcpCapabilities?.http === true;
     const mcpServers = options.mcpServers.filter((server) => !("type" in server && server.type === "http") || canHttp);
 
     let sessionId: string | null = null;
-    let models: Models | null = null;
+    let models: ReturnType<typeof modelsOf> = null;
     if (options.resumeId && init.agentCapabilities?.loadSession) {
       try {
-        models = modelsOf(await Promise.race([agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers }), failed]));
+        models = modelsOf(await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers })));
         sessionId = options.resumeId;
       } catch {
         sessionId = null;
@@ -132,7 +162,8 @@ export async function startSession(options: {
     }
     const resumed = sessionId !== null;
     if (!sessionId) {
-      const created = await Promise.race([agent.request("session/new", { cwd: options.cwd, mcpServers }), failed]);
+      signal.throwIfAborted();
+      const created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers }));
       sessionId = created.sessionId;
       models = modelsOf(created);
     }
@@ -145,22 +176,37 @@ export async function startSession(options: {
       sessionId: id,
       resumed,
       models,
+      defaultModel: resumed ? null : models?.current ?? null,
       async setModel(value) {
-        await agent.request("session/set_config_option", { sessionId: id, configId: "model", value });
+        if (!models) throw new Error("this agent did not report a model selector");
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("the agent took too long to confirm the model")), 10_000);
+          });
+          const result = await Promise.race([agent.request("session/set_config_option", { sessionId: id, configId: models.configId, value }), timeout]);
+          const confirmed = result && typeof result === "object" ? modelsOf(result as Parameters<typeof modelsOf>[0]) : null;
+          if (confirmed?.current !== value) throw new Error("the agent did not confirm that model");
+          models.current = value;
+        } finally {
+          clearTimeout(timer);
+        }
       },
       prompt: (text) => agent.request("session/prompt", { sessionId: id, prompt: [{ type: "text", text }] }),
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
       close: () => {
         child.removeAllListeners("exit");
         connection.close();
-        child.kill();
+        terminate();
       },
     };
   } catch (error) {
     child.removeAllListeners("exit");
     connection.close();
-    child.kill();
+    terminate();
     throw error;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
   }
 }
 

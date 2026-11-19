@@ -26,11 +26,17 @@ export function openDb(dataDir: string) {
     );
     CREATE INDEX IF NOT EXISTS items_by_thread ON items (thread_id, seq);
     CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS drafts (
+      project_id TEXT NOT NULL REFERENCES projects(id), thread_id TEXT NOT NULL, text TEXT NOT NULL,
+      PRIMARY KEY (project_id, thread_id)
+    );
   `);
   // Added after the first build. Older databases get the column here.
   const columns = db.prepare("PRAGMA table_info(threads)").all().map((row) => row.name);
   if (!columns.includes("archived")) db.exec("ALTER TABLE threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
   if (!columns.includes("model")) db.exec("ALTER TABLE threads ADD COLUMN model TEXT");
+  if (!columns.includes("state")) db.exec("ALTER TABLE threads ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'");
+  db.exec("UPDATE threads SET state = 'interrupted' WHERE state IN ('starting', 'working', 'needs_you', 'stopping')");
 
   const project = (row: Record<string, unknown>): Project => ({
     id: row.id as string,
@@ -40,14 +46,13 @@ export function openDb(dataDir: string) {
     previewUrl: (row.preview_url as string | null) ?? null,
     createdAt: row.created_at as number,
   });
-  // Nothing is running when the engine starts, so every saved thread comes back idle.
   const thread = (row: Record<string, unknown>): ThreadRow => ({
     id: row.id as string,
     projectId: row.project_id as string,
     provider: row.provider as Thread["provider"],
     model: row.model ? (JSON.parse(row.model as string) as Thread["model"]) : null,
     title: row.title as string,
-    state: "idle",
+    state: row.state as Thread["state"],
     archived: row.archived === 1,
     sessionId: (row.session_id as string | null) ?? null,
     createdAt: row.created_at as number,
@@ -60,6 +65,15 @@ export function openDb(dataDir: string) {
   );
 
   return {
+    close: () => db.close(),
+    drafts: () => Object.fromEntries(db.prepare("SELECT * FROM drafts").all().map((row) => [row.thread_id || row.project_id, row.text as string])),
+    saveDraft(projectId: string, threadId: string, text: string) {
+      if (text) db.prepare("INSERT INTO drafts VALUES (?, ?, ?) ON CONFLICT(project_id, thread_id) DO UPDATE SET text = excluded.text").run(projectId, threadId, text);
+      else db.prepare("DELETE FROM drafts WHERE project_id = ? AND thread_id = ?").run(projectId, threadId);
+    },
+    clearSentDraft(projectId: string, threadId: string, sent: string) {
+      db.prepare("DELETE FROM drafts WHERE project_id = ? AND thread_id = ? AND text = ?").run(projectId, threadId, sent);
+    },
     settings(): Settings {
       const row = db.prepare("SELECT json FROM settings WHERE id = 1").get();
       return { ...DEFAULT_SETTINGS, ...(row ? (JSON.parse(row.json as string) as Partial<Settings>) : {}) };
@@ -77,6 +91,7 @@ export function openDb(dataDir: string) {
       db.prepare("UPDATE projects SET name = ?, goal = ?, preview_url = ? WHERE id = ?").run(p.name, p.goal, p.previewUrl, p.id);
     },
     removeProject(id: string) {
+      db.prepare("DELETE FROM drafts WHERE project_id = ?").run(id);
       db.prepare("DELETE FROM items WHERE thread_id IN (SELECT id FROM threads WHERE project_id = ?)").run(id);
       db.prepare("DELETE FROM threads WHERE project_id = ?").run(id);
       db.prepare("DELETE FROM projects WHERE id = ?").run(id);
@@ -84,15 +99,16 @@ export function openDb(dataDir: string) {
     threads: () => db.prepare("SELECT * FROM threads ORDER BY created_at").all().map(thread),
     insertThread(t: ThreadRow) {
       db.prepare(
-        "INSERT INTO threads (id, project_id, provider, model, title, session_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, t.title, t.sessionId, t.createdAt, t.updatedAt);
+        "INSERT INTO threads (id, project_id, provider, model, title, session_id, created_at, updated_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, t.title, t.sessionId, t.createdAt, t.updatedAt, t.state);
     },
     saveThread(t: ThreadRow) {
-      db.prepare("UPDATE threads SET title = ?, archived = ?, model = ?, session_id = ?, updated_at = ? WHERE id = ?").run(
-        t.title, t.archived ? 1 : 0, t.model ? JSON.stringify(t.model) : null, t.sessionId, t.updatedAt, t.id,
+      db.prepare("UPDATE threads SET title = ?, archived = ?, model = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
+        t.title, t.archived ? 1 : 0, t.model ? JSON.stringify(t.model) : null, t.sessionId, t.updatedAt, t.state, t.id,
       );
     },
     removeThread(id: string) {
+      db.prepare("DELETE FROM drafts WHERE thread_id = ?").run(id);
       db.prepare("DELETE FROM items WHERE thread_id = ?").run(id);
       db.prepare("DELETE FROM threads WHERE id = ?").run(id);
     },

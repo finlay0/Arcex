@@ -71,9 +71,20 @@ server.listen(Number(process.env.ARCEX_ENGINE_PORT ?? 4517), "127.0.0.1", () => 
   if (address && typeof address === "object") console.log(`ARCEX_ENGINE_READY http://127.0.0.1:${address.port}/`);
 });
 
+let closing = false;
 function shutdown() {
+  if (closing) return;
+  closing = true;
   engine.close();
-  process.exit(0);
+  for (const socket of sockets) socket.terminate();
+  wss.close();
+  server.close();
+  if (process.connected) process.disconnect?.();
+  setTimeout(() => process.exit(0), 3000).unref();
 }
+// One agent or request going wrong must never take the whole workspace down. Log it and keep serving.
+process.on("uncaughtException", (error) => console.error("[engine] unexpected error:", error));
+process.on("unhandledRejection", (error) => console.error("[engine] unhandled rejection:", error));
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("disconnect", shutdown);

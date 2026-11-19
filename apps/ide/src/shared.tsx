@@ -4,7 +4,7 @@ import type { Agent, Thread } from "@arcex/contracts";
 declare global {
   interface Window {
     /** Present only inside the desktop shell. */
-    arcex?: { pickFolder(): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void };
+    arcex?: { pickFolder(): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void; ensureEngine(): Promise<void> };
   }
 }
 
@@ -38,11 +38,13 @@ export const Icon = ({ name }: { name: string }) => (
   </svg>
 );
 
-export const busy = (thread: Thread) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you";
-export const stateLabel = (thread: Thread) =>
-  thread.state === "needs_you" ? "Needs you" : busy(thread) ? "Working" : thread.state === "failed" ? "Stopped" : "";
+export const busy = (thread: Thread) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
+export const stateLabel = (thread: Thread) => ({
+  idle: "", starting: "Starting", working: "Working", needs_you: "Needs you",
+  stopping: "Stopping…", stopped: "Stopped", interrupted: "Interrupted", failed: "Failed",
+})[thread.state];
 export const dotClass = (thread: Thread) =>
-  thread.state === "needs_you" ? "dot needs" : busy(thread) ? "dot working" : thread.state === "failed" ? "dot failed" : null;
+  thread.state === "needs_you" || thread.state === "interrupted" ? "dot needs" : busy(thread) ? "dot working" : thread.state === "failed" ? "dot failed" : null;
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** "now", "5m", "3h", "2d": how long since a thread last moved. */
@@ -57,7 +59,7 @@ export function ago(time: number): string {
 /** Sends on Enter, or on Ctrl+Enter when the user chose that. Shift+Enter always makes a new line. */
 export function onEnter(send: () => void) {
   return (event: KeyboardEvent) => {
-    if (event.key !== "Enter" || event.shiftKey) return;
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
     if (prefs.sendWith === "ctrl-enter" && !event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     send();
