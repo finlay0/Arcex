@@ -197,6 +197,11 @@ catalog.get("/radar", async (c) => {
     );
     values.push(new Date(Date.now() - days * 86_400_000).toISOString());
   }
+  if (c.req.query("sponsored") === "true") clauses.push("m.sponsors>0");
+  if (c.req.query("hasBlueprint") === "true")
+    clauses.push(
+      "EXISTS (SELECT 1 FROM agent_blueprints fb WHERE fb.product_id=p.id AND fb.status='published')",
+    );
   const sort = c.req.query("sort");
   const sortColumn = sort ? RADAR_SORT[sort] : undefined;
   if (sort && !sortColumn) fail(400, "Invalid sort");

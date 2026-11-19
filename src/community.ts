@@ -128,7 +128,12 @@ community.get("/me/saves", requireUser, async (c) => {
   return c.json({
     items: (
       await c.env.DB.prepare(
-        "SELECT p.* FROM user_saves s JOIN products p ON p.id=s.product_id WHERE s.user_id=? AND p.status='published' ORDER BY s.created_at DESC LIMIT ? OFFSET ?",
+        // Saved products share the table's columns. Revenue stays on the app page, with its sources.
+        `SELECT p.*,p.coverage_level AS coverage,COALESCE(m.observations,0) AS observations,CASE WHEN p.coverage_level='full' THEN COALESCE(m.step_count,0) ELSE 0 END AS step_count,
+          m.active_ads,m.ads_delta_7d,m.longest_ad_days,m.creators,m.sponsors,m.creators_delta_7d,m.activity_change_4w,m.activity_weekly,m.first_seen,m.last_seen,
+          EXISTS(SELECT 1 FROM agent_blueprints b WHERE b.product_id=p.id AND b.status='published') AS has_blueprint
+         FROM user_saves s JOIN products p ON p.id=s.product_id LEFT JOIN product_metrics m ON m.product_id=p.id
+         WHERE s.user_id=? AND p.status='published' ORDER BY s.created_at DESC LIMIT ? OFFSET ?`,
       )
         .bind(c.get("actor").userId, limit, offset)
         .all()

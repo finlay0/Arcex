@@ -1,0 +1,79 @@
+// Engine entry point: serves the built client and one WebSocket that speaks @arcex/contracts.
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingMessage } from "node:http";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { WebSocketServer, type WebSocket } from "ws";
+import { openDb } from "./db.ts";
+import { createEngine } from "./engine.ts";
+import { TOOLBOX } from "./toolbox.ts";
+
+const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ide/dist");
+const dataDir = process.env.ARCEX_DATA_DIR ?? path.join(process.env.APPDATA ?? os.homedir(), "Arcex");
+const TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png",
+  ".svg": "image/svg+xml", ".woff2": "font/woff2", ".ico": "image/x-icon",
+};
+
+const sockets = new Set<WebSocket>();
+const about = { version: "0.1.0", dataDir, projectsDir: path.join(os.homedir(), "Arcex Projects") };
+// The connector runs as its own process, so it reads the toolbox from a file.
+mkdirSync(dataDir, { recursive: true });
+const toolboxFile = path.join(dataDir, "toolbox.json");
+writeFileSync(toolboxFile, JSON.stringify(TOOLBOX));
+const connector = { script: path.join(path.dirname(fileURLToPath(import.meta.url)), "connector.mjs"), toolboxFile };
+const engine = createEngine(openDb(dataDir), about, connector, (message) => {
+  const data = JSON.stringify(message);
+  for (const socket of sockets) socket.send(data);
+});
+
+const server = createServer((request, response) => {
+  const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+  const file = path.join(clientDir, pathname === "/" ? "index.html" : pathname);
+  // Stay inside the client folder.
+  if (!file.startsWith(clientDir + path.sep) || !existsSync(file) || !statSync(file).isFile()) {
+    response.writeHead(404).end("Not found. Build the client with: pnpm --filter @arcex/ide build");
+    return;
+  }
+  response.writeHead(200, { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream" });
+  response.end(readFileSync(file));
+});
+
+// Only the engine's own page may connect, plus the client dev server when one is named.
+const wss = new WebSocketServer({
+  server,
+  maxPayload: 1_000_000,
+  verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) =>
+    origin === `http://${req.headers.host}` || (!!process.env.ARCEX_DEV_ORIGIN && origin === process.env.ARCEX_DEV_ORIGIN),
+});
+wss.on("connection", (socket) => {
+  sockets.add(socket);
+  socket.on("close", () => sockets.delete(socket));
+  socket.on("message", (raw) => {
+    let message: { id?: unknown; method?: unknown; params?: unknown };
+    try {
+      message = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    const { id } = message;
+    if (typeof id !== "number" || typeof message.method !== "string") return;
+    engine.handle(message.method, message.params).then(
+      (result) => socket.send(JSON.stringify({ id, result })),
+      (error: unknown) => socket.send(JSON.stringify({ id, error: String(error instanceof Error ? error.message : error) })),
+    );
+  });
+});
+
+server.listen(Number(process.env.ARCEX_ENGINE_PORT ?? 4517), "127.0.0.1", () => {
+  const address = server.address();
+  if (address && typeof address === "object") console.log(`ARCEX_ENGINE_READY http://127.0.0.1:${address.port}/`);
+});
+
+function shutdown() {
+  engine.close();
+  process.exit(0);
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

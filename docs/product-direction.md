@@ -16,7 +16,15 @@ Preserved, structured observations and earlier flow versions make repeated use v
 
 Ad longevity is observed distribution, not proof of profit, spend, conversion or uninterrupted delivery. A creator link is not automatically sponsorship. Client-side tags do not reveal private databases or models. A blueprint is a proposed implementation from observed behavior, not recovered proprietary source code. Demand, retention, sponsorship income and the dataset's commercial defensibility remain hypotheses to validate.
 
+## Coverage levels
+
+Decision, November 4, 2026: the catalog has two levels. Signals-only products (the goal is 300+) show public ads, creators, pricing and growth, which are cheap to collect and need almost no storage. Fully captured products (the best 50 to 125 within the current 50 MB quota) add the screen walkthrough and blueprint. Signals-only pages are open without sign-in and don't use the daily limit. People can request a full breakdown of any signals-only product.
+
 ## Access and business model
+
+**Decision, November 5, 2026: the paid tier is named Pro, not Insider.** Everyone who joins the waitlist before launch gets their first year of Pro free. Price and limits are unchanged by this decision; the app, API and Stripe still use the Insider name until they are renamed.
+
+**Decision, November 4, 2026: free core with an optional $12/mo Insider upsell.** Growth is the priority, so the core stays free and generous. Free accounts get 10 apps and 10 blueprint exports a day, and reopening an app they've already opened that day is free. Insider removes those daily caps and adds collections and Request X-Ray priority. This takes precedence over the pricing and quota proposals below.
 
 The latest explicit preference in the supplied discussion is a public Radar list with free sign-in when opening a full Vault entry. This supersedes earlier suggestions to expose the whole Vault publicly or gate only a later flow step. Actual UI implementation is excluded here.
 
@@ -35,6 +43,8 @@ The baseline is server-side access and usage policy, lightweight public summarie
 - Later implementation aligned full-capture access with sign-in, ten distinct free apps per UTC day and free reopening. Signals-only details and an explicitly selected open sample remain public. Approved full images require signed delivery. Owner-reviewed publication remains separate from these access controls.
 - Consumer MCP supports public search and free metered blueprint exports. Its ten-export daily allowance is separate from full-app opens. The owner research collector is a separate OAuth connection and cannot choose consumer entitlements or publish.
 - Account product history is separate from usage accounting: reading or clearing it never resets app allowances. Watermarking, canary bans, PostHog instrumentation and agent micropayments are not claimed live; analytics needs the future product integration.
+- There's no revenue model. The API stores manually entered ranges with a method version, sourced inputs, assumptions, evidence IDs and history, returns null without them, and doesn't call them computed estimates. Ad longevity is never a dollar input. Changes are reviewed drafts before they publish. Detection covers observed public pages only.
+- Activity figures compare distinct ads and creators across comparably collected weeks. They aren't product or business growth, and they stay null without comparable collection.
 - The versioned research playbook, product-history retrieval and durable run checkpoints address collection repeatability. They do not establish that the current candidates are qualified, that all funnels were inspected or that the business is validated.
 
 The [research playbook](../src/research-playbook.ts) and [Work bootstrap](work-bootstrap.txt) operationalize collection. The original long discussion is source context, not a document to paste into every Work run. New direct user decisions take precedence over historical assistant pitches and these summaries.

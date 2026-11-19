@@ -422,7 +422,7 @@ export const openapi = {
     "/auth/logout": { post: operation("Revoke current session", "user") },
     "/api/v1/radar": {
       get: operation(
-        "Published products; q, category, monetization, price (free|paid_only, from published pricing), minObservedAdDays, sort, limit, offset. Each row carries a pricing summary of its latest published pricing page. Ad days are distinct approved observed dates per ad, not continuous delivery.",
+        "Published products; q, category, monetization, coverage, price (free|paid_only, from published pricing), firstSeenDays, changedDays, minObservedAdDays, sponsored, hasBlueprint, sort, dir, limit, offset. Each row carries a pricing summary of its latest published pricing page. Ad days are distinct approved observed dates per ad, not continuous delivery.",
       ),
     },
     "/api/v1/market/overview": {

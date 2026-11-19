@@ -1,8 +1,18 @@
 # Arcex
 
-This repository now contains the arcex.dev platform. The retired T3 desktop fork is not part of this product.
+This repository holds two things: the Arcex ADE (desktop AI development environment, the main product since November 10, 2026) and the arcex.dev platform (Radar, Vault, MCP), which is kept and may feed the ADE later.
 
-- Backend functionality only until Finlay asks for UI/UX.
+## ADE
+
+- Architecture and phases are in docs/ade-plan.md. Electron shell (apps/desktop), local Node engine (apps/engine), client talks to the engine only through the WebSocket contract. Windows first.
+- Agents connect through the Agent Client Protocol. Each provider runs as its vendor's own CLI with the user's own sign-in. Never read, store or proxy provider credentials.
+- The audience is vibe coders. Terminal, git and CLIs stay hidden by default and are opt-in views.
+- The UI starts from a conventional ADE layout: sidebar with projects and threads, conversation in the centre, details panel on the right. The look is dark and monochrome: near-black surfaces, white ink, one green status colour, and curved silver light art behind start and empty screens only. Dark is the default theme. No blue accents or neon glows.
+- This is a new build. Read T3 Code's source for how things work underneath, but do not fork it or copy its UI.
+- Keep the ADE folders self-contained: no imports from the platform's src/. They will move to a public repository before release.
+
+## Platform (src/, apps/web, packages/mcp)
+
 - Use D1 for relational records and the existing Supabase Free project for private evidence files. R2 stays disabled because the user requires zero overage charges. Never upgrade a plan or activate a metered fallback. Evidence storage is capped at 900 MB inside Supabase Free's 1 GB (Finlay approved on November 6, 2026 for full desktop and mobile screenshots of 1,000 products).
 - Finlay paused ChatGPT Work research on November 5, 2026 and requested Cursor Automations/Grok Bot onboarding for roughly the next month. Do not launch more Terra/Luna Work research or resume their schedules. Prepare the replacement using included plan usage only, with paid overages/top-ups off. Finish upfront research and owner review before enabling daily 09:00 America/Halifax runs. Both old schedules stay paused. On November 6, 2026 Finlay approved turning on production COLLECTION_ENABLED and the free hourly HTTP workflow: code-only homepage checks and brand icons run daily for pending and accepted products (not excluded ones); browser/model monitoring stays accepted-only. No automatic date-based reversion.
 - Finlay then increased the upfront target to 1,000 strong source-backed Radar products and requested frequent bootstrap batches, not one daily research run. Use code/HTTP and supplied-text batches for breadth, browser jobs for selected flows/ambiguity. Activate the bounded bootstrap cadence only after real Cursor pilots and included-only usage are verified; daily09:00 is the later maintenance phase. Counts of raw leads or full teardowns are separate.
@@ -15,4 +25,4 @@ This repository now contains the arcex.dev platform. The retired T3 desktop fork
 - Preserve ownership, publication and Pro access checks across API and MCP. Use parameterized SQL and bounded input.
 - Validate with pnpm check and pnpm smoke against an isolated local database. Do not test billing against live accounts.
 - Keep checks and tests lean and proportional to actual risk. Do not add tests that merely restate implementation, duplicate existing coverage, or inflate counts. Preserve vital access, credential, publication, billing and cost protections. Once checks pass, repeat only for a relevant change or unresolved issue.
-- Do not create a separate platform repository or revive the T3 fork.
+- Do not create a separate platform repository.

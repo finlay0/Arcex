@@ -1,6 +1,6 @@
 # Arcex
 
-Backend for arcex.dev: Radar discovery, Vault evidence and commercial blueprints, Arena model experiments, Ship community submissions, and MCP access. The retired T3 Code desktop fork has been replaced. This repository contains no frontend UI.
+Backend for arcex.dev: Radar discovery, Vault evidence and commercial blueprints, Arena model experiments, Ship community submissions, and MCP access. The retired T3 Code desktop fork has been replaced. The web app is in `apps/web`. It isn't deployed yet.
 
 Live API: https://arcex-api.peak-era-avern.workers.dev
 
@@ -11,6 +11,10 @@ Live API: https://arcex-api.peak-era-avern.workers.dev
 - [Product direction and decisions](docs/product-direction.md)
 - [Repeatable Work bootstrap](docs/work-bootstrap.txt)
 - [MCP package](packages/mcp/README.md)
+
+## Web app
+
+`pnpm --filter @arcex/web dev` serves it on port 5174 and proxies `/api` and `/auth` to the local Worker on 8791. Start that Worker with `--var APP_ORIGIN:http://localhost:5174`. To read live data instead, set `ARCEX_API_PROXY=https://api.arcex.dev`. Writes won't pass the live origin check from localhost. Production builds call `https://api.arcex.dev`, and the API only accepts `https://arcex.dev` as an origin.
 
 ## Run locally
 
@@ -41,7 +45,7 @@ Meta Ad Library, Google Ads Transparency, YouTube and X distribution watches use
 
 An optional official YouTube Data API adapter fetches full descriptions/statistics after discovery, filters direct domain links, caches for 24 hours and caps searches at 25/day. It requires a protected server key; Work's cloud browser is the active path. SponsorBlock lookup code is disabled until commercial-use permission is established for its noncommercial database/API license.
 
-Public endpoints expose published records and approved evidence only. Free signed-in users can export blueprints, save products, submit builds and vote. An active Insider subscription enables MCP API keys, collections, a derived public badge and stream-queue priority. Stripe webhooks reconcile subscription state, reject invalid signatures, deduplicate deliveries, and place refunds/disputes/fraud warnings into an admin review hold.
+Public endpoints expose published records and approved evidence only. Signals-only products and one chosen open sample can be read without sign-in. For other products, signed-out viewers get an outline, or the single screen a shared link points to. Signed-in viewers open 10 captured apps a day, reopening is free, and Insider has no daily limit. Screenshots are served only through 15-minute signed links. Table metrics describe observed ad and creator activity, not product or business growth, and stay null where nothing comparable was collected. Revenue is a manually entered range with its sources, assumptions and evidence, not a computed estimate, and it can't use ad activity as an input. Revenue ranges and observed changes stay drafts until an admin publishes them. Free signed-in users can export blueprints, create MCP API keys limited to blueprint export (10 exports a day; Insider has no daily cap), save products, submit builds and vote. An active Insider subscription enables collections, a derived public badge and stream-queue priority. Stripe webhooks reconcile subscription state, reject invalid signatures, deduplicate deliveries, and place refunds/disputes/fraud warnings into an admin review hold.
 
 ## Inspector
 
@@ -61,7 +65,7 @@ The extractor defaults to **GPT-6.1 Terra, medium**. `--prepare-only` produces a
 
 - GitHub OAuth app and encrypted Worker secrets are configured, including exact regular and collector callbacks. X OAuth still requires a dedicated provider registration; X email is not requested or assumed available.
 - Stripe has a dedicated sandbox, a $12 USD/month test fixture, hosted Portal and the required 12 webhook events. The admin readiness endpoint verifies provider configuration without returning secrets. Full hosted payment/webhook delivery remains to be verified; no live charges or live products were created. Launch currency is not decided by the sandbox fixture.
-- `arcex-mcp` builds and passes a packed-install stdio handshake and live public-read test. The GitHub preview release provides an installable tarball; npm registry publication remains separate because the original scoped name is occupied.
+- Anyone can connect an agent to the hosted MCP at `/public/mcp`, with no install or sign-in. Search is open, and blueprints use a free API key sent as a Bearer header. The optional `arcex` stdio package in `packages/mcp` isn't on npm.
 - No customer-facing site, ten published deep teardowns, real benchmark games, or provider performance claims have been fabricated. Those require frontend work and observed content.
 
 Evidence records distinguish observations from proposed implementation. Distinct ad-observation days do not establish continuous ad activity, ad spend, revenue or conversion. A retracted observation unpublishes its product and blueprint exports.
