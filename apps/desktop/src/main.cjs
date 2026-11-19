@@ -5,28 +5,81 @@ const path = require("node:path");
 
 const engineDir = path.resolve(__dirname, "../../engine");
 let engine;
+let engineUrl;
+let starting;
+let quitting = false;
+// Recent unexpected exits, to stop restarting an engine that keeps crashing straight away.
+const crashes = [];
 
-function startEngine() {
+function startEngine(port) {
   return new Promise((resolve, reject) => {
-    engine = spawn("node", ["--import", "tsx", "src/main.ts"], {
+    const child = spawn("node", ["--import", "tsx", "src/main.ts"], {
       cwd: engineDir,
-      env: { ...process.env, ARCEX_ENGINE_PORT: process.env.ARCEX_ENGINE_PORT ?? "0" },
-      stdio: ["ignore", "pipe", "inherit"],
+      env: { ...process.env, ARCEX_ENGINE_PORT: port },
+      stdio: ["ignore", "pipe", "inherit", "ipc"],
     });
-    engine.once("error", reject);
-    engine.once("exit", (code) => reject(new Error(`engine exited with code ${code}`)));
+    engine = child;
+    const timer = setTimeout(() => {
+      reject(new Error("The engine took too long to start."));
+      child.kill();
+    }, 12_000);
+    const onFailure = (error) => {
+      clearTimeout(timer);
+      if (engine === child) engine = undefined;
+      reject(error);
+    };
+    child.once("error", onFailure);
+    child.once("exit", (code) => {
+      onFailure(new Error(`The engine exited with code ${code}.`));
+      // A running engine that stops on its own is brought straight back on the same address,
+      // so the open window reconnects without the user noticing.
+      if (quitting || !engineUrl) return;
+      const now = Date.now();
+      crashes.push(now);
+      while (crashes.length && now - crashes[0] > 60_000) crashes.shift();
+      if (crashes.length > 5) return console.error("[desktop] the engine keeps stopping; waiting for the window to ask again");
+      setTimeout(() => ensureEngine().catch((error) => console.error("[desktop] engine restart failed:", error.message)), 300);
+    });
     let buffered = "";
-    engine.stdout.on("data", (chunk) => {
+    child.stdout.on("data", (chunk) => {
       process.stdout.write(chunk);
+      if (buffered === null) return;
       buffered += chunk;
       const match = buffered.match(/ARCEX_ENGINE_READY (\S+)/);
-      if (match) resolve(match[1]);
+      if (match) {
+        buffered = null;
+        clearTimeout(timer);
+        resolve(match[1]);
+      }
     });
   });
 }
 
+function ensureEngine() {
+  if (starting) return starting;
+  if (engine && engineUrl) return Promise.resolve(engineUrl);
+  const port = engineUrl ? new URL(engineUrl).port : process.env.ARCEX_ENGINE_PORT ?? "0";
+  starting = startEngine(port).then((url) => (engineUrl = url)).finally(() => (starting = undefined));
+  return starting;
+}
+
 app.whenReady().then(async () => {
-  const url = await startEngine();
+  let url;
+  while (!url) {
+    try {
+      url = await ensureEngine();
+    } catch (error) {
+      const result = await dialog.showMessageBox({
+        type: "error",
+        title: "Arcex couldn't start",
+        message: "Arcex couldn't start its local engine.",
+        detail: error.message,
+        buttons: ["Retry", "Close"],
+        cancelId: 1,
+      });
+      if (result.response !== 0) return app.quit();
+    }
+  }
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -41,6 +94,13 @@ app.whenReady().then(async () => {
   });
   win.setMenuBarVisibility(false);
 
+  ipcMain.handle("ensure-engine", async (event) => {
+    const frame = event.senderFrame;
+    if (event.sender !== win.webContents || !frame || frame.parent !== null || !frame.url.startsWith(engineUrl)) throw new Error("Only the Arcex workspace can reconnect.");
+    // The window asking is a fresh start for the crash guard.
+    crashes.length = 0;
+    await ensureEngine();
+  });
   ipcMain.handle("pick-folder", async () => {
     const result = await dialog.showOpenDialog(win, { title: "Choose your project folder", properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);
@@ -71,4 +131,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => app.quit());
-app.on("quit", () => engine?.kill());
+app.on("before-quit", () => (quitting = true));
+app.on("quit", () => {
+  if (engine?.connected) engine.disconnect();
+});

@@ -21,6 +21,9 @@ type Say = Extract<Item, { kind: "say" }>;
 /** What exists only while a thread's agent is running. */
 type Live = {
   session: AgentSession | null;
+  turn: AbortController | null;
+  turnFailure: "failed" | "interrupted" | null;
+  stopTimer?: ReturnType<typeof setTimeout>;
   say: Say | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
@@ -83,6 +86,7 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
+  const changingModels = new Set<string>();
   /** Model lists, read once per agent while the engine runs. */
   const modelCache = new Map<string, Models>();
   const nameOf = (agentId: string) => agentList(settings).find((agent) => agent.id === agentId)?.name ?? "The agent";
@@ -95,7 +99,7 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
-    if (!live) lives.set(id, (live = { session: null, say: null, steps: new Map(), asks: new Map() }));
+    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, steps: new Map(), asks: new Map() }));
     return live;
   };
   const projectOf = (id: unknown): Project => {
@@ -137,7 +141,8 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   }
 
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
-    const live = liveOf(thread.id);
+    const live = lives.get(thread.id);
+    if (!live?.turn) return;
     if (update.sessionUpdate === "agent_message_chunk") {
       if (update.content.type !== "text") return;
       live.say ??= { id: randomUUID(), kind: "say", text: "" };
@@ -147,7 +152,7 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       endSay(thread);
       let step = live.steps.get(update.toolCallId);
       if (!step) {
-        step = { kind: "other", title: "", item: { id: update.toolCallId, kind: "step", label: "", detail: "", status: "running", files: [] } };
+        step = { kind: "other", title: "", item: { id: randomUUID(), kind: "step", label: "", detail: "", status: "running", files: [] } };
         live.steps.set(update.toolCallId, step);
       }
       if (update.kind) step.kind = update.kind;
@@ -163,6 +168,8 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   }
 
   function onPermission(thread: ThreadRow, project: Project, request: acp.RequestPermissionRequest) {
+    const live = lives.get(thread.id);
+    if (!live?.turn || live.turn.signal.aborted) return Promise.resolve<acp.RequestPermissionResponse>({ outcome: { outcome: "cancelled" } });
     return new Promise<acp.RequestPermissionResponse>((resolve) => {
       endSay(thread);
       const call = request.toolCall;
@@ -176,20 +183,34 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
         options: request.options.map((option) => ({ id: option.optionId, name: option.name, kind: option.kind })),
         answer: null,
       };
-      liveOf(thread.id).asks.set(item.id, { item, resolve });
+      live.asks.set(item.id, { item, resolve });
       put(thread, item);
       setState(thread, "needs_you");
     });
   }
 
-  async function ensureSession(thread: ThreadRow, project: Project): Promise<AgentSession> {
-    const live = liveOf(thread.id);
+  function closeSession(live: Live) {
+    const session = live.session;
+    live.session = null;
+    session?.close();
+  }
+
+  function dismissAsks(thread: ThreadRow, live: Live, answer: string, save = true) {
+    for (const { item, resolve } of live.asks.values()) {
+      if (save) put(thread, { ...item, answer });
+      resolve({ outcome: { outcome: "cancelled" } });
+    }
+    live.asks.clear();
+  }
+
+  async function ensureSession(thread: ThreadRow, project: Project, live: Live, signal: AbortSignal): Promise<AgentSession> {
     if (live.session) return live.session;
     const session = await startSession({
       agentId: thread.provider,
       settings,
       cwd: project.cwd,
       resumeId: thread.sessionId,
+      signal,
       mcpServers: [
         {
           name: "arcex",
@@ -208,14 +229,17 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       onExit: (detail) => {
         if (live.session !== session) return;
         live.session = null;
+        dismissAsks(thread, live, "Agent disconnected");
         put(thread, { id: randomUUID(), kind: "error", text: detail.slice(0, 600) });
-        setState(thread, "failed");
+        if (live.turn) live.turnFailure = "failed";
+        else setState(thread, "failed");
       },
     });
+    if (signal.aborted) {
+      session.close();
+      signal.throwIfAborted();
+    }
     live.session = session;
-    if (session.models) modelCache.set(thread.provider, session.models);
-    // A model the agent no longer offers is ignored, and the thread runs on the agent's default.
-    if (thread.model && thread.model.value !== session.models?.current) await session.setModel(thread.model.value).catch(() => {});
     if (thread.sessionId && !session.resumed) {
       put(thread, { id: randomUUID(), kind: "say", text: `${nameOf(thread.provider)} started fresh and doesn't remember the earlier messages in this thread.` });
     }
@@ -227,48 +251,84 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   async function run(thread: ThreadRow, prompt: string) {
     const project = projectOf(thread.projectId);
     const live = liveOf(thread.id);
-    put(thread, { id: randomUUID(), kind: "user", text: prompt });
+    const turn = new AbortController();
+    live.turn = turn;
+    live.turnFailure = null;
     setState(thread, live.session ? "working" : "starting");
+    put(thread, { id: randomUUID(), kind: "user", text: prompt });
+    let outcome: ThreadState = "idle";
     try {
-      const session = await ensureSession(thread, project);
+      const session = await ensureSession(thread, project, live, turn.signal);
+      if (thread.model && thread.model.value !== session.models?.current) {
+        try {
+          await session.setModel(thread.model.value);
+        } catch {
+          closeSession(live);
+          throw new Error(`couldn't use ${thread.model.name}. Choose another model or Default, then retry your message.`);
+        }
+      }
+      turn.signal.throwIfAborted();
       setState(thread, "working");
-      await session.prompt(prompt);
+      const result = await session.prompt(prompt);
+      if (result.stopReason === "cancelled") outcome = "stopped";
+      if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
+        const reason = result.stopReason === "refusal" ? "declined the request" : "reached a turn limit";
+        throw new Error(`${reason}. Review the reply before continuing.`);
+      }
     } catch (error) {
-      const message = String(error instanceof Error ? error.message : error);
-      const friendly = /auth/i.test(message)
-        ? `${nameOf(thread.provider)} isn't signed in on this computer. ${BUILTIN[thread.provider] ? `Open a terminal, run "${BUILTIN[thread.provider]!.signIn}", then send your message again.` : "Sign in with its own tool, then send your message again."}`
-        : `${nameOf(thread.provider)} couldn't finish: ${message.slice(0, 400)}`;
-      put(thread, { id: randomUUID(), kind: "error", text: friendly });
+      if (!threads.has(thread.id)) return;
+      if (live.turnFailure) outcome = live.turnFailure;
+      else if (turn.signal.aborted) outcome = "stopped";
+      else {
+        outcome = "failed";
+        const message = error instanceof Error ? error.message : String(error);
+        const friendly = /auth|sign.in required/i.test(message)
+          ? `${nameOf(thread.provider)} needs you to sign in. Open Agents to set it up, then retry your message.`
+          : `${nameOf(thread.provider)} couldn't finish: ${message.slice(0, 400)}`;
+        put(thread, { id: randomUUID(), kind: "error", text: friendly });
+      }
     }
     if (!threads.has(thread.id)) return;
+    clearTimeout(live.stopTimer);
+    live.turn = null;
+    dismissAsks(thread, live, "Request closed");
     endSay(thread);
     const changed = new Set<string>();
     for (const step of live.steps.values()) {
-      if (step.item.status === "running") put(thread, { ...step.item, status: "done" });
-      if (["edit", "delete", "move"].includes(step.kind) && step.item.status !== "failed") step.item.files.forEach((file) => changed.add(file));
+      if (step.item.status === "running") put(thread, { ...step.item, status: "interrupted" });
+      if (["edit", "delete", "move"].includes(step.kind) && step.item.status === "done") step.item.files.forEach((file) => changed.add(file));
     }
     if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     live.steps.clear();
-    if (thread.state !== "failed") setState(thread, "idle");
+    setState(thread, live.turnFailure ?? outcome);
   }
 
-  const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you";
+  const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
 
   /** Stops a thread's agent and forgets it in memory. The caller removes it from the database. */
   function dropThread(thread: ThreadRow) {
     const live = lives.get(thread.id);
     if (live) {
-      const session = live.session;
-      live.session = null;
-      for (const ask of live.asks.values()) ask.resolve({ outcome: { outcome: "cancelled" } });
-      session?.close();
+      clearTimeout(live.stopTimer);
+      live.turn?.abort();
+      dismissAsks(thread, live, "", false);
+      closeSession(live);
       lives.delete(thread.id);
     }
     threads.delete(thread.id);
   }
 
   const handlers: { [M in Method]: (params: Requests[M]["params"]) => Promise<Requests[M]["result"]> | Requests[M]["result"] } = {
-    "state.get": () => ({ agents: agentList(settings), projects: [...projects.values()], threads: [...threads.values()].map(publicThread), settings, about }),
+    "state.get": () => ({ agents: agentList(settings), projects: [...projects.values()], threads: [...threads.values()].map(publicThread), settings, about, drafts: db.drafts() }),
+
+    "draft.set"(params) {
+      const project = projectOf(params.projectId);
+      const thread = params.threadId === undefined ? null : threadOf(params.threadId);
+      if (thread && thread.projectId !== project.id) throw new Error("thread not found in this project");
+      if (typeof params.text !== "string" || params.text.length > 20_000) throw new Error("draft is too long");
+      db.saveDraft(project.id, thread?.id ?? "", params.text);
+      return { ok: true };
+    },
 
     "settings.set"(params) {
       const next: Settings = { ...settings };
@@ -321,13 +381,13 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
     "toolbox.list": () => TOOLBOX,
 
     async "project.create"(params) {
-      const goal = text(params.goal, "what you're building", 2000);
+      const goal = params.cwd !== undefined && params.goal === "" ? "" : text(params.goal, "what you're building", 2000);
       let cwd: string;
       let name: string;
       if (params.cwd !== undefined) {
         cwd = path.resolve(text(params.cwd, "folder", 1000));
         if (!path.isAbsolute(params.cwd) || !existsSync(cwd) || !statSync(cwd).isDirectory()) throw new Error("that folder doesn't exist");
-        name = nameFrom(goal);
+        name = (path.basename(cwd) || cwd).slice(0, 60);
       } else {
         name = nameFrom(goal);
         const root = about.projectsDir;
@@ -335,8 +395,8 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
         cwd = path.join(root, slug);
         for (let n = 2; existsSync(cwd); n++) cwd = path.join(root, `${slug}-${n}`);
         mkdirSync(cwd, { recursive: true });
+        await git.initRepo(cwd).catch(() => {});
       }
-      if (!existsSync(path.join(cwd, ".git"))) await git.initRepo(cwd);
       const project: Project = { id: randomUUID(), name, goal, cwd, previewUrl: null, createdAt: Date.now() };
       db.insertProject(project);
       projects.set(project.id, project);
@@ -391,7 +451,10 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
-    "project.diff": async (params) => ({ text: await git.diff(projectOf(params.projectId).cwd, text(params.path, "path", 1000)) }),
+    "project.diff": async (params) => {
+      if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");
+      return { text: await git.diff(projectOf(params.projectId).cwd, params.path) };
+    },
 
     "thread.create"(params) {
       const project = projectOf(params.projectId);
@@ -406,21 +469,38 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       db.insertThread(thread);
       threads.set(thread.id, thread);
       void run(thread, prompt);
+      db.clearSentDraft(project.id, "", params.text);
       return publicThread(thread);
     },
 
     async "thread.update"(params) {
       const thread = threadOf(params.threadId);
-      if (params.title !== undefined) thread.title = text(params.title, "name", 80);
+      const title = params.title === undefined ? thread.title : text(params.title, "name", 80);
+      if (params.archived === true && busyState(thread)) throw new Error("wait for this thread to finish before archiving it");
       if (params.model !== undefined) {
-        if (busyState(thread)) throw new Error("wait for this thread to finish before changing its model");
-        thread.model = pickedModel(params.model);
-        if (thread.model) await lives.get(thread.id)?.session?.setModel(thread.model.value);
+        if (busyState(thread) || changingModels.has(thread.id)) throw new Error("wait for this thread to finish before changing its model");
+        const model = pickedModel(params.model);
+        const live = lives.get(thread.id);
+        const session = live?.session;
+        if (live && session && (model || thread.model)) {
+          changingModels.add(thread.id);
+          try {
+            const selected = model?.value ?? session.defaultModel ?? (await listModels(thread.provider, settings, about.dataDir)).current;
+            if (!selected) throw new Error("the agent did not report a default model");
+            if (selected !== session.models?.current) await session.setModel(selected);
+          } catch (error) {
+            if (live.session === session) closeSession(live);
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`The agent couldn't switch models. ${message}`);
+          } finally {
+            changingModels.delete(thread.id);
+          }
+        }
+        if (!threads.has(thread.id)) throw new Error("thread not found");
+        thread.model = model;
       }
-      if (params.archived !== undefined) {
-        if (params.archived === true && busyState(thread)) throw new Error("wait for this thread to finish before archiving it");
-        thread.archived = params.archived === true;
-      }
+      if (params.title !== undefined) thread.title = title;
+      if (params.archived !== undefined) thread.archived = params.archived === true;
       db.saveThread(thread);
       emit({ event: "thread", thread: publicThread(thread) });
       return publicThread(thread);
@@ -434,17 +514,37 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       return { ok: true };
     },
 
-    "thread.items": (params) => db.items(threadOf(params.threadId).id),
+    "thread.items"(params) {
+      const thread = threadOf(params.threadId);
+      const items = db.items(thread.id);
+      const reply = lives.get(thread.id)?.say;
+      return reply ? [...items, reply] : items;
+    },
 
     "thread.prompt"(params) {
       const thread = threadOf(params.threadId);
-      if (thread.state === "working" || thread.state === "starting" || thread.state === "needs_you") throw new Error("this thread is still working");
+      if (busyState(thread)) throw new Error("this thread is still working");
+      if (changingModels.has(thread.id)) throw new Error("wait for the model to finish switching");
       void run(thread, text(params.text, "message", 20_000));
+      db.clearSentDraft(thread.projectId, thread.id, params.text);
       return { ok: true };
     },
 
-    async "thread.cancel"(params) {
-      await lives.get(threadOf(params.threadId).id)?.session?.cancel();
+    "thread.cancel"(params) {
+      const thread = threadOf(params.threadId);
+      const live = lives.get(thread.id);
+      if (!live?.turn || live.turn.signal.aborted) return { ok: true };
+      live.turn.abort();
+      setState(thread, "stopping");
+      dismissAsks(thread, live, "Turn stopped");
+      if (live.session) {
+        void live.session.cancel().catch(() => {});
+        live.stopTimer = setTimeout(() => {
+          put(thread, { id: randomUUID(), kind: "error", text: "The agent did not confirm it stopped. Arcex disconnected it. Check the project for partial changes before continuing." });
+          live.turnFailure = "interrupted";
+          closeSession(live);
+        }, 5000);
+      }
       return { ok: true };
     },
 
@@ -457,7 +557,7 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       liveOf(thread.id).asks.delete(pending.item.id);
       pending.item.answer = option ? option.name : "Not now";
       put(thread, pending.item);
-      setState(thread, "working");
+      setState(thread, liveOf(thread.id).asks.size ? "needs_you" : "working");
       pending.resolve({ outcome: option ? { outcome: "selected", optionId: option.id } : { outcome: "cancelled" } });
       return { ok: true };
     },
@@ -470,7 +570,11 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
       return Promise.resolve().then(() => handler((params ?? {}) as never));
     },
     close() {
-      for (const live of lives.values()) live.session?.close();
+      for (const live of lives.values()) {
+        clearTimeout(live.stopTimer);
+        live.turn?.abort();
+        closeSession(live);
+      }
     },
   };
 }

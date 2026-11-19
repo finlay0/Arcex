@@ -1,6 +1,20 @@
 # Arcex
 
-Backend for arcex.dev: Radar discovery, Vault evidence and commercial blueprints, Arena model experiments, Ship community submissions, and MCP access. The retired T3 Code desktop fork has been replaced. The web app is in `apps/web`. It isn't deployed yet.
+Arcex ADE is a Windows-first desktop workspace for building with coding agents. This repository also contains the arcex.dev platform, including Radar, Vault, Arena, Ship, and MCP access.
+
+## Run the desktop development build
+
+With Node 22.13 or newer and pnpm installed, run these commands from the repository root.
+
+```powershell
+pnpm install --frozen-lockfile
+pnpm --filter @arcex/ide build
+pnpm --filter @arcex/desktop dev
+```
+
+Open **Agents** in Arcex to check which providers are ready. Each provider uses its own sign-in flow. Install Git if you want the Changes panel to show working-tree diffs. See the [ADE build notes](docs/ade-plan.md) for architecture and current feature coverage.
+
+## Platform
 
 Live API: https://arcex-api.peak-era-avern.workers.dev
 

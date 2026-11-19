@@ -59,7 +59,7 @@ export function ToolboxView({ use, fail }: { use(tool: Tool): void; fail(error: 
               <footer>
                 <span className="mono trunc" title={tool.url}>{tool.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
                 <button className="btn" onClick={() => use(tool)}>
-                  Use in a thread
+                  Draft a request
                 </button>
               </footer>
             </article>

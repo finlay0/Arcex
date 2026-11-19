@@ -21,7 +21,7 @@ export type Project = {
 };
 
 /** `needs_you` means an agent is waiting on an approval. */
-export type ThreadState = "idle" | "starting" | "working" | "needs_you" | "failed";
+export type ThreadState = "idle" | "starting" | "working" | "needs_you" | "stopping" | "stopped" | "interrupted" | "failed";
 
 export type Thread = {
   id: string;
@@ -50,7 +50,7 @@ export type Item =
       label: string;
       /** What the agent actually ran or touched, for the under-the-hood view. */
       detail: string;
-      status: "running" | "done" | "failed";
+      status: "running" | "done" | "failed" | "interrupted";
       files: string[];
     }
   | { id: string; kind: "ask"; title: string; detail: string; options: AskOption[]; answer: string | null }
@@ -99,9 +99,12 @@ export type ProviderStatus = {
 
 export type About = { version: string; dataDir: string; projectsDir: string };
 
+export type DraftTarget = { projectId: string; threadId?: string };
+
 /** Client to engine. Every request gets exactly one response with the same id. */
 export type Requests = {
-  "state.get": { params: Record<string, never>; result: { agents: Agent[]; projects: Project[]; threads: Thread[]; settings: Settings; about: About } };
+  "state.get": { params: Record<string, never>; result: { agents: Agent[]; projects: Project[]; threads: Thread[]; settings: Settings; about: About; drafts: Record<string, string> } };
+  "draft.set": { params: DraftTarget & { text: string }; result: { ok: true } };
   "settings.set": { params: Partial<Settings>; result: Settings };
   "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
   /** The models an agent offers. Reading them starts the agent briefly but sends no message. */
