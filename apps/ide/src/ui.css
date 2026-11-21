@@ -112,10 +112,18 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .menu .danger { color: var(--stop); }
 .foot { padding: 10px 12px 12px; border-top: 1px solid var(--line); }
 .foot .row { color: var(--ink); }
-.foot .update { color: var(--ink-3); }
-.foot .update.ready { color: var(--ink); }
-.foot .update.ready .i { color: var(--ok); }
-.foot .update:disabled { opacity: .7; cursor: progress; }
+.foot .profile { gap: 10px; }
+.foot .profile .avatar { width: 28px; height: 28px; font-size: 12px; }
+.foot .profile .trunc { flex: 1; min-width: 0; text-align: left; }
+.foot .profile > .i { color: var(--ink-4); }
+.foot .profile:hover > .i { color: var(--ink-2); }
+/* Shown only when newer code is waiting, just above the profile. */
+.updatebar { padding: 0 12px 10px; animation: connection-in .3s ease-out; }
+.updatebar .update { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--raised); color: var(--ink); font-size: 14px; text-align: left; }
+.updatebar .update:hover:not(:disabled) { background: var(--raised-2); }
+.updatebar .update:disabled { cursor: progress; color: var(--ink-2); }
+.updatebar .fill { flex: 1; }
+.updatebar .go { font-size: 13px; color: var(--ink-2); }
 
 /* ── Main */
 .main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 64px minmax(0, 1fr); background: var(--page); }
@@ -355,3 +363,4 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 60; background: var(--primary); color: var(--on-primary); padding: 10px 16px; border-radius: 12px; font-size: 14px; box-shadow: var(--shadow); max-width: 70vw; white-space: pre-line; }
 .lost { height: 100%; display: grid; place-items: center; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.chipgroup { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }

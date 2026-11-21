@@ -110,6 +110,8 @@ function startEngine(port) {
       cwd: engineDir,
       env: { ...process.env, ARCEX_ENGINE_PORT: port },
       stdio: ["ignore", "pipe", "inherit", "ipc"],
+      // Without this Windows opens a console window for the engine, and everything it starts inherits it.
+      windowsHide: true,
     });
     engine = child;
     child.on("message", (message) => void handleAccountVault(child, message));

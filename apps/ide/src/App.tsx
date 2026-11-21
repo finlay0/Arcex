@@ -98,11 +98,11 @@ function UpdateButton({ fail }: { fail: (error: unknown) => void }) {
     window.addEventListener("focus", check);
     return () => (clearInterval(timer), window.removeEventListener("focus", check));
   }, [desktop]);
-  if (!desktop?.update) return null;
   const ready = !!info && (info.behind > 0 || info.changed);
-  const hint = !info ? "Rebuild Arcex from its code and restart" : info.behind > 0
-    ? `${info.behind} new ${info.behind === 1 ? "change" : "changes"} on GitHub. Rebuild and restart onto them.`
-    : info.changed ? "The code changed since Arcex started. Rebuild and restart onto it." : "Arcex is running the latest code. Rebuild and restart anyway.";
+  if (!desktop?.update || !ready) return null;
+  const hint = info.behind > 0
+    ? `${info.behind} new ${info.behind === 1 ? "change" : "changes"} on GitHub. Arcex rebuilds and restarts onto them.`
+    : "The code changed since Arcex started. Arcex rebuilds and restarts onto it.";
   const update = async () => {
     setBusy(true);
     try {
@@ -116,10 +116,13 @@ function UpdateButton({ fail }: { fail: (error: unknown) => void }) {
     }
   };
   return (
-    <button className={ready ? "row update ready" : "row update"} title={hint} disabled={busy} onClick={() => void update()}>
-      <Icon name="reload" />
-      {busy ? "Updating…" : ready ? "Update ready" : "Update"}
-    </button>
+    <div className="updatebar">
+      <button className="update" title={hint} disabled={busy} onClick={() => void update()}>
+        <span className="dot ok" />
+        <span className="fill">{busy ? "Updating Arcex…" : "Update ready"}</span>
+        {!busy && <span className="go">Restart</span>}
+      </button>
+    </div>
   );
 }
 
@@ -293,8 +296,6 @@ export function App() {
   if (!settings || !store.about) return <div className="lost">{store.status === "lost" ? connectionNotice : <span className="starting" role="status">Starting Arcex…</span>}{toast && <p role="alert">{toast}</p>}</div>;
 
   const showPanel = panelOpen && !!project && view.kind === "thread";
-  const ready = status?.filter((agent) => agent.installed && agent.signedIn === true).length ?? 0;
-  const unchecked = status?.some((agent) => agent.installed && agent.signedIn === null);
   const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
   const needle = query.trim().toLowerCase();
 
@@ -414,12 +415,13 @@ export function App() {
           })}
           {needle && !live.some((t) => t.title.toLowerCase().includes(needle)) && <div className="none flat">No thread matches "{query}".</div>}
         </div>
+        <UpdateButton fail={fail} />
         <div className="foot">
-          <button className="row" onClick={() => setScreen({ kind: "settings", section: "agents" })}>
-            <span className={!status ? "dot working" : ready > 0 ? "dot ok" : "dot needs"} />
-            {!status ? "Checking agents" : ready === 0 ? (unchecked ? "Check agent setup" : "No agent ready") : ready === 1 ? "1 agent ready" : `${ready} agents ready`}
+          <button className="row profile" title="Profile and settings" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
+            <span className="avatar">{initials(settings.name)}</span>
+            <span className="trunc">{settings.name.trim() || "Your profile"}</span>
+            <Icon name="gear" />
           </button>
-          <UpdateButton fail={fail} />
         </div>
       </aside>
 
@@ -476,9 +478,6 @@ export function App() {
               </button>
             </>
           )}
-          <button className="avabtn" aria-label="Arcex account and profile" title="Arcex account and profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
-            <span className="avatar">{initials(settings.name)}</span>
-          </button>
         </header>
         <div className="body">
           <div className="stage">
@@ -507,11 +506,18 @@ export function App() {
         ) : view.kind === "new-project" ? (
           <NewProject
             ready={store.status === "ready"}
+            agents={store.agents}
+            choice={picked}
+            setChoice={setChoice}
+            manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
             fail={fail}
-            created={(p) => {
-              if (p.goal && !seed && !unassignedDraft) saveDraft({ projectId: p.id }, p.goal);
+            start={async (p, text) => {
               setExpanded((open) => new Set(open).add(p.id));
-              newThreadIn(p.id);
+              setProjectId(p.id);
+              if (!text) return newThreadIn(p.id);
+              const created = await call("thread.create", { projectId: p.id, provider: picked.agentId, model: picked.model, text });
+              void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
+              setScreen({ kind: "thread", threadId: created.id });
             }}
           />
         ) : (

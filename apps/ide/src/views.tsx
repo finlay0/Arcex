@@ -11,10 +11,23 @@ type Ask = Extract<Item, { kind: "ask" }>;
 
 /* ───────── New project ───────── */
 
-export function NewProject(props: { ready: boolean; created(project: Project): void; fail(error: unknown): void }) {
-  const [goal, setGoal] = useState("");
+/**
+ * A new project starts with its first message, just like a thread: describe it, pick the agent and model, send.
+ * Arcex makes the folder (or uses the one you open) and the agent starts straight away. There is no separate setup step.
+ */
+export function NewProject(props: {
+  ready: boolean;
+  agents: Agent[];
+  choice: Choice;
+  setChoice(choice: Choice): void;
+  manageAgents(): void;
+  start(project: Project, text: string): Promise<void>;
+  fail(error: unknown): void;
+}) {
+  const [text, setText] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
+  const folderName = folder?.split(/[\/]/).filter(Boolean).pop() ?? folder;
 
   const pick = async () => {
     try {
@@ -24,15 +37,18 @@ export function NewProject(props: { ready: boolean; created(project: Project): v
       props.fail(error);
     }
   };
-  const create = async () => {
-    if ((!folder && !goal.trim()) || working || !props.ready) return;
+  const canSend = props.ready && !working && (!!folder || !!text.trim());
+  const send = async () => {
+    if (!canSend) return;
     setWorking(true);
     try {
-      props.created(await call("project.create", folder ? { goal: goal.trim(), cwd: folder } : { goal }));
+      const message = text.trim();
+      const project = await call("project.create", folder ? { goal: message, cwd: folder } : { goal: message });
+      await props.start(project, message);
     } catch (error) {
       props.fail(error);
+      setWorking(false);
     }
-    setWorking(false);
   };
 
   return (
@@ -40,36 +56,38 @@ export function NewProject(props: { ready: boolean; created(project: Project): v
       <Art />
       <div className="inner">
         <img className="mark logo" src="./mark.png" alt="" />
-        <h2>{folder ? "Open an existing project" : "What are we building?"}</h2>
-        <p className="lead">
-          {folder ? "Use the folder as it is. You can add a project goal now or later."
-            : "Describe your idea. Arcex creates a folder in Arcex Projects, then lets you review your first message before sending."}
-        </p>
+        <h2>What are we building?</h2>
+        <p className="lead">Describe it and send. Your agent starts right away.</p>
         <div className="composer">
           <AutoText
             autoFocus
-            value={goal}
-            aria-label={folder ? "Project goal (optional)" : "Project idea"}
-            maxLength={2000}
-            placeholder={folder ? "What are you building? (optional)" : "A fitness app where people log workouts and keep a streak"}
-            onChange={(event) => setGoal(event.target.value)}
-            onKeyDown={onEnter(create)}
+            rows={2}
+            value={text}
+            aria-label="First message"
+            maxLength={20000}
+            placeholder={folder ? `What should happen in ${folderName}?` : "A fitness app where people log workouts and keep a streak"}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={onEnter(send)}
           />
           <div className="tools">
-            <button className="chip" onClick={pick} title={folder ?? undefined} disabled={working}>
-              <Icon name="folder" /> <span className="trunc">{folder ?? "Open a folder"}</span>
-            </button>
-            {folder && (
-              <button className="icon" aria-label="Start with a new folder instead" onClick={() => setFolder(null)}>
-                <Icon name="x" />
+            <span className="chipgroup">
+              <button className="chip" onClick={pick} title={folder ?? "Work in a folder you already have"} disabled={working}>
+                <Icon name="folder" /> <span className="trunc">{folder ? folderName : "Open a folder"}</span>
               </button>
-            )}
+              {folder && (
+                <button className="icon" aria-label="Use a new folder instead" title="Use a new folder instead" onClick={() => setFolder(null)} disabled={working}>
+                  <Icon name="x" />
+                </button>
+              )}
+            </span>
+            <ModelPicker agents={props.agents} nameOf={nameOf} disabled={working || !props.ready} manage={props.manageAgents} value={props.choice} onChange={props.setChoice} />
             <span className="fill" />
-            <button className="btn primary" onClick={create} disabled={!props.ready || working || (!folder && !goal.trim())}>
-              {working ? "Opening…" : folder ? "Open project" : "Create project"}
+            <button className="send" aria-label={working ? "Starting" : "Send"} title={folder && !text.trim() ? "Open this folder" : "Send"} onClick={() => void send()} disabled={!canSend}>
+              <Icon name="send" />
             </button>
           </div>
         </div>
+        <p className="hint">{folder ? <>Works in <span className="mono">{folder}</span> as it is.</> : <>Arcex makes a new folder for it in Arcex Projects, or open one you already have.</>}</p>
       </div>
     </div>
   );
