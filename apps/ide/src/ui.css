@@ -189,14 +189,20 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 14px 0 10px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 500; font-size: 14px; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
 .outcome span { color: var(--ink-2); font-weight: 400; }
-.spin { flex: none; width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--ink-4); border-top-color: var(--ink); animation: turn 1s linear infinite; }
+.loader { flex: none; width: 14px; height: 14px; color: var(--ink); overflow: visible; --beat: 1.6s; }
+.loader g { transform-origin: 50px 50px; animation: turn 3.2s cubic-bezier(.55, .15, .45, .85) infinite; }
+.loader path { fill: currentColor; stroke: currentColor; stroke-width: 2.5; stroke-linejoin: round; opacity: .28; animation: blade var(--beat) ease-in-out infinite; animation-delay: calc(var(--i) * var(--beat) / 4 - var(--beat)); }
+.loader.work { --beat: .8s; }
+.loader.work g { animation-duration: 1.1s; animation-timing-function: linear; }
+@keyframes blade { 0%, 100% { opacity: .28; } 25% { opacity: 1; } 55% { opacity: .5; } }
+@media (prefers-reduced-motion: reduce) { .loader g { animation: none; } }
 .work { color: var(--ink-3); font-size: 14px; }
 .work summary { cursor: pointer; width: fit-content; max-width: 100%; list-style: none; display: flex; align-items: center; gap: 8px; padding: 3px 0; }
 .work summary::-webkit-details-marker { display: none; }
 .work summary .i { width: 13px; height: 13px; transition: transform .12s; opacity: .7; }
 .work[open] summary .i { transform: rotate(90deg); }
 .work summary:hover { color: var(--ink); }
-.work.running summary > span:not(.spin) { color: var(--ink-2); }
+.work.running summary > span { color: var(--ink-2); }
 .work .bad { color: var(--stop); }
 .work ul { list-style: none; margin: 6px 0 2px 6px; padding: 0 0 0 14px; border-left: 1px solid var(--line-2); display: grid; gap: 7px; color: var(--ink-2); }
 .work li { display: grid; grid-template-columns: 14px minmax(0, 1fr); align-items: center; column-gap: 9px; row-gap: 3px; }
@@ -205,7 +211,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .work li code { grid-column: 2; font: 12px/18px var(--mono); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plan-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; color: var(--ink-2); font-size: 14px; }
 .plan-list li { display: flex; align-items: flex-start; gap: 9px; line-height: 20px; }
-.plan-list li > .spin, .plan-list .box { margin-top: 3px; }
+.plan-list li > .loader, .plan-list .box { margin-top: 3px; }
 .plan-list .box { flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--ink-4); display: grid; place-items: center; }
 .plan-list .box .i { width: 10px; height: 10px; stroke-width: 2.6; }
 .plan-list li.completed { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--ink-4); }
@@ -311,7 +317,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .act { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; height: 38px; width: calc(100% + 16px); margin: 0 -8px; padding: 0 8px; border-radius: 9px; text-align: left; }
 .act:hover { background: var(--hover); }
 .act > .i { color: var(--ink-2); }
-.act .spin { width: 18px; height: 18px; }
+.act .loader { width: 18px; height: 18px; }
 @keyframes turn { to { transform: rotate(360deg); } }
 .field { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 6px 0 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--raised); font-size: 14px; }
 .field:focus-within { border-color: var(--ink-3); }

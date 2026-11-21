@@ -3,7 +3,7 @@ import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } 
 import { ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Md } from "./md.tsx";
-import { AutoText, Icon, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -163,7 +163,7 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
   return (
     <details className={running ? "work running" : "work"}>
       <summary>
-        {running && <span className="spin" aria-hidden="true" />}
+        {running && <Loader work />}
         <span>{summarize(steps)}</span>
         {failed > 0 && <span className="bad">· {failed} failed</span>}
         <Icon name="chev" />
@@ -174,7 +174,7 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
           const unconfirmed = (step.status === "running" && !live) || step.status === "interrupted";
           return (
             <li key={step.id} className={step.status === "failed" || unconfirmed ? "bad" : undefined}>
-              {pending ? <span className="spin" aria-hidden="true" /> : <Icon name={step.status === "done" ? "check" : "x"} />}
+              {pending ? <Loader work /> : <Icon name={step.status === "done" ? "check" : "x"} />}
               <span className="what">{step.label}{unconfirmed ? " · Unconfirmed" : ""}</span>
               {step.detail && step.detail !== step.label && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
             </li>
@@ -192,7 +192,7 @@ function PlanList({ plan, docked }: { plan: Plan; docked: boolean }) {
     <ol className="plan-list">
       {plan.entries.map((entry, index) => (
         <li key={index} className={entry.status}>
-          {entry.status === "in_progress" ? <span className="spin" aria-hidden="true" /> : <span className="box">{entry.status === "completed" && <Icon name="check" />}</span>}
+          {entry.status === "in_progress" ? <Loader /> : <span className="box">{entry.status === "completed" && <Icon name="check" />}</span>}
           <span>{entry.content}</span>
         </li>
       ))}
@@ -245,7 +245,7 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
       {!live && turn.plan && <PlanList plan={turn.plan} docked={false} />}
       {live && thread.state !== "needs_you" && (
         <div className="live">
-          <span className="spin" aria-hidden="true" />
+          <Loader work={!!running} />
           <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? stateLabel(thread) ?? "Working"}</span>
         </div>
       )}
@@ -623,7 +623,7 @@ export function Panel(props: {
               <header><b>Recent activity</b></header>
               {recent.map((t) => (
                 <button key={t.id} className="act" onClick={() => props.open(t)}>
-                  {busy(t) && t.state !== "needs_you" ? <span className="spin" /> : <Icon name={t.state === "idle" ? "circlecheck" : "x"} />}
+                  {busy(t) && t.state !== "needs_you" ? <Loader /> : <Icon name={t.state === "idle" ? "circlecheck" : "x"} />}
                   <span className="trunc">{t.title}</span>
                   <span className="when">{stateLabel(t) || ago(t.updatedAt)}</span>
                 </button>

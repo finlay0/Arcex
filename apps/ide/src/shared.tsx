@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
 import type { Agent, Thread } from "@arcex/contracts";
 
 declare global {
@@ -37,6 +37,23 @@ export type Actions = {
 export const Icon = ({ name }: { name: string }) => (
   <svg className="i" aria-hidden="true">
     <use href={`#${name}`} />
+  </svg>
+);
+
+/** One blade of the Arcex mark, pointing up. The mark is four of them turned about the centre. */
+const BLADE = "M26 11 L38 1 L67 12 L51 20 L44 45 L37 43 Z";
+
+/**
+ * The Arcex mark, alive. Its blades light up in turn while the agent thinks; while it runs a command or edits
+ * a file the whole mark turns faster.
+ */
+export const Loader = ({ work = false }: { work?: boolean }) => (
+  <svg className={work ? "loader work" : "loader"} viewBox="-2 -2 104 104" aria-hidden="true">
+    <g>
+      {[0, 1, 2, 3].map((index) => (
+        <path key={index} d={BLADE} transform={`rotate(${index * 90} 50 50)`} style={{ "--i": index } as CSSProperties} />
+      ))}
+    </g>
   </svg>
 );
 
