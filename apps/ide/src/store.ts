@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, Thread } from "@arcex/contracts";
+import type { About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, SpeechState, Thread } from "@arcex/contracts";
 
 export type State = {
   /** "reconnecting" keeps the workspace on screen while the engine comes back; "lost" means it hasn't for a while. */
@@ -14,9 +14,11 @@ export type State = {
   items: Record<string, Item[]>;
   /** The last time an agent used a project's browser, so the Browser tab can be shown. */
   browse: { projectId: string; at: number } | null;
+  /** Voice dictation's model, once the client has asked about it. */
+  speech: SpeechState | null;
 };
 
-let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null };
+let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null, speech: null };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => {
   state = { ...state, ...next };
@@ -134,6 +136,7 @@ function receive({ data }: MessageEvent) {
       items: known ? state.items : { ...state.items, [message.thread.id]: [] },
     });
   }
+  else if (message.event === "speech") set({ speech: message.speech });
   else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });
   else if (message.event === "settings") set({ settings: message.settings, agents: message.agents });
   else if (message.event === "gone") {

@@ -140,6 +140,24 @@ export type Requests = {
   "thread.prompt": { params: { threadId: string; text: string }; result: { ok: true } };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };
   "ask.answer": { params: { threadId: string; itemId: string; optionId: string | null }; result: { ok: true } };
+  /** Voice dictation runs on this computer. The speech model downloads once, when the user first asks for it. */
+  "speech.status": { params: Record<string, never>; result: SpeechState };
+  "speech.prepare": { params: Record<string, never>; result: SpeechState };
+  "speech.start": { params: Record<string, never>; result: { recordingId: string } };
+  /** `pcm` is base64 of 16 kHz mono 16-bit little-endian samples, at most about a second per chunk. */
+  "speech.chunk": { params: { recordingId: string; pcm: string }; result: { ok: true } };
+  "speech.finish": { params: { recordingId: string }; result: { text: string } };
+  "speech.cancel": { params: { recordingId: string }; result: { ok: true } };
+};
+
+export type SpeechState = {
+  state: "missing" | "downloading" | "ready" | "failed";
+  /** 0 to 1 while downloading. */
+  progress: number;
+  /** Download size in bytes. */
+  size: number;
+  model: string;
+  error?: string;
 };
 
 export type Method = keyof Requests;
@@ -154,4 +172,5 @@ export type EventMessage =
   | { event: "settings"; settings: Settings; agents: Agent[] }
   | { event: "gone"; kind: "project" | "thread"; id: string }
   /** An agent is using the project's browser, so the client shows the Browser tab. */
-  | { event: "browse"; projectId: string };
+  | { event: "browse"; projectId: string }
+  | { event: "speech"; speech: SpeechState };

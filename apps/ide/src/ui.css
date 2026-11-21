@@ -386,3 +386,14 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .lost { height: 100%; display: grid; place-items: center; color: var(--ink-2); }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .chipgroup { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+
+/* Voice dictation in the message box. */
+.mic .ring { width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--ink) calc(var(--p) * 360deg), var(--ink-4) 0); -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
+.dictating { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 4px 0 12px; border-radius: 18px; background: var(--raised-2); border: 1px solid var(--line-2); animation: arrive .14s ease-out; }
+.dictating .bars { display: inline-flex; align-items: center; gap: 3px; height: 18px; }
+.dictating .bars i { width: 3px; height: 18px; border-radius: 2px; background: var(--ink); transform-origin: center; transition: transform .08s linear; }
+.dictating .time { font: 12px/1 var(--mono); color: var(--ink-2); min-width: 30px; }
+.dictating .icon { width: 28px; height: 28px; }
+.dictating .done { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); }
+.dictating .done .i { width: 15px; height: 15px; stroke-width: 2.4; }
+@media (prefers-reduced-motion: reduce) { .dictating .bars i { transition: none; } }

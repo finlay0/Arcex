@@ -248,6 +248,7 @@ export function SettingsView(props: {
                 <Row title="Arcex" hint="An AI development environment built around what you're building."><span className="mono">{props.about.version}</span></Row>
                 <Row title="Your data" hint="Projects, threads and settings are saved in this folder on your computer."><span className="mono path" title={props.about.dataDir}>{props.about.dataDir}</span></Row>
                 <Row title="New projects" hint="Where Arcex creates a folder when you start from an idea."><span className="mono path" title={props.about.projectsDir}>{props.about.projectsDir}</span></Row>
+                <Row title="Voice dictation" hint="Runs on this computer, so what you say stays here. Speech model: NVIDIA Parakeet TDT-CTC 110M (CC BY 4.0), run with transcribe.cpp (MIT)."><span className="mono">Parakeet 110M</span></Row>
                 <Row title="Usage" hint={`${plural(props.projects.length, "project")} and ${plural(props.threads.length, "thread")} on this computer.`}><span /></Row>
               </div>
             </>

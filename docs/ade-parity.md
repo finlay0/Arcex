@@ -54,7 +54,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 | ID | Feature | Claude / Codex behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| K1 | Voice dictation | Mic button, live level, transcribe into the box | P0 | partial | Finlay chose a local model on November 21. Engine `transcribe-cpp` (MIT) with the `handy-computer/parakeet-tdt_ctc-110m-gguf` default (135 MB, downloads on first use). Larger models go in Settings |
+| K1 | Voice dictation | Mic button, live level, transcribe into the box | P0 | done | `Dictation.tsx` plus engine `speech.ts` (`transcribe-cpp`, Parakeet 110M, 135 MB on first press, checksum verified, unloads after 10 idle min). Streams 1 s chunks over the WebSocket. Enter finishes, Esc discards. Later: a keyboard shortcut, a bigger-model choice in Settings, dictation in the new-project box |
 | K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | open | ACP prompt `image` and `resource_link` blocks, checked against `promptCapabilities` |
 | K3 | @-mention files | `@` opens a fuzzy file picker and inserts a chip | P0 | open | `project.files` exists. Add a search request |
 | K4 | Slash commands and skills | `/` menu from the agent's commands | P0 | open | ACP `available_commands_update` |
@@ -125,6 +125,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · K1 local voice dictation in the message box.
 - 2026-11-21 · Arcex mark loader replaces the spinner (6bd6046).
 - 2026-11-21 · Conversation rebuilt: narration, folded work rows, docked plan and ask, Claude task tools on (3b216aa).
 - 2026-11-21 · Agents can drive the Browser tab (a885e7a).
@@ -133,8 +134,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. K1 dictation (in progress: engine `transcribe-cpp`, mic button in the composer).
-2. C5 thinking, C6 edit counts, C7 command output: engine update handling plus rows.
+1. C5 thinking, C6 edit counts, C7 command output: engine update handling plus rows.
 3. K6 permission modes and A2 plan approval.
 4. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
 5. G1 diff pane upgrade, C9 retry and edit-resend, C12 turn outcome.

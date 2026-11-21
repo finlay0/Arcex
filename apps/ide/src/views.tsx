@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
 import { ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
+import { Dictation } from "./Dictation.tsx";
 import { Md } from "./md.tsx";
 import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
@@ -383,6 +384,10 @@ export function Conversation(props: {
   const draftKey = thread?.id ?? project?.id;
   const draft = draftKey ? props.drafts[draftKey] ?? "" : props.unassignedDraft;
   const setDraft = (value: string) => target ? saveDraft(target, value) : props.setUnassignedDraft(value);
+  // Dictation finishes after a pause, so it adds to whatever the box holds by then.
+  const latestDraft = useRef(draft);
+  latestDraft.current = draft;
+  const addSpoken = (text: string) => setDraft(latestDraft.current.trim() ? `${latestDraft.current.trimEnd()} ${text}` : text);
   useEffect(() => {
     if (target && props.seed) {
       const seeded = [draft, props.seed].filter(Boolean).join("\n\n");
@@ -452,6 +457,7 @@ export function Conversation(props: {
           }}
         />
         <span className="fill" />
+        <Dictation onText={addSpoken} fail={actions.fail} disabled={!props.connected} />
         {working ? (
           <button className="send" aria-label={thread.state === "stopping" ? "Stopping" : "Stop"} title="Stop" disabled={!props.connected || thread.state === "stopping"} onClick={() => void actions.cancel(thread.id)}>
             <Icon name="stop" />

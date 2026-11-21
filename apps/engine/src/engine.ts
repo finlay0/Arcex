@@ -1,4 +1,5 @@
 // Projects, threads and their timelines. Clients only see what this module emits.
+import { createSpeech } from "./speech.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
@@ -106,6 +107,7 @@ export function createEngine(
   extras: { browser?: BrowserBridge; connectorEnv?(): { name: string; value: string }[] } = {},
 ) {
   let settings = db.settings();
+  const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
@@ -587,6 +589,13 @@ export function createEngine(
       return { ok: true };
     },
 
+    "speech.status": () => speech.status(),
+    "speech.prepare": () => speech.prepare(),
+    "speech.start": () => speech.start(),
+    "speech.chunk": (params) => speech.chunk(params),
+    "speech.finish": (params) => speech.finish(params),
+    "speech.cancel": (params) => speech.cancel(params),
+
     "ask.answer"(params) {
       const thread = threadOf(params.threadId);
       const pending = liveOf(thread.id).asks.get(String(params.itemId));
@@ -637,6 +646,7 @@ export function createEngine(
       return Promise.resolve().then(() => handler((params ?? {}) as never));
     },
     close() {
+      speech.close();
       for (const live of lives.values()) {
         clearTimeout(live.stopTimer);
         live.turn?.abort();
