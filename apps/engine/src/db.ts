@@ -35,6 +35,7 @@ export function openDb(dataDir: string) {
   const columns = db.prepare("PRAGMA table_info(threads)").all().map((row) => row.name);
   if (!columns.includes("archived")) db.exec("ALTER TABLE threads ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
   if (!columns.includes("model")) db.exec("ALTER TABLE threads ADD COLUMN model TEXT");
+  if (!columns.includes("queued")) db.exec("ALTER TABLE threads ADD COLUMN queued TEXT");
   if (!columns.includes("choices")) db.exec("ALTER TABLE threads ADD COLUMN choices TEXT");
   if (!columns.includes("state")) db.exec("ALTER TABLE threads ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'");
   db.exec("UPDATE threads SET state = 'interrupted' WHERE state IN ('starting', 'working', 'needs_you', 'stopping')");
@@ -52,6 +53,7 @@ export function openDb(dataDir: string) {
     projectId: row.project_id as string,
     provider: row.provider as Thread["provider"],
     model: row.model ? (JSON.parse(row.model as string) as Thread["model"]) : null,
+    queued: row.queued ? (JSON.parse(row.queued as string) as string[]) : [],
     choices: row.choices ? (JSON.parse(row.choices as string) as Thread["choices"]) : {},
     title: row.title as string,
     state: row.state as Thread["state"],
@@ -101,12 +103,12 @@ export function openDb(dataDir: string) {
     threads: () => db.prepare("SELECT * FROM threads ORDER BY created_at").all().map(thread),
     insertThread(t: ThreadRow) {
       db.prepare(
-        "INSERT INTO threads (id, project_id, provider, model, choices, title, session_id, created_at, updated_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), t.title, t.sessionId, t.createdAt, t.updatedAt, t.state);
+        "INSERT INTO threads (id, project_id, provider, model, choices, queued, title, session_id, created_at, updated_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.title, t.sessionId, t.createdAt, t.updatedAt, t.state);
     },
     saveThread(t: ThreadRow) {
-      db.prepare("UPDATE threads SET title = ?, archived = ?, model = ?, choices = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
-        t.title, t.archived ? 1 : 0, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), t.sessionId, t.updatedAt, t.state, t.id,
+      db.prepare("UPDATE threads SET title = ?, archived = ?, model = ?, choices = ?, queued = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
+        t.title, t.archived ? 1 : 0, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.sessionId, t.updatedAt, t.state, t.id,
       );
     },
     removeThread(id: string) {

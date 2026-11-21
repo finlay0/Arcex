@@ -435,3 +435,12 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .dockbar > .ask .btns { flex-wrap: wrap; }
 .dockbar > .ask { max-height: 62vh; overflow-y: auto; }
 .composer .tools > .ends { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+
+/* Messages queued while the agent works. */
+.dockbar > .queue { list-style: none; max-width: 760px; margin: 0 auto 8px; padding: 0; display: grid; gap: 4px; }
+.queue li { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); color: var(--ink-3); font-size: 13px; }
+.queue li > .i { flex: none; width: 13px; height: 13px; opacity: .7; }
+.queue .qtext { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.queue .qbtn { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink-3); cursor: pointer; }
+.queue .qbtn:hover { background: var(--hover); color: var(--ink); }
+.queue .qbtn .i { width: 13px; height: 13px; }

@@ -470,6 +470,13 @@ export function createEngine(
     const endings: Partial<Record<ThreadState, "stopped" | "failed" | "interrupted">> = { stopped: "stopped", failed: "failed", interrupted: "interrupted" };
     put(thread, { id: randomUUID(), kind: "end", seconds: Math.round((Date.now() - started) / 1000), outcome: endings[ended] ?? "done" });
     setState(thread, ended);
+    // The next waiting message goes out only after a clean finish. After a stop or a failure the user decides.
+    if (ended === "idle" && thread.queued.length && threads.has(thread.id)) {
+      const [next, ...rest] = thread.queued;
+      thread.queued = rest;
+      db.saveThread(thread);
+      void run(thread, next!);
+    }
   }
 
   const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
@@ -637,7 +644,7 @@ export function createEngine(
       const prompt = text(params.text, "message", 20_000);
       const now = Date.now();
       const thread: ThreadRow = {
-        id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, title: titleFrom(prompt),
+        id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: titleFrom(prompt),
         state: "starting", archived: false, sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
@@ -705,11 +712,30 @@ export function createEngine(
 
     "thread.prompt"(params) {
       const thread = threadOf(params.threadId);
+      if (busyState(thread) && params.queue === true) {
+        if (thread.queued.length >= 10) throw new Error("ten messages are already waiting. Remove one first");
+        thread.queued = [...thread.queued, text(params.text, "message", 20_000)];
+        db.saveThread(thread);
+        db.clearSentDraft(thread.projectId, thread.id, params.text);
+        emit({ event: "thread", thread: publicThread(thread) });
+        return { ok: true, queued: true };
+      }
       if (busyState(thread)) throw new Error("this thread is still working");
       if (changingModels.has(thread.id)) throw new Error("wait for the model to finish switching");
       void run(thread, text(params.text, "message", 20_000));
       db.clearSentDraft(thread.projectId, thread.id, params.text);
       return { ok: true };
+    },
+
+    "thread.unqueue"(params) {
+      const thread = threadOf(params.threadId);
+      const index = Number(params.index);
+      if (!Number.isInteger(index) || index < 0 || index >= thread.queued.length) throw new Error("that message already went out");
+      const removed = thread.queued[index]!;
+      thread.queued = thread.queued.filter((_, at) => at !== index);
+      db.saveThread(thread);
+      emit({ event: "thread", thread: publicThread(thread) });
+      return { text: removed };
     },
 
     "thread.cancel"(params) {

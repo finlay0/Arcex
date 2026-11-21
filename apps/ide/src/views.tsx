@@ -458,14 +458,16 @@ export function Conversation(props: {
   const agentId = thread ? thread.provider : props.choice.agentId;
   const health = props.status?.find((entry) => entry.id === agentId);
   const notReady = health && (!health.installed || health.signedIn === false);
-  const canSend = Boolean(target && props.connected && !notReady && !working && !sending && draft.trim());
+  const queueFull = working && (thread?.queued?.length ?? 0) >= 10;
+  const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && draft.trim() && (!working || thread?.state !== "stopping"));
 
   const send = async () => {
     if (!canSend || !target || pendingSend.current) return;
     pendingSend.current = true;
     setSending(true);
     try {
-      if (thread) await actions.prompt(thread.id, draft);
+      if (thread && working) await call("thread.prompt", { threadId: thread.id, text: draft, queue: true });
+      else if (thread) await actions.prompt(thread.id, draft);
       else await props.start(draft);
       clearSentDraft(target, draft);
       setAway(false);
@@ -598,8 +600,39 @@ export function Conversation(props: {
         )}
         {working && thread.state !== "needs_you" && list.at(-1)?.plan && <PlanList plan={list.at(-1)!.plan!} docked />}
         {pendingAsk && <AskCard thread={thread} item={pendingAsk} actions={actions} active />}
+        {(thread.queued?.length ?? 0) > 0 && (
+          <ol className="queue" aria-label="Queued messages">
+            {thread.queued.map((text, index) => (
+              <li key={`${index}:${text.slice(0, 40)}`}>
+                <Icon name="up" />
+                <span className="qtext" title={text}>{text}</span>
+                <button
+                  className="qbtn"
+                  title="Edit"
+                  aria-label="Edit queued message"
+                  onClick={() =>
+                    call("thread.unqueue", { threadId: thread.id, index })
+                      .then(({ text: back }) => setDraft([back, draft].filter((part) => part.trim()).join("\n\n")))
+                      .catch(actions.fail)
+                  }
+                >
+                  <Icon name="edit" />
+                </button>
+                <button className="qbtn" title="Remove" aria-label="Remove queued message" onClick={() => call("thread.unqueue", { threadId: thread.id, index }).catch(actions.fail)}>
+                  <Icon name="x" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
         {composer}
-        {notice || <p className="hint">{prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter to send" : "Enter to send · Shift + Enter for a new line"}</p>}
+        {notice || (
+          <p className="hint">
+            {working
+              ? queueFull ? "The queue is full. It sends as this turn finishes." : `${prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter" : "Enter"} to queue · it sends when this turn finishes`
+              : prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter to send" : "Enter to send · Shift + Enter for a new line"}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -37,6 +37,8 @@ export type Thread = {
   model: { value: string; name: string } | null;
   /** The thread's agent settings by choice id, such as { mode: "acceptEdits", effort: "high" }. Missing means the agent's default. */
   choices: Record<string, string>;
+  /** Messages the user sent while the agent was working. The first goes out when the turn finishes. */
+  queued: string[];
   title: string;
   state: ThreadState;
   /** Archived threads are hidden from the sidebar and the board but keep their history. */
@@ -157,7 +159,9 @@ export type Requests = {
   "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   "thread.items": { params: { threadId: string }; result: Item[] };
-  "thread.prompt": { params: { threadId: string; text: string }; result: { ok: true } };
+  "thread.prompt": { params: { threadId: string; text: string; /** While the agent works, add it to the queue instead. */ queue?: boolean }; result: { ok: true; queued?: boolean } };
+  /** Takes a message out of the queue, returning its text so the client can put it back in the message box. */
+  "thread.unqueue": { params: { threadId: string; index: number }; result: { text: string } };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };
   "ask.answer": { params: { threadId: string; itemId: string; optionId: string | null }; result: { ok: true } };
   /** Voice dictation runs on this computer. The speech model downloads once, when the user first asks for it. */

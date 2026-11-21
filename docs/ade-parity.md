@@ -58,7 +58,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | open | ACP prompt `image` and `resource_link` blocks, checked against `promptCapabilities` |
 | K3 | @-mention files | `@` opens a fuzzy file picker and inserts a chip | P0 | open | `project.files` exists. Add a search request |
 | K4 | Slash commands and skills | `/` menu from the agent's commands | P0 | open | ACP `available_commands_update` |
-| K5 | Queue while working | Ctrl+Enter queues the next message, shown above the box, editable | P0 | open | |
+| K5 | Queue while working | Enter while the agent works queues the message above the box (edit or remove); the next one sends when the turn finishes cleanly. Kept in the engine, so it survives reloads | P0 | done | Stops and failures leave the queue waiting |
 | K6 | Permission / approval mode picker | Ask before edits · Auto-accept edits · Plan mode · Full access (Codex: read-only, auto, full) | P0 | open | ACP session modes (`current_mode_update`, `session/set_mode`). Pick friendly names for vibe coders |
 | K7 | Reasoning effort / speed | Effort picker (low to max), fast mode | P1 | open | ACP session config options. The adapter exposes effort |
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | open | |
@@ -125,6 +125,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · K5 queue while working: queued messages sit above the box and send in order when a turn finishes.
 - 2026-11-21 · K6 mode, K7 effort and fast, A2 plan approval with the plan shown. Files outside the project (an agent's own plan notes) no longer count as changed.
 - 2026-11-21 · C6, C7 and C12 shipped: edit line counts with patches, command output and turn duration. C5 thinking rendering is in.
 - 2026-11-21 · K1 local voice dictation in the message box.
@@ -136,7 +137,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
+1. K4 slash commands, K2 attachments, K3 @-mentions.
 2. G1 diff pane upgrade (new files show +0 −0 today), C9 retry and edit-resend.
 3. C5 thinking stream (adapter or SDK setting), then K6 remembering picks across restarts.
 
