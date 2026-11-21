@@ -146,4 +146,6 @@ export type EventMessage =
   | { event: "thread"; thread: Thread }
   | { event: "item"; threadId: string; item: Item }
   | { event: "settings"; settings: Settings; agents: Agent[] }
-  | { event: "gone"; kind: "project" | "thread"; id: string };
+  | { event: "gone"; kind: "project" | "thread"; id: string }
+  /** An agent is using the project's browser, so the client shows the Browser tab. */
+  | { event: "browse"; projectId: string };

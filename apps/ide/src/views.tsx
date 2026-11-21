@@ -710,7 +710,7 @@ function Browser({ project, found, fail }: { project: Project; found: string[]; 
       )}
       {project.previewUrl ? (
         <div className={phone ? "bstage phone" : "bstage"}>
-          <iframe key={nonce} src={project.previewUrl} title="Your running app" />
+          <iframe key={nonce} name="arcex-preview" src={project.previewUrl} title="Your running app" />
         </div>
       ) : (
         <div className="bempty">

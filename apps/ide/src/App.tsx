@@ -148,6 +148,12 @@ export function App() {
   const search = useRef<HTMLInputElement>(null);
 
   const overlay = screen.kind === "settings" || screen.kind === "toolbox";
+  // When an agent uses the browser of the project on screen, show it so the user can watch.
+  useEffect(() => {
+    if (!store.browse || store.browse.projectId !== projectId) return;
+    setPanel(true);
+    setTab("browser");
+  }, [store.browse]);
   /** Moves to a screen, remembering where to come back to from Settings or the Toolbox. */
   const setScreen = (next: Screen) => {
     if (screen.kind === "thread" || screen.kind === "new-project") setLast(screen);

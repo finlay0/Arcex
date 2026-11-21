@@ -62,8 +62,22 @@ function nameFrom(goal: string): string {
 }
 
 /** Says what a tool call did in words a non-developer would use. The raw title stays in `detail`. */
+const BROWSER_STEPS: Record<string, string> = {
+  browser_open: "Opened the app in the browser",
+  browser_snapshot: "Looked at the page",
+  browser_click: "Clicked on the page",
+  browser_type: "Typed on the page",
+  browser_press: "Pressed a key on the page",
+  browser_screenshot: "Took a screenshot",
+  browser_console: "Checked the page for errors",
+  browser_back: "Went back a page",
+  browser_reload: "Reloaded the page",
+};
+
 function describe(kind: string, title: string, files: string[]): string {
   // Tools reached through a connector arrive with machine names such as mcp__arcex__search_toolbox.
+  const browserStep = /browser_[a-z]+/.exec(title)?.[0];
+  if (browserStep && BROWSER_STEPS[browserStep]) return BROWSER_STEPS[browserStep];
   const connector = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(title);
   if (connector) return connector[1] === "arcex" ? "Checked the Arcex toolbox" : `Used ${connector[1]!.replace(/[-_]/g, " ")}`;
   if (title === "ToolSearch") return "Looked for the right tool";
@@ -82,7 +96,14 @@ function describe(kind: string, title: string, files: string[]): string {
   }
 }
 
-export function createEngine(db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void, account = createAccountClient()) {
+/** Drives the Browser tab of the desktop app. Absent when the client runs in an ordinary browser. */
+export type BrowserBridge = { act(action: string, args: Record<string, unknown>): Promise<unknown> };
+
+export function createEngine(
+  db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void,
+  account = createAccountClient(),
+  extras: { browser?: BrowserBridge; connectorEnv?(): { name: string; value: string }[] } = {},
+) {
   let settings = db.settings();
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
@@ -221,6 +242,8 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
             { name: "ARCEX_TOOLBOX", value: connector.toolboxFile },
             { name: "ARCEX_PROJECT_NAME", value: project.name },
             { name: "ARCEX_PROJECT_GOAL", value: project.goal },
+            { name: "ARCEX_PROJECT_ID", value: project.id },
+            ...(extras.connectorEnv?.() ?? []),
           ],
         },
         ...(settings.research ? [{ type: "http" as const, name: "arcex-research", url: RESEARCH_MCP, headers: [] }] : []),
@@ -568,7 +591,35 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
     },
   };
 
+  const BROWSER_ACTIONS = new Set(["open", "snapshot", "click", "type", "press", "screenshot", "console", "back", "reload"]);
+  /** An agent's browser tool call, from the Arcex connector. It only ever reaches the project's own Browser tab. */
+  async function browse(projectId: unknown, action: unknown, raw: unknown): Promise<unknown> {
+    const project = projectOf(projectId);
+    if (typeof action !== "string" || !BROWSER_ACTIONS.has(action)) throw new Error("unknown browser action");
+    if (!extras.browser) throw new Error("The browser is only available in the Arcex desktop app.");
+    const input = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const args: Record<string, unknown> = {};
+    if (action === "open") {
+      const parsed = new URL(text(input.url, "address", 2000));
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("the address must start with http or https");
+      args.url = parsed.href;
+      args.reload = project.previewUrl === parsed.href;
+      handlers["project.setPreview"]({ projectId: project.id, url: parsed.href });
+    }
+    if (action === "click" || action === "type") args.ref = Number(input.ref);
+    if (action === "type") {
+      // Typed exactly as given: an empty string clears the field and spaces matter.
+      if (typeof input.text !== "string" || input.text.length > 5000) throw new Error("text must be at most 5000 characters");
+      args.text = input.text;
+      args.submit = input.submit === true;
+    }
+    if (action === "press") args.key = text(input.key, "key", 20);
+    emit({ event: "browse", projectId: project.id });
+    return extras.browser.act(action, args);
+  }
+
   return {
+    browse,
     handle: (method: string, params: unknown): Promise<unknown> => {
       const handler = (handlers as Record<string, ((params: never) => unknown) | undefined>)[method];
       if (!Object.hasOwn(handlers, method) || !handler) return Promise.reject(new Error("unknown request"));

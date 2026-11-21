@@ -1,7 +1,7 @@
 // Engine entry point: serves the built client and one WebSocket that speaks @arcex/contracts.
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +48,38 @@ function vaultRequest(action: "read" | "write", token?: string | null) {
     });
   });
 }
+/** Asks the desktop shell to do something only it can, and waits for its answer. */
+function desktopCall(channel: string, payload: Record<string, unknown>, waitMs: number) {
+  return new Promise<unknown>((resolve, reject) => {
+    const id = randomUUID();
+    const finish = (error?: string, value?: unknown) => {
+      clearTimeout(timeout);
+      process.off("message", receive);
+      if (error) reject(new Error(error));
+      else resolve(value);
+    };
+    const receive = (message: unknown) => {
+      if (!message || typeof message !== "object" || !("id" in message) || message.id !== id ||
+        !("channel" in message) || message.channel !== channel) return;
+      finish("error" in message && typeof message.error === "string" ? message.error : undefined, "result" in message ? message.result : undefined);
+    };
+    const timeout = setTimeout(() => finish("The Arcex window took too long to respond."), waitMs);
+    process.on("message", receive);
+    process.send?.({ channel, id, ...payload }, (error) => {
+      if (error) finish("Couldn't reach the Arcex window.");
+    });
+  });
+}
+
+// Agents reach the Browser tab through the Arcex connector, which calls back into this engine.
+// The key is made fresh for every run and only handed to the connector, so web pages can't use the route.
+const browserKey = randomBytes(32).toString("hex");
+const engineUrl = () => {
+  const address = server.address();
+  return address && typeof address === "object" ? `http://127.0.0.1:${address.port}` : "";
+};
+const browserBridge = process.send ? { act: (action: string, args: Record<string, unknown>) => desktopCall("browser", { action, args }, 45_000) } : undefined;
+
 const account = createAccountClient(process.send ? {
   read: () => vaultRequest("read"),
   write: async (token) => { await vaultRequest("write", token); },
@@ -55,7 +87,41 @@ const account = createAccountClient(process.send ? {
 const engine = createEngine(openDb(dataDir), about, connector, (message) => {
   const data = JSON.stringify(message);
   for (const socket of sockets) socket.send(data);
-}, account);
+}, account, {
+  browser: browserBridge,
+  connectorEnv: () => [
+    { name: "ARCEX_ENGINE_URL", value: engineUrl() },
+    { name: "ARCEX_BROWSER_KEY", value: browserKey },
+  ],
+});
+
+function agentBrowser(request: IncomingMessage, response: import("node:http").ServerResponse) {
+  const reply = (status: number, body: unknown) => {
+    response.writeHead(status, { "content-type": "application/json" });
+    response.end(JSON.stringify(body));
+  };
+  const key = Buffer.from(String(request.headers["x-arcex-key"] ?? ""));
+  if (key.length !== browserKey.length || !timingSafeEqual(key, Buffer.from(browserKey))) return reply(403, { error: "forbidden" });
+  const chunks: Buffer[] = [];
+  let size = 0;
+  request.on("data", (chunk: Buffer) => {
+    size += chunk.length;
+    if (size > 64_000) request.destroy();
+    else chunks.push(chunk);
+  });
+  request.on("end", () => {
+    let body: { projectId?: unknown; action?: unknown; args?: unknown };
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      return reply(400, { error: "invalid request" });
+    }
+    engine.browse(body.projectId, body.action, body.args).then(
+      (result) => reply(200, { result }),
+      (error: unknown) => reply(400, { error: error instanceof Error ? error.message : String(error) }),
+    );
+  });
+}
 
 function localHost(host: string | undefined) {
   const address = server.address();
@@ -69,6 +135,7 @@ const server = createServer((request, response) => {
     return;
   }
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
+  if (pathname === "/agent/browser" && request.method === "POST") return agentBrowser(request, response);
   const file = path.join(clientDir, pathname === "/" ? "index.html" : pathname);
   // Stay inside the client folder.
   if (!file.startsWith(clientDir + path.sep) || !existsSync(file) || !statSync(file).isFile()) {

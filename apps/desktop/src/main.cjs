@@ -4,6 +4,7 @@ const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
 const { mkdir, readFile, rename, rm, writeFile } = require("node:fs/promises");
 const path = require("node:path");
+const { createAgentBrowser } = require("./browser.cjs");
 
 const engineDir = path.resolve(__dirname, "../../engine");
 const repoDir = path.resolve(__dirname, "../../..");
@@ -104,6 +105,20 @@ async function handleAccountVault(child, message) {
   if (child.connected) child.send({ channel: "account-vault", id: message.id, ...reply }, () => {});
 }
 
+let mainWindow;
+const agentBrowser = createAgentBrowser(() => mainWindow, () => engineUrl);
+
+async function handleBrowser(child, message) {
+  if (engine !== child || message?.channel !== "browser" || typeof message.id !== "string") return;
+  let reply;
+  try {
+    reply = { result: await agentBrowser.act(String(message.action), message.args ?? {}) };
+  } catch (error) {
+    reply = { error: error instanceof Error ? error.message : String(error) };
+  }
+  if (child.connected) child.send({ channel: "browser", id: message.id, ...reply }, () => {});
+}
+
 function startEngine(port) {
   return new Promise((resolve, reject) => {
     const child = spawn("node", ["--import", "tsx", "src/main.ts"], {
@@ -115,6 +130,7 @@ function startEngine(port) {
     });
     engine = child;
     child.on("message", (message) => void handleAccountVault(child, message));
+    child.on("message", (message) => void handleBrowser(child, message));
     const timer = setTimeout(() => {
       reject(new Error("The engine took too long to start."));
       child.kill();
@@ -191,6 +207,8 @@ app.whenReady().then(async () => {
     webPreferences: { contextIsolation: true, sandbox: true, preload: path.join(__dirname, "preload.cjs") },
   });
   win.setMenuBarVisibility(false);
+  mainWindow = win;
+  agentBrowser.watch(win);
 
   ipcMain.handle("ensure-engine", async (event) => {
     const frame = event.senderFrame;

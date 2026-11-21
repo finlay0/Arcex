@@ -12,9 +12,11 @@ export type State = {
   drafts: Record<string, string>;
   /** Timelines that have been loaded. Live items for other threads are ignored until they are loaded. */
   items: Record<string, Item[]>;
+  /** The last time an agent used a project's browser, so the Browser tab can be shown. */
+  browse: { projectId: string; at: number } | null;
 };
 
-let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {} };
+let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => {
   state = { ...state, ...next };
@@ -132,6 +134,7 @@ function receive({ data }: MessageEvent) {
       items: known ? state.items : { ...state.items, [message.thread.id]: [] },
     });
   }
+  else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });
   else if (message.event === "settings") set({ settings: message.settings, agents: message.agents });
   else if (message.event === "gone") {
     if (message.kind === "thread") set({ threads: state.threads.filter((t) => t.id !== message.id) });

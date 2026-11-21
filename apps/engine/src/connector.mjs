@@ -51,4 +51,100 @@ server.registerTool(
   async () => text(toolbox.map((tool) => `${tool.category}: ${tool.name} (${tool.id}). ${tool.what}`).join("\n")),
 );
 
+// ── The Browser tab. The user sees it in Arcex, beside the conversation, while the agent works in it.
+const engineUrl = process.env.ARCEX_ENGINE_URL;
+const browserKey = process.env.ARCEX_BROWSER_KEY;
+const projectId = process.env.ARCEX_PROJECT_ID;
+
+async function browse(action, args = {}) {
+  try {
+    const response = await fetch(`${engineUrl}/agent/browser`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-arcex-key": browserKey },
+      body: JSON.stringify({ projectId, action, args }),
+    });
+    const body = await response.json();
+    if (!response.ok) return { content: [{ type: "text", text: body.error ?? "The browser didn't respond." }], isError: true };
+    return body.result;
+  } catch {
+    return { content: [{ type: "text", text: "Couldn't reach Arcex. The app may have closed." }], isError: true };
+  }
+}
+const reply = (result, describe) => (result?.isError ? result : text(describe(result)));
+const where = (result) => `Now on ${result.url}${result.title ? ` (${result.title})` : ""}. Use browser_snapshot to read it.`;
+
+if (engineUrl && browserKey && projectId) {
+  const about =
+    "Arcex has a Browser tab beside the conversation that the user can watch. Use it to check the app you are building: " +
+    "start the app's dev server, open its local address, then read the page, click, type and look for errors. ";
+  server.registerTool(
+    "browser_open",
+    {
+      description: about + "Opens an address, usually the local dev server such as http://localhost:3000. Opening the current address reloads it.",
+      inputSchema: { url: z.string().min(1).max(2000).describe("Full address, starting with http:// or https://") },
+    },
+    async ({ url }) => reply(await browse("open", { url }), where),
+  );
+  server.registerTool(
+    "browser_snapshot",
+    {
+      description: "Reads the page in the Browser tab: headings, text, and every link, button and field with a number like [4] to use with browser_click and browser_type. Take a new one after the page changes.",
+      inputSchema: {},
+    },
+    async () => reply(await browse("snapshot"), (result) => `${result.title || "Untitled"} — ${result.url}\n\n${result.page || "(The page is empty.)"}`),
+  );
+  server.registerTool(
+    "browser_click",
+    {
+      description: "Clicks a link, button or other element in the Browser tab, by its number from browser_snapshot.",
+      inputSchema: { ref: z.number().int().min(1).describe("The element's number from the latest browser_snapshot") },
+    },
+    async ({ ref }) => reply(await browse("click", { ref }), (result) => `Clicked [${ref}]. ${where(result)}`),
+  );
+  server.registerTool(
+    "browser_type",
+    {
+      description: "Replaces the text in a field in the Browser tab, by its number from browser_snapshot. Set submit to press Enter afterwards.",
+      inputSchema: {
+        ref: z.number().int().min(1).describe("The field's number from the latest browser_snapshot"),
+        text: z.string().max(5000).describe("The text to enter; empty clears the field"),
+        submit: z.boolean().optional().describe("Press Enter after typing"),
+      },
+    },
+    async ({ ref, text: value, submit }) => reply(await browse("type", { ref, text: value, submit: submit === true }), (result) => `Typed into [${ref}]. ${where(result)}`),
+  );
+  server.registerTool(
+    "browser_press",
+    {
+      description: "Presses a key in the Browser tab: Enter, Tab, Escape, Backspace, Delete, Space, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Home, End, PageUp or PageDown.",
+      inputSchema: { key: z.string().min(1).max(20) },
+    },
+    async ({ key }) => reply(await browse("press", { key }), (result) => `Pressed ${key}. ${where(result)}`),
+  );
+  server.registerTool(
+    "browser_screenshot",
+    { description: "Takes a picture of the page in the Browser tab, to check how it looks.", inputSchema: {} },
+    async () => {
+      const result = await browse("screenshot");
+      return result?.isError ? result : { content: [{ type: "image", data: result.image, mimeType: result.mimeType }] };
+    },
+  );
+  server.registerTool(
+    "browser_console",
+    { description: "Lists what the page in the Browser tab logged since the last check, including errors.", inputSchema: {} },
+    async () => reply(await browse("console"), (result) =>
+      result.messages.length ? result.messages.map((m) => `${m.level}: ${m.message} (${m.source})`).join("\n") : "Nothing new in the page's console."),
+  );
+  server.registerTool(
+    "browser_back",
+    { description: "Goes back one page in the Browser tab.", inputSchema: {} },
+    async () => reply(await browse("back"), where),
+  );
+  server.registerTool(
+    "browser_reload",
+    { description: "Reloads the page in the Browser tab.", inputSchema: {} },
+    async () => reply(await browse("reload"), where),
+  );
+}
+
 await server.connect(new StdioServerTransport());
