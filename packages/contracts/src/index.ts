@@ -10,6 +10,12 @@ export type Agent = { id: string; name: string; builtin: boolean; /** The comman
 /** One model an agent offers, as the agent itself describes it. */
 export type ModelOption = { value: string; name: string; description: string };
 
+/**
+ * A setting the agent offers besides its model, such as how much it asks before acting ("mode"), how hard it
+ * thinks ("thought_level"), fast mode ("model_config") or planning first ("collaboration_mode").
+ */
+export type AgentChoice = { id: string; name: string; category: string; current: string; values: ModelOption[] };
+
 export type Project = {
   id: string;
   name: string;
@@ -29,6 +35,8 @@ export type Thread = {
   provider: ProviderId;
   /** The model picked for this thread. Null means the agent's own default. */
   model: { value: string; name: string } | null;
+  /** The thread's agent settings by choice id, such as { mode: "acceptEdits", effort: "high" }. Missing means the agent's default. */
+  choices: Record<string, string>;
   title: string;
   state: ThreadState;
   /** Archived threads are hidden from the sidebar and the board but keep their history. */
@@ -66,7 +74,8 @@ export type Item =
   | { id: string; kind: "think"; text: string; seconds: number | null }
   /** The agent's own plan for the turn, kept up to date as it works. */
   | { id: string; kind: "plan"; entries: PlanEntry[] }
-  | { id: string; kind: "ask"; title: string; detail: string; options: AskOption[]; answer: string | null }
+  /** `body` is what the agent wants approved in full, such as its plan, as markdown. */
+  | { id: string; kind: "ask"; title: string; detail: string; body?: string; options: AskOption[]; answer: string | null }
   | { id: string; kind: "error"; text: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | { id: string; kind: "result"; files: string[] }
@@ -131,7 +140,7 @@ export type Requests = {
   "settings.set": { params: Partial<Settings>; result: Settings };
   "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
   /** The models an agent offers. Reading them starts the agent briefly but sends no message. */
-  "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null } };
+  "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[] } };
   "agents.add": { params: { name: string; command: string }; result: Settings };
   "agents.remove": { params: { agentId: string }; result: Settings };
   "toolbox.list": { params: Record<string, never>; result: Tool[] };
@@ -144,8 +153,8 @@ export type Requests = {
   "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
-  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; text: string }; result: Thread };
-  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null }; result: Thread };
+  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string }; result: Thread };
+  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   "thread.items": { params: { threadId: string }; result: Item[] };
   "thread.prompt": { params: { threadId: string; text: string }; result: { ok: true } };

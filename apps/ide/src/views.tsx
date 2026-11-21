@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
-import { ModelPicker, type Choice } from "./ModelPicker.tsx";
+import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { Md } from "./md.tsx";
@@ -82,6 +82,8 @@ export function NewProject(props: {
               )}
             </span>
             <ModelPicker agents={props.agents} nameOf={nameOf} disabled={working || !props.ready} manage={props.manageAgents} value={props.choice} onChange={props.setChoice} />
+            <AgentChoices agentId={props.choice.agentId} value={props.choice.choices ?? {}} disabled={working || !props.ready}
+              onChange={(id, value) => props.setChoice({ ...props.choice, choices: { ...props.choice.choices, [id]: value } })} />
             <span className="fill" />
             <button className="send" aria-label={working ? "Starting" : "Send"} title={folder && !text.trim() ? "Open this folder" : "Send"} onClick={() => void send()} disabled={!canSend}>
               <Icon name="send" />
@@ -319,8 +321,12 @@ function AskCard({ thread, item, actions, active }: { thread: Thread; item: Ask;
   return (
     <div className="ask">
       <span className="label">Needs your OK</span>
-      <b>{nameOf(thread.provider)} wants to {item.title.toLowerCase()}</b>
-      {item.detail && item.detail !== item.title && <p title={item.detail}>{item.detail.slice(0, 160)}</p>}
+      <b>{item.title.endsWith("?") ? item.title : `${nameOf(thread.provider)} wants to ${item.title.toLowerCase()}`}</b>
+      {item.body ? (
+        <div className="askbody"><Md text={item.body} /></div>
+      ) : (
+        item.detail && item.detail !== item.title && <p title={item.detail}>{item.detail.slice(0, 160)}</p>
+      )}
       <AskButtons thread={thread} item={item} actions={actions} />
     </div>
   );
@@ -497,7 +503,17 @@ export function Conversation(props: {
             else props.setChoice(choice);
           }}
         />
+        <AgentChoices
+          agentId={agentId}
+          value={thread ? thread.choices ?? {} : props.choice.choices ?? {}}
+          disabled={sending || !props.connected}
+          onChange={(id, value) => {
+            if (thread) call("thread.update", { threadId: thread.id, choices: { [id]: value } }).catch(actions.fail);
+            else props.setChoice({ ...props.choice, choices: { ...props.choice.choices, [id]: value } });
+          }}
+        />
         <span className="fill" />
+        <span className="ends">
         <Dictation onText={addSpoken} fail={actions.fail} disabled={!props.connected} />
         {working ? (
           <button className="send" aria-label={thread.state === "stopping" ? "Stopping" : "Stop"} title="Stop" disabled={!props.connected || thread.state === "stopping"} onClick={() => void actions.cancel(thread.id)}>
@@ -508,6 +524,7 @@ export function Conversation(props: {
             <Icon name="send" />
           </button>
         )}
+        </span>
       </div>
     </div>
   );

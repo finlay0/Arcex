@@ -1,12 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Agent, ModelOption } from "@arcex/contracts";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import type { Agent, AgentChoice, ModelOption } from "@arcex/contracts";
 import { Icon } from "./shared.tsx";
 import { call } from "./store.ts";
 
-export type Choice = { agentId: string; model: { value: string; name: string } | null };
+export type Choice = { agentId: string; model: { value: string; name: string } | null; /** Agent settings such as mode and effort, by choice id. */ choices?: Record<string, string> };
 
 // Model lists are read from each agent once and shared by every picker.
-const cache = new Map<string, { options: ModelOption[]; current: string | null }>();
+const cache = new Map<string, { options: ModelOption[]; current: string | null; choices: AgentChoice[] }>();
 
 /** Hides an agent's own "default" entry, since the picker already offers the agent's default at the top. */
 const real = (options: ModelOption[]) => options.filter((option) => option.value !== "default");
@@ -89,7 +89,7 @@ export function ModelPicker(props: { agents: Agent[]; value: Choice; lockAgent?:
   }, [open, agentId, attempt]);
 
   const pick = (model: Choice["model"]) => {
-    props.onChange({ agentId, model });
+    props.onChange({ ...props.value, agentId, model, choices: agentId === props.value.agentId ? props.value.choices : {} });
     setOpen(false);
     trigger.current?.focus();
   };
@@ -167,5 +167,154 @@ export function ModelPicker(props: { agents: Agent[]; value: Choice; lockAgent?:
         </div>
       )}
     </span>
+  );
+}
+
+/** Reads an agent's settings (mode, effort and so on) once and shares them, like the model list. */
+function useAgentChoices(agentId: string) {
+  const [choices, setChoices] = useState<AgentChoice[] | null>(cache.get(agentId)?.choices ?? null);
+  useEffect(() => {
+    const cached = cache.get(agentId);
+    if (cached) return setChoices(cached.choices);
+    setChoices(null);
+    let stale = false;
+    call("agents.models", { agentId })
+      .then((models) => {
+        cache.set(agentId, models);
+        if (!stale) setChoices(models.choices);
+      })
+      .catch(() => !stale && setChoices([]));
+    return () => {
+      stale = true;
+    };
+  }, [agentId]);
+  return choices;
+}
+
+/** A small menu that opens above or below its button, whichever has more room. */
+function Dropdown(props: { label: ReactNode; title: string; disabled?: boolean; children(close: () => void): ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLSpanElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const menu = panel.current;
+    const button = trigger.current;
+    if (!open || !menu || !button) return;
+    const rect = button.getBoundingClientRect();
+    menu.showPopover();
+    const height = menu.offsetHeight;
+    const width = Math.min(300, window.innerWidth - 24);
+    menu.style.width = `${width}px`;
+    menu.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - width - 12))}px`;
+    menu.style.top = `${rect.top - 16 >= height || rect.top > window.innerHeight - rect.bottom ? rect.top - height - 8 : rect.bottom + 8}px`;
+    menu.focus({ preventScroll: true });
+    return () => {
+      if (menu.isConnected && menu.matches(":popover-open")) menu.hidePopover();
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: MouseEvent) => !root.current?.contains(event.target as Node) && setOpen(false);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    window.addEventListener("mousedown", outside);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", outside);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  return (
+    <span className="cpick" ref={root}>
+      <button className="mbtn" ref={trigger} title={props.title} disabled={props.disabled} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {props.label}
+        <Icon name="down" />
+      </button>
+      {open && (
+        <div className="cpop" ref={panel} popover="manual" tabIndex={-1} role="menu" aria-label={props.title}
+          onBlur={(event) => event.relatedTarget && !root.current?.contains(event.relatedTarget) && setOpen(false)}>
+          {props.children(close)}
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** Which value of a two-way setting means "on": not "off", not "default". */
+const onValue = (choice: AgentChoice) => choice.values.find((entry) => !["off", "default", "false"].includes(entry.value))?.value;
+
+/**
+ * The agent's own settings beside the model: how much it asks before acting, and how hard it thinks (with fast
+ * mode and plan-first as switches). Names and descriptions come from the agent itself.
+ */
+export function AgentChoices(props: { agentId: string; value: Record<string, string>; disabled?: boolean; onChange(id: string, value: string): void }) {
+  const choices = useAgentChoices(props.agentId);
+  if (!choices?.length) return null;
+  const current = (choice: AgentChoice) => props.value[choice.id] ?? choice.current;
+  const nameIn = (choice: AgentChoice) => choice.values.find((entry) => entry.value === current(choice))?.name ?? current(choice);
+  const mode = choices.find((choice) => choice.category === "mode");
+  const effort = choices.find((choice) => choice.category === "thought_level");
+  const switches = choices.filter((choice) => choice.category !== "mode" && choice.category !== "thought_level" && choice.values.length === 2 && onValue(choice));
+  const onNames = switches.filter((choice) => current(choice) === onValue(choice)).map((choice) => (choice.category === "collaboration_mode" ? "Plan first" : choice.name));
+  const effortName = effort && current(effort) !== "default" ? nameIn(effort) : null;
+  return (
+    <>
+      {mode && (
+        <Dropdown title="How much the agent asks before acting" disabled={props.disabled} label={<span>{nameIn(mode)}</span>}>
+          {(close) => (
+            <>
+              <div className="label">{mode.name}</div>
+              {mode.values.map((entry) => (
+                <button key={entry.value} className="mrow" role="menuitemradio" aria-checked={current(mode) === entry.value} aria-current={current(mode) === entry.value}
+                  onClick={() => { props.onChange(mode.id, entry.value); close(); }}>
+                  <b>{entry.name}</b>
+                  {entry.description && <span>{entry.description}</span>}
+                </button>
+              ))}
+            </>
+          )}
+        </Dropdown>
+      )}
+      {(effort || switches.length > 0) && (
+        <Dropdown title="How hard the agent thinks" disabled={props.disabled}
+          label={<span>{[effortName ?? (effort ? "Effort" : null), ...onNames].filter(Boolean).join(" · ") || "Options"}</span>}>
+          {() => (
+            <>
+              {effort && (
+                <>
+                  <div className="label">{effort.name}</div>
+                  <div className="levels" role="radiogroup" aria-label={effort.name}>
+                    {effort.values.map((entry) => (
+                      <button key={entry.value} role="radio" aria-checked={current(effort) === entry.value} title={entry.description || entry.name}
+                        onClick={() => props.onChange(effort.id, entry.value)}>
+                        {entry.value === "default" ? "Auto" : entry.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+              {switches.map((choice) => {
+                const on = current(choice) === onValue(choice);
+                const off = choice.values.find((entry) => entry.value !== onValue(choice))!.value;
+                return (
+                  <button key={choice.id} className="switchrow" role="menuitemcheckbox" aria-checked={on} onClick={() => props.onChange(choice.id, on ? off : onValue(choice)!)}>
+                    <span>{choice.category === "collaboration_mode" ? "Plan first" : choice.name}</span>
+                    <span className="toggle" aria-hidden="true"><i /></span>
+                  </button>
+                );
+              })}
+            </>
+          )}
+        </Dropdown>
+      )}
+    </>
   );
 }

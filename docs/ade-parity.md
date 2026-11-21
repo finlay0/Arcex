@@ -1,4 +1,4 @@
-| C12 |undefined| undefined | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" || C7 |undefined| undefined | done | Last 4 KB of output under "Show the output" || C6 |undefined| undefined | done | Line counts from ACP diff content, a "Show the change" patch view, and +N −M on the group row || C5 |undefined| undefined | partial | Engine `think` item and folded "Thought for 12s" row are shipped. A live run with thinking hasn't been seen yet, because Haiku at its default effort didn't think. Recheck after K7 |# Arcex ADE parity tracker
+| C5 |undefined| undefined | partial | Engine `think` item and folded row are shipped. Claude sent no thought chunks on Haiku, even at High effort. Find out whether the SDK needs a setting to stream thinking summaries || A1 |undefined| undefined | partial | The card is docked and now shows the diff or exact command (`body`). Still to verify: ask-first with real Claude Manual mode and Codex Read-only || A2 |undefined| undefined | done | Claude ExitPlanMode shows the plan as markdown in the docked card ("Here's the plan. Go ahead?") with Claude's own options. Verified approve-in-auto: the mode chip follows to Auto || K7 |undefined| undefined | done | An effort chip with levels, plus switches for fast mode and Codex plan-first. Your pick wins and is set again at each turn start if the agent reset it, for example on a model switch || K6 |undefined| undefined | done | Generic ACP config options: a mode chip with the agent's own names (Claude: Manual, Accept edits, Plan, Auto, Bypass; Codex: Read-only, Workspace access, Auto review, Full access). Changeable mid-turn. The thread follows mode changes the agent makes itself. Still to do: remember the last picks for new threads across restarts || C12 |undefined| undefined | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" || C7 |undefined| undefined | done | Last 4 KB of output under "Show the output" || C6 |undefined| undefined | done | Line counts from ACP diff content, a "Show the change" patch view, and +N −M on the group row || C5 |undefined| undefined | partial | Engine `think` item and folded "Thought for 12s" row are shipped. A live run with thinking hasn't been seen yet, because Haiku at its default effort didn't think. Recheck after K7 |# Arcex ADE parity tracker
 
 This file is the running ledger for one goal. Any agent picking up the work starts here, works the next open item, and updates this file in the same commit as the code.
 
@@ -125,6 +125,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · K6 mode, K7 effort and fast, A2 plan approval with the plan shown. Files outside the project (an agent's own plan notes) no longer count as changed.
 - 2026-11-21 · C6, C7 and C12 shipped: edit line counts with patches, command output and turn duration. C5 thinking rendering is in.
 - 2026-11-21 · K1 local voice dictation in the message box.
 - 2026-11-21 · Arcex mark loader replaces the spinner (6bd6046).
@@ -135,10 +136,9 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. K6 permission modes and A2 plan approval.
-2. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
-3. G1 diff pane upgrade (new files show +0 −0 today), C9 retry and edit-resend.
-4. K7 effort picker, then recheck C5 thinking.
+1. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
+2. G1 diff pane upgrade (new files show +0 −0 today), C9 retry and edit-resend.
+3. C5 thinking stream (adapter or SDK setting), then K6 remembering picks across restarts.
 
 ## How to verify a change
 

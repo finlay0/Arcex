@@ -4,7 +4,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
-import type { Agent, ModelOption, Settings } from "@arcex/contracts";
+import type { Agent, AgentChoice, ModelOption, Settings } from "@arcex/contracts";
 
 const engineRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,7 +47,7 @@ function launchOf(agentId: string, settings: Settings): Launch {
   return { command, args: [], shell: true };
 }
 
-export type Models = { options: ModelOption[]; current: string | null };
+export type Models = { options: ModelOption[]; current: string | null; choices: AgentChoice[] };
 
 /** Agents describe their models as a "model" choice among the session's options. */
 function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Models & { configId: string }) | null {
@@ -60,7 +60,22 @@ function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }
     configId: option.id,
     options: flat.filter((entry) => typeof entry.value === "string").map((entry) => ({ value: entry.value!, name: entry.name ?? entry.value!, description: entry.description ?? "" })),
     current: typeof option.currentValue === "string" ? option.currentValue : null,
+    choices: [],
   };
+}
+
+const CHOICE_CATEGORIES = ["mode", "thought_level", "model_config", "collaboration_mode"];
+
+/** The agent's settings besides its model, as it describes them. */
+function choicesOf(response: { configOptions?: acp.SessionConfigOption[] | null } | null | undefined): AgentChoice[] {
+  return (response?.configOptions ?? []).flatMap((option) => {
+    if (option.type !== "select" || !option.category || !CHOICE_CATEGORIES.includes(option.category)) return [];
+    const values = (option.options as unknown as ({ value?: string; name?: string; description?: string | null; options?: unknown[] })[])
+      .flatMap((entry) => (Array.isArray(entry.options) ? (entry.options as typeof entry[]) : [entry]))
+      .filter((entry) => typeof entry.value === "string")
+      .map((entry) => ({ value: entry.value!, name: entry.name ?? entry.value!, description: entry.description ?? "" }));
+    return [{ id: option.id, name: option.name, category: option.category, current: String(option.currentValue), values }];
+  });
 }
 
 export type AgentSession = {
@@ -70,6 +85,11 @@ export type AgentSession = {
   models: Models | null;
   defaultModel: string | null;
   setModel(value: string): Promise<void>;
+  /** The agent's other settings, kept current as the agent reports changes. */
+  choices: AgentChoice[];
+  setChoice(id: string, value: string): Promise<void>;
+  /** Takes in settings the agent changed by itself, such as leaving plan mode. */
+  noteChoices(update: { configOptions?: acp.SessionConfigOption[] | null }): void;
   prompt(text: string): Promise<acp.PromptResponse>;
   cancel(): Promise<void>;
   close(): void;
@@ -159,9 +179,12 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
 
     let sessionId: string | null = null;
     let models: ReturnType<typeof modelsOf> = null;
+    let choices: AgentChoice[] = [];
     if (options.resumeId && init.agentCapabilities?.loadSession) {
       try {
-        models = modelsOf(await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers })));
+        const loaded = await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers }));
+        models = modelsOf(loaded);
+        choices = choicesOf(loaded);
         sessionId = options.resumeId;
       } catch {
         sessionId = null;
@@ -175,6 +198,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
       const created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, _meta: { systemPrompt: { append: PLAN_NOTE } } }));
       sessionId = created.sessionId;
       models = modelsOf(created);
+      choices = choicesOf(created);
     }
     live = true;
     child.removeAllListeners("exit");
@@ -200,6 +224,29 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         } finally {
           clearTimeout(timer);
         }
+      },
+      get choices() {
+        return choices;
+      },
+      async setChoice(choiceId, value) {
+        const choice = choices.find((entry) => entry.id === choiceId);
+        if (!choice || !choice.values.some((entry) => entry.value === value)) throw new Error("the agent doesn't offer that setting");
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error("the agent took too long to confirm the setting")), 10_000);
+          });
+          const result = await Promise.race([agent.request("session/set_config_option", { sessionId: id, configId: choiceId, value }), timeout]);
+          const next = choicesOf(result as { configOptions?: acp.SessionConfigOption[] });
+          if (next.length) choices = next;
+          else choice.current = value;
+        } finally {
+          clearTimeout(timer);
+        }
+      },
+      noteChoices(update) {
+        const next = choicesOf(update);
+        if (next.length) choices = next;
       },
       prompt: (text) => agent.request("session/prompt", { sessionId: id, prompt: [{ type: "text", text }] }),
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
@@ -228,5 +275,5 @@ export async function listModels(agentId: string, settings: Settings, cwd: strin
     onExit: () => {},
   });
   session.close();
-  return session.models ?? { options: [], current: null };
+  return { ...(session.models ?? { options: [], current: null }), choices: session.choices };
 }

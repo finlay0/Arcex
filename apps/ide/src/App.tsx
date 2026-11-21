@@ -276,7 +276,7 @@ export function App() {
   };
   const startThread = async (text: string) => {
     if (!project) throw new Error("Choose a project for this thread.");
-    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, text });
+    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text });
     void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
     setSeed("");
     setExpanded((open) => new Set(open).add(project.id));
@@ -521,7 +521,7 @@ export function App() {
               setExpanded((open) => new Set(open).add(p.id));
               setProjectId(p.id);
               if (!text) return newThreadIn(p.id);
-              const created = await call("thread.create", { projectId: p.id, provider: picked.agentId, model: picked.model, text });
+              const created = await call("thread.create", { projectId: p.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text });
               void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
               setScreen({ kind: "thread", threadId: created.id });
             }}

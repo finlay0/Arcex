@@ -165,6 +165,53 @@ export function createEngine(
     return { value: text(model.value, "model", 200), name: text(model.name, "model name", 200) };
   };
 
+  /** Agent settings from a client: a few short ids and values. The agent itself checks they exist. */
+  const pickedChoices = (value: unknown): Record<string, string> => {
+    if (value === undefined || value === null) return {};
+    if (typeof value !== "object" || Array.isArray(value)) throw new Error("settings must be an object");
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length > 10) throw new Error("too many settings");
+    return Object.fromEntries(entries.map(([key, choice]) => {
+      if (!/^[\w.-]{1,80}$/.test(key) || typeof choice !== "string" || !/^[\w.:-]{1,80}$/.test(choice)) throw new Error("invalid setting");
+      return [key, choice];
+    }));
+  };
+
+  /** Puts the thread's picked settings into the agent session, one by one. */
+  async function applyChoices(thread: ThreadRow, session: AgentSession, wanted: Record<string, string>) {
+    for (const [choiceId, value] of Object.entries(wanted)) {
+      const choice = session.choices.find((entry) => entry.id === choiceId);
+      if (!choice || choice.current === value) continue;
+      try {
+        await session.setChoice(choiceId, value);
+      } catch (error) {
+        const name = choice.values.find((entry) => entry.value === value)?.name ?? value;
+        throw new Error(`couldn't switch ${choice.name.toLowerCase()} to ${name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  /**
+   * Follows the mode when the agent changes it itself, such as leaving plan mode after the user approved the plan.
+   * Other settings stay as the user picked them: an agent can reset effort when its model changes, and the pick is
+   * put back at the start of the next turn.
+   */
+  function followChoices(thread: ThreadRow, session: AgentSession) {
+    let changed = false;
+    for (const choiceId of Object.keys(thread.choices)) {
+      const choice = session.choices.find((entry) => entry.id === choiceId);
+      if (choice?.category !== "mode") continue;
+      if (choice.current && choice.current !== thread.choices[choiceId]) {
+        thread.choices = { ...thread.choices, [choiceId]: choice.current };
+        changed = true;
+      }
+    }
+    if (changed) {
+      db.saveThread(thread);
+      emit({ event: "thread", thread: publicThread(thread) });
+    }
+  }
+
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
@@ -205,6 +252,9 @@ export function createEngine(
       live.think = null;
     }
   }
+
+  /** Paths are kept relative to the project; anything that climbs out of it (an agent's own notes) is not project work. */
+  const insideProject = (file: string) => !file.startsWith("..") && !path.isAbsolute(file);
 
   function filesOf(project: Project, update: { locations?: acp.ToolCallLocation[] | null; content?: acp.ToolCallContent[] | null }) {
     const found = [
@@ -247,6 +297,13 @@ export function createEngine(
       step.item.label = describe(step.kind, step.title, step.item.files);
       step.item.tool = /browser_[a-z]+/.test(step.title) ? "browser" : step.kind;
       put(thread, step.item);
+    } else if (update.sessionUpdate === "config_option_update" && live.session) {
+      live.session.noteChoices(update);
+      followChoices(thread, live.session);
+    } else if (update.sessionUpdate === "current_mode_update" && live.session) {
+      const mode = live.session.choices.find((entry) => entry.category === "mode");
+      if (mode) mode.current = update.currentModeId;
+      followChoices(thread, live.session);
     } else if (update.sessionUpdate === "plan") {
       // Agents send their whole plan each time it changes; one plan item per turn follows it.
       live.plan ??= { id: randomUUID(), kind: "plan", entries: [] };
@@ -264,13 +321,26 @@ export function createEngine(
     return new Promise<acp.RequestPermissionResponse>((resolve) => {
       endSay(thread);
       const call = request.toolCall;
+      // Show what is being approved in full: the plan itself, the change to a file, or the exact command.
+      const input = (call.rawInput ?? {}) as { plan?: unknown; command?: unknown };
+      const plan = typeof input.plan === "string" && input.plan.trim() ? input.plan.trim() : null;
+      const shown: Step = { id: "", kind: "step", label: "", detail: "", status: "running", files: [] };
+      readContent(shown, call.content);
+      const body = plan
+        ?? (shown.patch ? "```diff\n" + shown.patch.trimEnd() + "\n```" : null)
+        ?? (typeof input.command === "string" ? "```\n" + input.command + "\n```" : null)
+        ?? shown.output
+        ?? undefined;
       const item: Ask = {
         id: randomUUID(),
         kind: "ask",
-        title: describe(call.kind ?? "other", call.title ?? "", filesOf(project, call)).replace(/^(Changed|Ran|Removed|Moved|Looked at)/, (verb) =>
-          ({ Changed: "Change", Ran: "Run", Removed: "Remove", Moved: "Move", "Looked at": "Look at" })[verb] ?? verb,
-        ),
+        title: plan
+          ? "Here's the plan. Go ahead?"
+          : describe(call.kind ?? "other", call.title ?? "", filesOf(project, call)).replace(/^(Changed|Ran|Removed|Moved|Looked at)/, (verb) =>
+            ({ Changed: "Change", Ran: "Run", Removed: "Remove", Moved: "Move", "Looked at": "Look at" })[verb] ?? verb,
+          ),
         detail: (call.title ?? "").slice(0, 2000),
+        body: body?.slice(0, 20_000),
         options: request.options.map((option) => ({ id: option.optionId, name: option.name, kind: option.kind })),
         answer: null,
       };
@@ -362,6 +432,7 @@ export function createEngine(
           throw new Error(`couldn't use ${thread.model.name}. Choose another model or Default, then retry your message.`);
         }
       }
+      await applyChoices(thread, session, thread.choices);
       turn.signal.throwIfAborted();
       setState(thread, "working");
       const result = await session.prompt(prompt);
@@ -391,7 +462,7 @@ export function createEngine(
     const changed = new Set<string>();
     for (const step of live.steps.values()) {
       if (step.item.status === "running") put(thread, { ...step.item, status: "interrupted" });
-      if (["edit", "delete", "move"].includes(step.kind) && step.item.status === "done") step.item.files.forEach((file) => changed.add(file));
+      if (["edit", "delete", "move"].includes(step.kind) && step.item.status === "done") step.item.files.filter(insideProject).forEach((file) => changed.add(file));
     }
     if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     live.steps.clear();
@@ -562,10 +633,11 @@ export function createEngine(
       const project = projectOf(params.projectId);
       if (!agentList(settings).some((agent) => agent.id === params.provider)) throw new Error("unknown agent");
       const model = pickedModel(params.model);
+      const choices = pickedChoices(params.choices);
       const prompt = text(params.text, "message", 20_000);
       const now = Date.now();
       const thread: ThreadRow = {
-        id: randomUUID(), projectId: project.id, provider: params.provider, model, title: titleFrom(prompt),
+        id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, title: titleFrom(prompt),
         state: "starting", archived: false, sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
@@ -600,6 +672,14 @@ export function createEngine(
         }
         if (!threads.has(thread.id)) throw new Error("thread not found");
         thread.model = model;
+      }
+      if (params.choices !== undefined) {
+        const wanted = pickedChoices(params.choices);
+        const session = lives.get(thread.id)?.session;
+        // Settings can change mid-turn too, the way switching to plan mode works while an agent runs.
+        if (session) await applyChoices(thread, session, wanted);
+        if (!threads.has(thread.id)) throw new Error("thread not found");
+        thread.choices = { ...thread.choices, ...wanted };
       }
       if (params.title !== undefined) thread.title = title;
       if (params.archived !== undefined) thread.archived = params.archived === true;
