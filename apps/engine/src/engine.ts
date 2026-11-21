@@ -10,6 +10,7 @@ import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
 import { providerStatus } from "./providers.ts";
 import { TOOLBOX } from "./toolbox.ts";
+import { createAccountClient } from "./account.ts";
 
 /** The public Arcex research library. Search needs no key. */
 const RESEARCH_MCP = "https://api.arcex.dev/public/mcp";
@@ -81,7 +82,7 @@ function describe(kind: string, title: string, files: string[]): string {
   }
 }
 
-export function createEngine(db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void) {
+export function createEngine(db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void, account = createAccountClient()) {
   let settings = db.settings();
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
@@ -319,6 +320,10 @@ export function createEngine(db: Db, about: About, connector: { script: string; 
   }
 
   const handlers: { [M in Method]: (params: Requests[M]["params"]) => Promise<Requests[M]["result"]> | Requests[M]["result"] } = {
+    "account.status": account.status,
+    "account.start": account.start,
+    "account.finish": account.finish,
+    "account.disconnect": account.disconnect,
     "state.get": () => ({ agents: agentList(settings), projects: [...projects.values()], threads: [...threads.values()].map(publicThread), settings, about, drafts: db.drafts() }),
 
     "draft.set"(params) {

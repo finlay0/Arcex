@@ -12,6 +12,9 @@ import { Updates } from "./updates";
 import "./index.css";
 
 const router = createBrowserRouter([
+  { path: "/desktop/link", lazy: async () => ({ Component: (await import("./accounts")).DesktopLinkPage }) },
+  { path: "/account/devices", lazy: async () => ({ Component: (await import("./accounts")).DevicesPage }) },
+  { path: "/owner/customers", lazy: async () => ({ Component: (await import("./accounts")).CustomersPage }) },
   {
     element: <Shell />,
     children: [

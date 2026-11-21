@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --port 5174 --strictPort",
     "build": "tsc --noEmit && vite build",
+    "build:accounts": "tsc --noEmit && vite build --mode accounts && node -e \"const fs = require('node:fs'); fs.copyFileSync('dist/account-site/_arcex-account/index.html', 'dist/account-site/index.html'); fs.copyFileSync('accounts.headers', 'dist/account-site/_headers')\"",
     "preview": "vite preview --port 5174 --strictPort"
   },
   "dependencies": {

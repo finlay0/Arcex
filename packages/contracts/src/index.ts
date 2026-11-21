@@ -68,7 +68,7 @@ export type Tool = { id: string; name: string; category: string; what: string; g
 
 /** Preferences saved by the engine, so every client of the same engine agrees. */
 export type Settings = {
-  /** The user's name, shown in the app only. There are no Arcex accounts. */
+  /** The local name used in the workspace. */
   name: string;
   theme: "light" | "dark" | "system";
   defaultProvider: ProviderId;
@@ -100,9 +100,15 @@ export type ProviderStatus = {
 export type About = { version: string; dataDir: string; projectsDir: string };
 
 export type DraftTarget = { projectId: string; threadId?: string };
+export type DesktopAccount = { id: string; name: string; handle: string; pro: boolean; expiresAt: string; devicesUrl: string };
+export type DesktopLink = { code: string; verificationUrl: string; expiresAt: string; interval: number };
 
 /** Client to engine. Every request gets exactly one response with the same id. */
 export type Requests = {
+  "account.status": { params: Record<string, never>; result: { account: DesktopAccount | null; link?: DesktopLink } };
+  "account.start": { params: Record<string, never>; result: DesktopLink };
+  "account.finish": { params: Record<string, never>; result: { account: DesktopAccount | null } };
+  "account.disconnect": { params: Record<string, never>; result: { ok: true } };
   "state.get": { params: Record<string, never>; result: { agents: Agent[]; projects: Project[]; threads: Thread[]; settings: Settings; about: About; drafts: Record<string, string> } };
   "draft.set": { params: DraftTarget & { text: string }; result: { ok: true } };
   "settings.set": { params: Partial<Settings>; result: Settings };

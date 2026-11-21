@@ -93,6 +93,16 @@ The dedicated GitHub app and `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` Worker 
 
 The OAuth flow checks state against a short-lived HttpOnly cookie and a one-use DB record, uses PKCE, discards provider tokens, and stores opaque hashed sessions. Accounts are keyed by provider subject and are never linked automatically just because email strings match. GitHub stores only a verified primary email. X email is left null.
 
+## Desktop accounts
+
+The desktop **Profile** screen starts a device-code sign-in. The customer approves at `/desktop/link` in their browser using an existing Arcex session or a supported identity provider. The desktop uses the resulting scoped session for account and plan status. D1 stores session hashes. Electron uses the operating system's encrypted storage for the desktop credential. Local workspace data and coding-agent sign-in follow the existing desktop flow.
+
+Customers can revoke a session in **Desktop devices** at `/account/devices`. The configured GitHub owner (`MCP_OWNER_GITHUB_ID`) can open `/owner/customers`, search by customer name, handle or email, check Pro and billing-hold state, and revoke browser and desktop sessions. Revocation creates an audit event and lets the customer sign in again.
+
+Apply migration `0037_desktop_accounts.sql` before deploying the account API. Release the API before the web app and desktop build. While the landing site serves the root of arcex.dev, build the account pages with `pnpm --filter @arcex/web build:accounts` and deploy with `pnpm exec wrangler deploy --config apps/web/wrangler.accounts.jsonc`. This config assigns the three account page paths and their asset prefix. When the full web app takes over the domain, serve the same paths from that app and retire the scoped routes as part of that release.
+
+For a local desktop linked to a local Worker set `ARCEX_ACCOUNTS_API=http://127.0.0.1:8791` and configure the Worker `APP_ORIGIN` to the localhost web origin. A local Worker uses a separate desktop credential file.
+
 ## Stripe activation
 
 An isolated Arcex Stripe sandbox is configured with an active $12 USD/month **test fixture**, hosted portal (payment updates and end-of-period cancellation), and all 12 webhook events below. Nothing was copied from live and no live products or charges were created. The fixture does not decide launch currency. `/api/v1/admin/billing/readiness` reads provider configuration and reports nonsecret flags; full hosted Checkout and signed webhook delivery still require sandbox end-to-end verification.

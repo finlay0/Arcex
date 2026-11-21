@@ -52,7 +52,7 @@ const schemas = {
 const auth = { security: [{ Session: [] }, { InsiderKey: [] }] };
 function operation(
   summary: string,
-  security: "public" | "user" | "admin" | "collector" = "public",
+  security: "public" | "user" | "admin" | "collector" | "browser" | "desktop" = "public",
   schema?: keyof typeof schemas,
 ) {
   return {
@@ -63,7 +63,11 @@ function operation(
         ? { security: [{ AdminToken: [] }] }
         : security === "collector"
           ? { security: [{ CollectorToken: [] }] }
-          : {}),
+          : security === "browser"
+            ? { security: [{ Session: [] }] }
+            : security === "desktop"
+              ? { security: [{ DesktopSession: [] }] }
+              : {}),
     ...(schema
       ? {
           requestBody: {
@@ -102,6 +106,7 @@ export const openapi = {
     ),
     securitySchemes: {
       Session: { type: "apiKey", in: "cookie", name: "arcex_session" },
+      DesktopSession: { type: "http", scheme: "bearer" },
       InsiderKey: { type: "http", scheme: "bearer" },
       AdminToken: { type: "http", scheme: "bearer" },
       CollectorToken: { type: "http", scheme: "bearer" },
@@ -496,6 +501,33 @@ export const openapi = {
     },
     "/api/v1/me": {
       get: operation("Private profile and Insider entitlement", "user"),
+    },
+    "/api/v1/accounts/desktop/link": {
+      post: operation("Start a ten-minute desktop sign-in request"),
+    },
+    "/api/v1/accounts/desktop/approve": {
+      post: operation("Approve a desktop sign-in code with the current browser account", "browser"),
+    },
+    "/api/v1/accounts/desktop/exchange": {
+      post: operation("Exchange an approved device secret once for a scoped desktop session"),
+    },
+    "/api/v1/accounts/desktop/me": {
+      get: operation("Read the account and current Pro access for this desktop session", "desktop"),
+    },
+    "/api/v1/accounts/desktop/session": {
+      delete: operation("Sign out of the current desktop session", "desktop"),
+    },
+    "/api/v1/accounts/devices": {
+      get: operation("List desktop sessions for the current browser account", "browser"),
+    },
+    "/api/v1/accounts/devices/{id}": {
+      delete: operation("Revoke a desktop session owned by the current browser account", "browser"),
+    },
+    "/api/v1/accounts/owner/customers/search": {
+      post: operation("Search customers and read plan and session status as the GitHub owner", "browser"),
+    },
+    "/api/v1/accounts/owner/customers/{id}/revoke-sessions": {
+      post: operation("Revoke the customer's web and desktop sessions as the GitHub owner", "browser"),
     },
     "/api/v1/email/unsubscribe/{userId}": {
       post: operation(

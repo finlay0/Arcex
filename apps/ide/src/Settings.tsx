@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { About, Agent, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
 import { call } from "./store.ts";
+import { Account } from "./Account.tsx";
 
 export type Section = "profile" | "general" | "appearance" | "agents" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
@@ -112,12 +113,12 @@ export function SettingsView(props: {
           {props.section === "profile" && (
             <>
               <h2>Profile</h2>
-              <p className="sdesc">Your name is used inside the app on this computer. Arcex has no accounts, so nothing here is sent anywhere.</p>
+              <Account />
               <div className="card who">
                 <span className="avatar big">{initials(settings.name)}</span>
                 <div>
                   <b>{settings.name || "No name yet"}</b>
-                  <p>This computer</p>
+                  <p>Local workspace profile</p>
                 </div>
               </div>
               <div className="card">

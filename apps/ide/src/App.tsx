@@ -437,7 +437,7 @@ export function App() {
               </button>
             </>
           )}
-          <button className="avabtn" aria-label="Profile" title="Profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
+          <button className="avabtn" aria-label="Arcex account and profile" title="Arcex account and profile" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
             <span className="avatar">{initials(settings.name)}</span>
           </button>
         </header>

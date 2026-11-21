@@ -6,6 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { ZodError } from "zod";
 import type { AppEnv, Bindings } from "./types";
 import { auth } from "./auth";
+import { accounts } from "./accounts";
 import { catalog, adminCatalog } from "./catalog";
 import { community, adminCommunity } from "./community";
 import { billing, adminBilling } from "./billing";
@@ -83,6 +84,7 @@ app.get("/health", async (c) => {
 });
 app.get("/openapi.json", (c) => c.json(openapi));
 app.route("/auth", auth);
+app.route("/api/v1/accounts", accounts);
 app.route("/api/v1", catalog);
 app.route("/api/v1", community);
 app.route("/api/v1", insights);

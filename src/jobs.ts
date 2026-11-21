@@ -71,6 +71,8 @@ export async function expireAuthState(db: D1Database) {
   await db.batch([
     db.prepare("DELETE FROM rate_limits WHERE expires_at<?").bind(time),
     db.prepare("DELETE FROM sessions WHERE expires_at<?").bind(time),
+    db.prepare("DELETE FROM desktop_sessions WHERE expires_at<?").bind(time),
+    db.prepare("DELETE FROM desktop_links WHERE expires_at<?").bind(time),
     db.prepare("DELETE FROM oauth_states WHERE expires_at<?").bind(time),
     db
       .prepare("DELETE FROM checkout_attempts WHERE bucket<?")

@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "arcex-accounts-web",
+  "account_id": "f4fd2d7253ee80d49ffb768f4a25b132",
+  "compatibility_date": "2026-11-09",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "https://arcex.dev/desktop/link", "zone_name": "arcex.dev" },
+    { "pattern": "https://arcex.dev/account/devices", "zone_name": "arcex.dev" },
+    { "pattern": "https://arcex.dev/owner/customers", "zone_name": "arcex.dev" },
+    { "pattern": "https://arcex.dev/_arcex-account/*", "zone_name": "arcex.dev" }
+  ],
+  "assets": {
+    "directory": "./dist/account-site",
+    "not_found_handling": "single-page-application"
+  }
+}

@@ -308,6 +308,10 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .scol h2, .tcol h2 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 600; letter-spacing: -.018em; }
 .sub2 { margin-top: 20px !important; font-size: 18px !important; }
 .sdesc { color: var(--ink-2); margin-top: -8px; max-width: 62ch; }
+.arcex-account.card { display: grid; gap: 10px; padding: 16px 18px; }
+.arcex-account p { color: var(--ink-2); }
+.arcex-account .oops { color: var(--stop); }
+.account-code { font: 20px var(--mono); letter-spacing: .12em; }
 .card { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: 0 18px; }
 .card.list:empty { display: none; }
 .srow { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; border-top: 1px solid var(--line); min-width: 0; }

@@ -316,6 +316,7 @@ function AccountMenu() {
           {s.insider
             ? <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { void s.portal(); setOpen(false); }}>Manage billing</button>
             : <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.openInsider(); setOpen(false); }}>Go Insider ({INSIDER_PRICE})</button>}
+          <Link to="/account/devices" className="block w-full rounded-lg px-3 py-2 text-left hover:bg-s3">Desktop devices</Link>
           <button className="w-full rounded-lg px-3 py-2 text-left hover:bg-s3" onClick={() => { s.signOut(); setOpen(false); }}>Sign out</button>
         </div>
       )}

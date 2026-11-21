@@ -1,6 +1,8 @@
 // Desktop shell: starts the engine, then shows the client the engine serves.
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, safeStorage, shell } = require("electron");
 const { spawn } = require("node:child_process");
+const { randomUUID } = require("node:crypto");
+const { mkdir, readFile, rename, rm, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 
 const engineDir = path.resolve(__dirname, "../../engine");
@@ -10,6 +12,43 @@ let starting;
 let quitting = false;
 // Recent unexpected exits, to stop restarting an engine that keeps crashing straight away.
 const crashes = [];
+const accountVaultFile = () => {
+  const local = process.env.ARCEX_ACCOUNTS_API && new URL(process.env.ARCEX_ACCOUNTS_API).protocol === "http:";
+  return path.join(app.getPath("userData"), local ? "account-local.enc" : "account.enc");
+};
+
+async function handleAccountVault(child, message) {
+  if (engine !== child || message?.channel !== "account-vault" || typeof message.id !== "string") return;
+  let reply;
+  try {
+    const file = accountVaultFile();
+    if (message.action === "read") {
+      const encrypted = await readFile(file).catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+      const result = encrypted && await safeStorage.decryptStringAsync(encrypted);
+      reply = { token: result?.result ?? null };
+    } else if (message.action === "write" && message.token === null) {
+      await rm(file, { force: true });
+      reply = {};
+    } else if (message.action === "write" && /^[0-9a-f]{64}$/.test(message.token) &&
+      ["win32", "darwin"].includes(process.platform) && await safeStorage.isAsyncEncryptionAvailable()) {
+      const temp = file + "." + randomUUID();
+      try {
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(temp, await safeStorage.encryptStringAsync(message.token), { flag: "wx" });
+        await rename(temp, file);
+      } finally {
+        await rm(temp, { force: true });
+      }
+      reply = {};
+    } else throw new Error("Unavailable credential storage");
+  } catch {
+    reply = { error: "Couldn't access your encrypted Arcex session. Try again from the desktop app." };
+  }
+  if (child.connected) child.send({ channel: "account-vault", id: message.id, ...reply }, () => {});
+}
 
 function startEngine(port) {
   return new Promise((resolve, reject) => {
@@ -19,6 +58,7 @@ function startEngine(port) {
       stdio: ["ignore", "pipe", "inherit", "ipc"],
     });
     engine = child;
+    child.on("message", (message) => void handleAccountVault(child, message));
     const timer = setTimeout(() => {
       reject(new Error("The engine took too long to start."));
       child.kill();
@@ -115,6 +155,11 @@ app.whenReady().then(async () => {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
   };
   ipcMain.on("open-external", (_event, url) => openOutside(url));
+  win.webContents.on("will-navigate", (event, target) => {
+    if (new URL(target).origin === new URL(url).origin) return;
+    event.preventDefault();
+    openOutside(target);
+  });
   win.webContents.setWindowOpenHandler(({ url }) => {
     openOutside(url);
     return { action: "deny" };
