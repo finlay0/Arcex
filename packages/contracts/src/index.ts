@@ -54,13 +54,24 @@ export type Item =
       files: string[];
       /** What sort of tool it was (execute, edit, read, search, fetch, browser...), for grouping. Older steps lack it. */
       tool?: string;
+      /** Lines added and removed, for edits. */
+      added?: number;
+      removed?: number;
+      /** The changed lines of an edit, each starting with "+" or "-". Bounded. */
+      patch?: string;
+      /** The end of what a command printed. Bounded. */
+      output?: string;
     }
+  /** The agent's reasoning before it acts. `seconds` is set once it stops thinking. */
+  | { id: string; kind: "think"; text: string; seconds: number | null }
   /** The agent's own plan for the turn, kept up to date as it works. */
   | { id: string; kind: "plan"; entries: PlanEntry[] }
   | { id: string; kind: "ask"; title: string; detail: string; options: AskOption[]; answer: string | null }
   | { id: string; kind: "error"; text: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
-  | { id: string; kind: "result"; files: string[] };
+  | { id: string; kind: "result"; files: string[] }
+  /** Closes every turn: how it ended and how long it took. */
+  | { id: string; kind: "end"; outcome: "done" | "stopped" | "failed" | "interrupted"; seconds: number };
 
 export type PlanEntry = { content: string; status: "pending" | "in_progress" | "completed" };
 

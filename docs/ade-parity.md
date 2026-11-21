@@ -1,4 +1,4 @@
-# Arcex ADE parity tracker
+| C12 |undefined| undefined | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" || C7 |undefined| undefined | done | Last 4 KB of output under "Show the output" || C6 |undefined| undefined | done | Line counts from ACP diff content, a "Show the change" patch view, and +N −M on the group row || C5 |undefined| undefined | partial | Engine `think` item and folded "Thought for 12s" row are shipped. A live run with thinking hasn't been seen yet, because Haiku at its default effort didn't think. Recheck after K7 |# Arcex ADE parity tracker
 
 This file is the running ledger for one goal. Any agent picking up the work starts here, works the next open item, and updates this file in the same commit as the code.
 
@@ -125,6 +125,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · C6, C7 and C12 shipped: edit line counts with patches, command output and turn duration. C5 thinking rendering is in.
 - 2026-11-21 · K1 local voice dictation in the message box.
 - 2026-11-21 · Arcex mark loader replaces the spinner (6bd6046).
 - 2026-11-21 · Conversation rebuilt: narration, folded work rows, docked plan and ask, Claude task tools on (3b216aa).
@@ -134,10 +135,10 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. C5 thinking, C6 edit counts, C7 command output: engine update handling plus rows.
-3. K6 permission modes and A2 plan approval.
-4. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
-5. G1 diff pane upgrade, C9 retry and edit-resend, C12 turn outcome.
+1. K6 permission modes and A2 plan approval.
+2. K2 attachments, K3 @-mentions, K4 slash commands, K5 queue.
+3. G1 diff pane upgrade (new files show +0 −0 today), C9 retry and edit-resend.
+4. K7 effort picker, then recheck C5 thinking.
 
 ## How to verify a change
 

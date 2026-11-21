@@ -28,7 +28,7 @@ export function NewProject(props: {
   const [text, setText] = useState("");
   const [folder, setFolder] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
-  const folderName = folder?.split(/[\/]/).filter(Boolean).pop() ?? folder;
+  const folderName = folder?.split(/[\\/]/).filter(Boolean).pop() ?? folder;
 
   const pick = async () => {
     try {
@@ -141,7 +141,10 @@ function summarize(steps: Step[]): string {
     const list = groups.get(tool)!;
     switch (tool) {
       case "execute": return `ran ${plural(list.length, "command")}`;
-      case "edit": case "delete": case "move": return `edited ${plural(filesIn(list), "file")}`;
+      case "edit": case "delete": case "move": {
+        const files = new Set(list.flatMap((step) => step.files));
+        return files.size === 1 ? `edited ${[...files][0]!.split(/[\\/]/).pop()}` : `edited ${plural(filesIn(list), "file")}`;
+      }
       case "read": return `read ${plural(filesIn(list), "file")}`;
       case "search": return list.length === 1 ? "searched the project" : `searched ${list.length} times`;
       case "fetch": return list.length === 1 ? "looked something up" : `looked up ${list.length} things`;
@@ -161,11 +164,14 @@ function summarize(steps: Step[]): string {
 function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
   const failed = steps.filter((step) => step.status === "failed").length;
   const running = live && steps.some((step) => step.status === "running");
+  const added = steps.reduce((sum, step) => sum + (step.added ?? 0), 0);
+  const removed = steps.reduce((sum, step) => sum + (step.removed ?? 0), 0);
   return (
     <details className={running ? "work running" : "work"}>
       <summary>
         {running && <Loader work />}
         <span>{summarize(steps)}</span>
+        {(added > 0 || removed > 0) && <span className="counts"><b>+{added}</b> <i>−{removed}</i></span>}
         {failed > 0 && <span className="bad">· {failed} failed</span>}
         <Icon name="chev" />
       </summary>
@@ -176,8 +182,21 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
           return (
             <li key={step.id} className={step.status === "failed" || unconfirmed ? "bad" : undefined}>
               {pending ? <Loader work /> : <Icon name={step.status === "done" ? "check" : "x"} />}
-              <span className="what">{step.label}{unconfirmed ? " · Unconfirmed" : ""}</span>
+              <span className="what">
+                {step.label}{unconfirmed ? " · Unconfirmed" : ""}
+                {step.added !== undefined && <span className="counts"> <b>+{step.added}</b> <i>−{step.removed ?? 0}</i></span>}
+              </span>
               {step.detail && step.detail !== step.label && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
+              {(step.patch || step.output) && (
+                <details className="peek">
+                  <summary>{step.patch ? "Show the change" : "Show the output"}</summary>
+                  <pre className={step.patch ? "patch" : "out"}>
+                    {step.patch
+                      ? step.patch.trimEnd().split("\n").map((line, at) => <span key={at} className={line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : undefined}>{line + "\n"}</span>)
+                      : step.output}
+                  </pre>
+                </details>
+              )}
             </li>
           );
         })}
@@ -217,6 +236,23 @@ function PlanList({ plan, docked }: { plan: Plan; docked: boolean }) {
 
 type Block = { kind: "work"; id: string; steps: Step[] } | Turn["parts"][number];
 
+const duration = (seconds: number) => (seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`);
+
+/** The agent's reasoning, folded. "Thinking" while it streams, "Thought for 12s" after. */
+function ThinkRow({ item }: { item: Extract<Item, { kind: "think" }> }) {
+  return (
+    <details className="work think">
+      <summary>
+        <span>{item.seconds === null ? "Thinking" : `Thought for ${duration(item.seconds)}`}</span>
+        <Icon name="chev" />
+      </summary>
+      <div className="thought"><Md text={item.text} /></div>
+    </details>
+  );
+}
+
+const ENDINGS = { done: "Worked for", stopped: "Stopped after", failed: "Stopped with a problem after", interrupted: "Interrupted after" };
+
 /** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
 function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn; live: boolean; actions: Actions }) {
   const blocks: Block[] = [];
@@ -228,6 +264,8 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
     } else blocks.push(part);
   }
   const running = turn.parts.findLast((part): part is Step => part.kind === "step" && part.status === "running");
+  const end = turn.parts.find((part) => part.kind === "end");
+  const thinking = live && blocks.at(-1)?.kind === "think";
   return (
     <>
       {turn.user !== null && <div className="you"><Md text={turn.user} /></div>}
@@ -237,6 +275,8 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
         // A question waiting on the user sits above the message box. Here it shows once it's settled.
         if (block.kind === "ask") return live && thread.state === "needs_you" && !block.answer ? null : <AskCard key={block.id} thread={thread} item={block} actions={actions} active={false} />;
         if (block.kind === "error") return <p key={block.id} className="oops">{block.text}</p>;
+        if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
+        if (block.kind === "end") return null;
         return (
           <p key={block.id} className="outcome">
             <Icon name="check" /> Changed {plural(block.files.length, "file")} <span>{block.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
@@ -244,10 +284,11 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
         );
       })}
       {!live && turn.plan && <PlanList plan={turn.plan} docked={false} />}
+      {!live && end?.kind === "end" && end.seconds >= 1 && <p className="ended">{ENDINGS[end.outcome]} {duration(end.seconds)}</p>}
       {live && thread.state !== "needs_you" && (
         <div className="live">
           <Loader work={!!running} />
-          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? stateLabel(thread) ?? "Working"}</span>
+          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? (thinking ? "Thinking" : stateLabel(thread)) ?? "Working"}</span>
         </div>
       )}
     </>

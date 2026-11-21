@@ -397,3 +397,17 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .dictating .done { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); }
 .dictating .done .i { width: 15px; height: 15px; stroke-width: 2.4; }
 @media (prefers-reduced-motion: reduce) { .dictating .bars i { transition: none; } }
+
+/* Thinking, line counts, a step's change or output, and how long a turn took. */
+.work .counts { font: 12px/1 var(--mono); }
+.work .counts b { font-weight: 500; color: var(--ok); }
+.work .counts i { font-style: normal; color: var(--ink-3); }
+.work.think .thought { margin: 6px 0 2px 6px; padding: 2px 0 2px 14px; border-left: 1px solid var(--line-2); color: var(--ink-3); font-size: 14px; max-height: 320px; overflow-y: auto; }
+.work li .peek { grid-column: 2; }
+.work li .peek summary { font-size: 12px; color: var(--ink-3); padding: 0; }
+.work li .peek summary::before { content: "›"; display: inline-block; width: 12px; transition: transform .12s; }
+.work li .peek[open] summary::before { transform: rotate(90deg); }
+.work li pre { margin: 6px 0 2px; padding: 10px 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); font: 12px/18px var(--mono); color: var(--ink-2); max-height: 280px; overflow: auto; white-space: pre; }
+.work li pre .add { color: var(--ok); }
+.work li pre .del { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--ink-4); }
+.ended { color: var(--ink-3); font-size: 12px; }

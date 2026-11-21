@@ -19,6 +19,7 @@ const RESEARCH_MCP = "https://api.arcex.dev/public/mcp";
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
 type Say = Extract<Item, { kind: "say" }>;
+type Think = Extract<Item, { kind: "think" }>;
 
 /** What exists only while a thread's agent is running. */
 type Live = {
@@ -27,6 +28,7 @@ type Live = {
   turnFailure: "failed" | "interrupted" | null;
   stopTimer?: ReturnType<typeof setTimeout>;
   say: Say | null;
+  think: { item: Think; started: number } | null;
   plan: Extract<Item, { kind: "plan" }> | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
@@ -98,6 +100,48 @@ function describe(kind: string, title: string, files: string[]): string {
   }
 }
 
+/** The lines an edit changed: the old and new text with their shared start and end trimmed off. */
+function changedLines(oldText: string, newText: string) {
+  // A file's final newline doesn't start another line.
+  const lines = (value: string) => (value ? value.replace(/\r?\n$/, "").split(/\r?\n/) : []);
+  const before = lines(oldText);
+  const after = lines(newText);
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  while (end < before.length - start && end < after.length - start && before[before.length - 1 - end] === after[after.length - 1 - end]) end++;
+  return { removed: before.slice(start, before.length - end), added: after.slice(start, after.length - end) };
+}
+
+/** Keeps what a tool call showed: line counts and changed lines for edits, the end of the output for commands. */
+function readContent(step: Step, content: acp.ToolCallContent[] | null | undefined) {
+  if (!content?.length) return;
+  let added = 0;
+  let removed = 0;
+  let patch = "";
+  let output = "";
+  for (const part of content) {
+    if (part.type === "diff") {
+      const lines = changedLines(part.oldText ?? "", part.newText);
+      added += lines.added.length;
+      removed += lines.removed.length;
+      if (patch.length < 6000) patch += [...lines.removed.map((line) => "-" + line), ...lines.added.map((line) => "+" + line)].join("\n") + "\n";
+    } else if (part.type === "content" && part.content.type === "text") {
+      output += part.content.text;
+    }
+  }
+  if (added || removed) {
+    step.added = added;
+    step.removed = removed;
+    step.patch = patch.slice(0, 6000);
+  }
+  if (output) {
+    // Agents often wrap output in a fenced block; the viewer adds its own.
+    const plain = output.replace(/^```[a-z]*\n?/, "").replace(/\n?```\s*$/, "");
+    step.output = plain.length > 4000 ? "…" + plain.slice(-4000) : plain;
+  }
+}
+
 /** Drives the Browser tab of the desktop app. Absent when the client runs in an ordinary browser. */
 export type BrowserBridge = { act(action: string, args: Record<string, unknown>): Promise<unknown> };
 
@@ -124,7 +168,7 @@ export function createEngine(
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
-    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, plan: null, steps: new Map(), asks: new Map() }));
+    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), asks: new Map() }));
     return live;
   };
   const projectOf = (id: unknown): Project => {
@@ -155,6 +199,11 @@ export function createEngine(
     const live = liveOf(thread.id);
     if (live.say) db.saveItem(thread.id, live.say);
     live.say = null;
+    if (live.think) {
+      live.think.item.seconds = Math.max(1, Math.round((Date.now() - live.think.started) / 1000));
+      put(thread, live.think.item);
+      live.think = null;
+    }
   }
 
   function filesOf(project: Project, update: { locations?: acp.ToolCallLocation[] | null; content?: acp.ToolCallContent[] | null }) {
@@ -168,8 +217,15 @@ export function createEngine(
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
     const live = lives.get(thread.id);
     if (!live?.turn) return;
-    if (update.sessionUpdate === "agent_message_chunk") {
+    if (update.sessionUpdate === "agent_thought_chunk") {
       if (update.content.type !== "text") return;
+      if (live.say) endSay(thread);
+      live.think ??= { item: { id: randomUUID(), kind: "think", text: "", seconds: null }, started: Date.now() };
+      if (live.think.item.text.length < 40_000) live.think.item.text += update.content.text;
+      put(thread, live.think.item, false);
+    } else if (update.sessionUpdate === "agent_message_chunk") {
+      if (update.content.type !== "text") return;
+      if (live.think) endSay(thread);
       live.say ??= { id: randomUUID(), kind: "say", text: "" };
       live.say.text += update.content.text;
       put(thread, live.say, false);
@@ -187,6 +243,7 @@ export function createEngine(
       if (update.status === "completed") step.item.status = "done";
       else if (update.status === "failed") step.item.status = "failed";
       step.item.detail = step.title.slice(0, 2000);
+      readContent(step.item, update.content);
       step.item.label = describe(step.kind, step.title, step.item.files);
       step.item.tool = /browser_[a-z]+/.test(step.title) ? "browser" : step.kind;
       put(thread, step.item);
@@ -291,6 +348,7 @@ export function createEngine(
     live.turn = turn;
     live.turnFailure = null;
     live.plan = null;
+    const started = Date.now();
     setState(thread, live.session ? "working" : "starting");
     put(thread, { id: randomUUID(), kind: "user", text: prompt });
     let outcome: ThreadState = "idle";
@@ -337,7 +395,10 @@ export function createEngine(
     }
     if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     live.steps.clear();
-    setState(thread, live.turnFailure ?? outcome);
+    const ended = (live.turnFailure ?? outcome) as ThreadState;
+    const endings: Partial<Record<ThreadState, "stopped" | "failed" | "interrupted">> = { stopped: "stopped", failed: "failed", interrupted: "interrupted" };
+    put(thread, { id: randomUUID(), kind: "end", seconds: Math.round((Date.now() - started) / 1000), outcome: endings[ended] ?? "done" });
+    setState(thread, ended);
   }
 
   const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
