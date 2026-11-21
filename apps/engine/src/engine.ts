@@ -26,6 +26,7 @@ type Live = {
   turnFailure: "failed" | "interrupted" | null;
   stopTimer?: ReturnType<typeof setTimeout>;
   say: Say | null;
+  plan: Extract<Item, { kind: "plan" }> | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
 };
@@ -121,7 +122,7 @@ export function createEngine(
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
-    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, steps: new Map(), asks: new Map() }));
+    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, plan: null, steps: new Map(), asks: new Map() }));
     return live;
   };
   const projectOf = (id: unknown): Project => {
@@ -185,7 +186,16 @@ export function createEngine(
       else if (update.status === "failed") step.item.status = "failed";
       step.item.detail = step.title.slice(0, 2000);
       step.item.label = describe(step.kind, step.title, step.item.files);
+      step.item.tool = /browser_[a-z]+/.test(step.title) ? "browser" : step.kind;
       put(thread, step.item);
+    } else if (update.sessionUpdate === "plan") {
+      // Agents send their whole plan each time it changes; one plan item per turn follows it.
+      live.plan ??= { id: randomUUID(), kind: "plan", entries: [] };
+      live.plan.entries = update.entries.slice(0, 50).map((entry) => ({
+        content: String(entry.content).slice(0, 500),
+        status: entry.status === "completed" || entry.status === "in_progress" ? entry.status : "pending",
+      }));
+      put(thread, live.plan);
     }
   }
 
@@ -278,6 +288,7 @@ export function createEngine(
     const turn = new AbortController();
     live.turn = turn;
     live.turnFailure = null;
+    live.plan = null;
     setState(thread, live.session ? "working" : "starting");
     put(thread, { id: randomUUID(), kind: "user", text: prompt });
     let outcome: ThreadState = "idle";

@@ -52,11 +52,17 @@ export type Item =
       detail: string;
       status: "running" | "done" | "failed" | "interrupted";
       files: string[];
+      /** What sort of tool it was (execute, edit, read, search, fetch, browser...), for grouping. Older steps lack it. */
+      tool?: string;
     }
+  /** The agent's own plan for the turn, kept up to date as it works. */
+  | { id: string; kind: "plan"; entries: PlanEntry[] }
   | { id: string; kind: "ask"; title: string; detail: string; options: AskOption[]; answer: string | null }
   | { id: string; kind: "error"; text: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | { id: string; kind: "result"; files: string[] };
+
+export type PlanEntry = { content: string; status: "pending" | "in_progress" | "completed" };
 
 /** One entry in a project folder. */
 export type FileEntry = { name: string; kind: "folder" | "file" };

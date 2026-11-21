@@ -8,6 +8,11 @@ import type { Agent, ModelOption, Settings } from "@arcex/contracts";
 
 const engineRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+const PLAN_NOTE =
+  "You are working inside Arcex, where the user sees your task list as a checklist while you work. " +
+  "When a request needs three or more distinct steps, make a task list first with your task or todo tool " +
+  "and keep each task's status current as you go. Skip the list for quick questions and one-step changes.";
+
 /**
  * Agents Arcex knows how to start. Every one speaks the Agent Client Protocol and runs as its maker's own tool,
  * signed in by the user. `adapter` agents ship with Arcex; `command` agents must be installed on the computer.
@@ -96,7 +101,9 @@ export async function startSession(options: {
 async function connectSession(options: Parameters<typeof startSession>[0], signal: AbortSignal): Promise<AgentSession> {
   signal.throwIfAborted();
   const launch = launchOf(options.agentId, options.settings);
-  const child: ChildProcess = spawn(launch.command, launch.args, { cwd: options.cwd, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
+  // Claude Code leaves its task list tools off in SDK sessions unless asked. Arcex shows that list as the plan.
+  const env = { ...process.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true" };
+  const child: ChildProcess = spawn(launch.command, launch.args, { cwd: options.cwd, env, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
   const terminate = () => {
     child.stdin?.destroy();
     if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
@@ -163,7 +170,9 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     const resumed = sessionId !== null;
     if (!sessionId) {
       signal.throwIfAborted();
-      const created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers }));
+      // Claude keeps its task tools behind ToolSearch, so smaller models rarely find them. Arcex shows the task list
+      // as the plan above the message box, so it asks for one. Other agents ignore this field.
+      const created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, _meta: { systemPrompt: { append: PLAN_NOTE } } }));
       sessionId = created.sessionId;
       models = modelsOf(created);
     }

@@ -95,18 +95,162 @@ export function NewProject(props: {
 
 /* ───────── Conversation ───────── */
 
-/** One message from the user and everything the agent did in response. */
-type Turn = { id: string; user: string | null; parts: Exclude<Item, { kind: "user" | "step" }>[]; steps: Step[] };
+/** One message from the user and everything the agent did in response, in the order it happened. */
+type Plan = Extract<Item, { kind: "plan" }>;
+type Turn = { id: string; user: string | null; parts: Exclude<Item, { kind: "user" | "plan" }>[]; plan: Plan | null };
 
 function turns(items: Item[]): Turn[] {
   const out: Turn[] = [];
   for (const item of items) {
-    if (item.kind === "user" || out.length === 0) out.push({ id: item.id, user: item.kind === "user" ? item.text : null, parts: [], steps: [] });
+    if (item.kind === "user" || out.length === 0) out.push({ id: item.id, user: item.kind === "user" ? item.text : null, parts: [], plan: null });
     const turn = out[out.length - 1]!;
-    if (item.kind === "step") turn.steps.push(item);
+    if (item.kind === "plan") turn.plan = item;
     else if (item.kind !== "user") turn.parts.push(item);
   }
   return out;
+}
+
+/** What sort of work a step was. Steps saved before tools were recorded are read from their wording. */
+function toolOf(step: Step): string {
+  if (step.tool) return step.tool;
+  if (step.detail.includes("browser_")) return "browser";
+  const label = step.label;
+  if (label.startsWith("Ran")) return "execute";
+  if (/^(Changed|Removed|Moved)/.test(label)) return "edit";
+  if (label.startsWith("Looked at") || label.startsWith("Looked through")) return "read";
+  if (label.startsWith("Searched")) return "search";
+  if (label.startsWith("Looked something up")) return "fetch";
+  return "other";
+}
+
+/** "Ran 2 commands, edited 3 files" for a run of steps, in the order the kinds of work first happened. */
+function summarize(steps: Step[]): string {
+  const order: string[] = [];
+  const groups = new Map<string, Step[]>();
+  for (const step of steps) {
+    const tool = toolOf(step);
+    if (!groups.has(tool)) {
+      order.push(tool);
+      groups.set(tool, []);
+    }
+    groups.get(tool)!.push(step);
+  }
+  const filesIn = (list: Step[]) => new Set(list.flatMap((step) => step.files)).size || list.length;
+  const phrases = order.map((tool) => {
+    const list = groups.get(tool)!;
+    switch (tool) {
+      case "execute": return `ran ${plural(list.length, "command")}`;
+      case "edit": case "delete": case "move": return `edited ${plural(filesIn(list), "file")}`;
+      case "read": return `read ${plural(filesIn(list), "file")}`;
+      case "search": return list.length === 1 ? "searched the project" : `searched ${list.length} times`;
+      case "fetch": return list.length === 1 ? "looked something up" : `looked up ${list.length} things`;
+      case "browser": return list.length === 1 ? "used the browser" : `used the browser ${list.length} times`;
+      case "think": return "thought it through";
+      default: {
+        const only = list[0]!.label;
+        return list.length === 1 ? only.charAt(0).toLowerCase() + only.slice(1) : `${list.length} other steps`;
+      }
+    }
+  });
+  const text = phrases.join(", ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** A run of tool calls between two things the agent said, folded into one quiet line that opens to show each step. */
+function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
+  const failed = steps.filter((step) => step.status === "failed").length;
+  const running = live && steps.some((step) => step.status === "running");
+  return (
+    <details className={running ? "work running" : "work"}>
+      <summary>
+        {running && <span className="spin" aria-hidden="true" />}
+        <span>{summarize(steps)}</span>
+        {failed > 0 && <span className="bad">· {failed} failed</span>}
+        <Icon name="chev" />
+      </summary>
+      <ul>
+        {steps.map((step) => {
+          const pending = step.status === "running" && live;
+          const unconfirmed = (step.status === "running" && !live) || step.status === "interrupted";
+          return (
+            <li key={step.id} className={step.status === "failed" || unconfirmed ? "bad" : undefined}>
+              {pending ? <span className="spin" aria-hidden="true" /> : <Icon name={step.status === "done" ? "check" : "x"} />}
+              <span className="what">{step.label}{unconfirmed ? " · Unconfirmed" : ""}</span>
+              {step.detail && step.detail !== step.label && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
+
+/** The agent's plan as a checklist. Docked above the message box while it works, folded into the turn afterwards. */
+function PlanList({ plan, docked }: { plan: Plan; docked: boolean }) {
+  const done = plan.entries.filter((entry) => entry.status === "completed").length;
+  const list = (
+    <ol className="plan-list">
+      {plan.entries.map((entry, index) => (
+        <li key={index} className={entry.status}>
+          {entry.status === "in_progress" ? <span className="spin" aria-hidden="true" /> : <span className="box">{entry.status === "completed" && <Icon name="check" />}</span>}
+          <span>{entry.content}</span>
+        </li>
+      ))}
+    </ol>
+  );
+  if (docked) {
+    return (
+      <div className="plan docked" aria-label="The agent's plan">
+        <span className="label">Plan · {done} of {plan.entries.length}</span>
+        {list}
+      </div>
+    );
+  }
+  return (
+    <details className="work plan">
+      <summary><span>Plan · {done} of {plan.entries.length} done</span><Icon name="chev" /></summary>
+      {list}
+    </details>
+  );
+}
+
+type Block = { kind: "work"; id: string; steps: Step[] } | Turn["parts"][number];
+
+/** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
+function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn; live: boolean; actions: Actions }) {
+  const blocks: Block[] = [];
+  for (const part of turn.parts) {
+    const last = blocks[blocks.length - 1];
+    if (part.kind === "step") {
+      if (last?.kind === "work") last.steps.push(part);
+      else blocks.push({ kind: "work", id: part.id, steps: [part] });
+    } else blocks.push(part);
+  }
+  const running = turn.parts.findLast((part): part is Step => part.kind === "step" && part.status === "running");
+  return (
+    <>
+      {turn.user !== null && <div className="you"><Md text={turn.user} /></div>}
+      {blocks.map((block, index) => {
+        if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} live={live && index === blocks.length - 1} />;
+        if (block.kind === "say") return <Reply key={block.id} text={block.text} />;
+        // A question waiting on the user sits above the message box. Here it shows once it's settled.
+        if (block.kind === "ask") return live && thread.state === "needs_you" && !block.answer ? null : <AskCard key={block.id} thread={thread} item={block} actions={actions} active={false} />;
+        if (block.kind === "error") return <p key={block.id} className="oops">{block.text}</p>;
+        return (
+          <p key={block.id} className="outcome">
+            <Icon name="check" /> Changed {plural(block.files.length, "file")} <span>{block.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
+          </p>
+        );
+      })}
+      {!live && turn.plan && <PlanList plan={turn.plan} docked={false} />}
+      {live && thread.state !== "needs_you" && (
+        <div className="live">
+          <span className="spin" aria-hidden="true" />
+          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? stateLabel(thread) ?? "Working"}</span>
+        </div>
+      )}
+    </>
+  );
 }
 
 function AskButtons({ thread, item, actions }: { thread: Thread; item: Ask; actions: Actions }) {
@@ -158,44 +302,6 @@ function Reply({ text }: { text: string }) {
         <Icon name={copied ? "check" : "copy"} />
       </button>
     </div>
-  );
-}
-
-/** The answer comes first. How the agent got there is folded away underneath. */
-function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn; live: boolean; actions: Actions }) {
-  const running = turn.steps.findLast((step) => step.status === "running") ?? turn.steps[turn.steps.length - 1];
-  return (
-    <>
-      {turn.user !== null && <div className="you"><Md text={turn.user} /></div>}
-      {turn.parts.map((part) =>
-        part.kind === "say" ? <Reply key={part.id} text={part.text} />
-        : part.kind === "ask" ? <AskCard key={part.id} thread={thread} item={part} actions={actions} active={live && thread.state === "needs_you"} />
-        : part.kind === "error" ? <p key={part.id} className="oops">{part.text}</p>
-        : (
-          <p key={part.id} className="outcome">
-            <Icon name="check" /> Changed {plural(part.files.length, "file")} <span>{part.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
-          </p>
-        ),
-      )}
-      {live && thread.state !== "needs_you" && (
-        <div className="live">
-          <span className="dot working" />
-          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? stateLabel(thread)}</span>
-        </div>
-      )}
-      {!live && turn.steps.length > 0 && (
-        <details className="how">
-          <summary>{plural(turn.steps.length, "step")}</summary>
-          <ul>
-            {turn.steps.map((step) => (
-              <li key={step.id} className={step.status !== "done" ? "bad" : undefined} title={step.detail}>
-                <Icon name={step.status === "done" ? "check" : "x"} /> {step.label}{step.status === "running" || step.status === "interrupted" ? " · Unconfirmed" : ""}
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </>
   );
 }
 
@@ -389,6 +495,10 @@ export function Conversation(props: {
     );
   }
   const lastPrompt = list.at(-1)?.user;
+  // The question the agent is waiting on sits just above the message box, like the plan while it works.
+  const pendingAsk = working && thread.state === "needs_you"
+    ? list.at(-1)?.parts.findLast((part): part is Ask => part.kind === "ask" && !part.answer)
+    : undefined;
   return (
     <div className="convo">
       <div
@@ -422,6 +532,8 @@ export function Conversation(props: {
             <Icon name="down" /> Latest
           </button>
         )}
+        {working && thread.state !== "needs_you" && list.at(-1)?.plan && <PlanList plan={list.at(-1)!.plan!} docked />}
+        {pendingAsk && <AskCard thread={thread} item={pendingAsk} actions={actions} active />}
         {composer}
         {notice || <p className="hint">{prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter to send" : "Enter to send · Shift + Enter for a new line"}</p>}
       </div>
