@@ -6,6 +6,60 @@ const { mkdir, readFile, rename, rm, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 
 const engineDir = path.resolve(__dirname, "../../engine");
+const repoDir = path.resolve(__dirname, "../../..");
+
+// ── Updating a build that runs from source.
+// Arcex is being built from inside Arcex, so "Update" means: take the latest code (pulled from GitHub when this
+// checkout is clean, plus any local edits the agents made), install new packages if the lockfile changed, rebuild
+// the client, then restart. If anything fails the running app is left as it is and the error is shown.
+function run(command, args) {
+  return new Promise((resolve) => {
+    // Fixed commands with fixed arguments. On Windows pnpm is a .cmd script, so it goes through cmd.exe.
+    const viaCmd = process.platform === "win32" && command === "pnpm";
+    const child = spawn(viaCmd ? "cmd.exe" : command, viaCmd ? ["/d", "/s", "/c", command, ...args] : args, { cwd: repoDir, windowsHide: true });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.on("error", (error) => resolve({ code: -1, output: output + error.message }));
+    child.on("close", (code) => resolve({ code, output }));
+  });
+}
+const sourceState = async () => {
+  const [head, status] = await Promise.all([run("git", ["rev-parse", "HEAD"]), run("git", ["status", "--porcelain"])]);
+  return `${head.output.trim()} ${status.output}`;
+};
+let launchState;
+const lockfile = () => require("node:fs").readFileSync(path.join(repoDir, "pnpm-lock.yaml"), "utf8");
+let launchLock;
+
+async function checkForUpdate() {
+  await run("git", ["fetch", "--quiet", "origin"]);
+  const [behind, state] = await Promise.all([run("git", ["rev-list", "--count", "HEAD..@{upstream}"]), sourceState()]);
+  return { behind: Number(behind.output.trim()) || 0, changed: launchState !== undefined && state !== launchState };
+}
+
+async function updateApp() {
+  const status = await run("git", ["status", "--porcelain", "--untracked-files=no"]);
+  const steps = [];
+  const upstream = await run("git", ["rev-parse", "--abbrev-ref", "@{upstream}"]);
+  if (!status.output.trim() && upstream.code === 0) {
+    const pull = await run("git", ["pull", "--ff-only", "--quiet"]);
+    if (pull.code !== 0) return { error: "Couldn't get the latest code from GitHub.", detail: pull.output.slice(-2000) };
+    steps.push("pulled");
+  }
+  if (lockfile() !== launchLock) {
+    const install = await run("pnpm", ["install", "--frozen-lockfile"]);
+    if (install.code !== 0) return { error: "Couldn't install the new packages.", detail: install.output.slice(-2000) };
+  }
+  const build = await run("pnpm", ["--filter", "@arcex/ide", "build"]);
+  if (build.code !== 0) return { error: "The new version doesn't build yet, so Arcex kept the current one.", detail: build.output.slice(-2000) };
+  const engineCheck = await run("pnpm", ["--filter", "@arcex/engine", "typecheck"]);
+  if (engineCheck.code !== 0) return { error: "The new engine has errors, so Arcex kept the current one.", detail: engineCheck.output.slice(-2000) };
+  quitting = true;
+  app.relaunch();
+  app.exit(0);
+  return { ok: true, steps };
+}
 let engine;
 let engineUrl;
 let starting;
@@ -104,6 +158,8 @@ function ensureEngine() {
 }
 
 app.whenReady().then(async () => {
+  launchState = await sourceState();
+  launchLock = lockfile();
   let url;
   while (!url) {
     try {
@@ -141,6 +197,9 @@ app.whenReady().then(async () => {
     crashes.length = 0;
     await ensureEngine();
   });
+  const fromWorkspace = (event) => event.sender === win.webContents && event.senderFrame?.parent === null && event.senderFrame.url.startsWith(engineUrl);
+  ipcMain.handle("update-check", (event) => (fromWorkspace(event) ? checkForUpdate() : null));
+  ipcMain.handle("update-app", (event) => (fromWorkspace(event) ? updateApp() : { error: "Only the Arcex workspace can update." }));
   ipcMain.handle("pick-folder", async () => {
     const result = await dialog.showOpenDialog(win, { title: "Choose your project folder", properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);

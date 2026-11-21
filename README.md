@@ -12,6 +12,8 @@ pnpm --filter @arcex/ide build
 pnpm --filter @arcex/desktop dev
 ```
 
+To work on Arcex from inside Arcex, add this repository as a project. **Update**, at the bottom of the sidebar, rebuilds the app from the current code and restarts it. If the checkout has no local edits, it pulls from GitHub first. If the new code doesn't build, the running version stays and the error is shown.
+
 Open **Agents** in Arcex to check which providers are ready. Each provider uses its own sign-in flow. Install Git if you want the Changes panel to show working-tree diffs. See the [ADE build notes](docs/ade-plan.md) for architecture and current feature coverage.
 
 ## Platform

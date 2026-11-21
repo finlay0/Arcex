@@ -4,6 +4,9 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("arcex", {
   pickFolder: () => ipcRenderer.invoke("pick-folder"),
   ensureEngine: () => ipcRenderer.invoke("ensure-engine"),
+  // Development builds run from source: check for newer code, and rebuild and restart onto it.
+  checkForUpdate: () => ipcRenderer.invoke("update-check"),
+  update: () => ipcRenderer.invoke("update-app"),
   // Opens a web address in the user's own browser.
   openExternal: (url) => ipcRenderer.send("open-external", String(url)),
   // Lets the window's own buttons match the theme the client is showing.

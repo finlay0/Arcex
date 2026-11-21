@@ -85,6 +85,44 @@ function Menu({ label, items }: { label: string; items: { label: string; danger?
   );
 }
 
+/** The Update button of a development build: quiet until there is newer code, then rebuilds and restarts onto it. */
+function UpdateButton({ fail }: { fail: (error: unknown) => void }) {
+  const desktop = window.arcex;
+  const [info, setInfo] = useState<{ behind: number; changed: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!desktop?.checkForUpdate) return;
+    const check = () => void desktop.checkForUpdate?.().then(setInfo).catch(() => {});
+    check();
+    const timer = setInterval(check, 120_000);
+    window.addEventListener("focus", check);
+    return () => (clearInterval(timer), window.removeEventListener("focus", check));
+  }, [desktop]);
+  if (!desktop?.update) return null;
+  const ready = !!info && (info.behind > 0 || info.changed);
+  const hint = !info ? "Rebuild Arcex from its code and restart" : info.behind > 0
+    ? `${info.behind} new ${info.behind === 1 ? "change" : "changes"} on GitHub. Rebuild and restart onto them.`
+    : info.changed ? "The code changed since Arcex started. Rebuild and restart onto it." : "Arcex is running the latest code. Rebuild and restart anyway.";
+  const update = async () => {
+    setBusy(true);
+    try {
+      const result = await desktop.update!();
+      // Show the error and the last few lines of what went wrong, so it can be pasted to an agent to fix.
+      if (result.error) fail(new Error(result.detail ? [result.error, "", ...result.detail.trim().split(/\r?\n/).slice(-6)].join("\n") : result.error));
+    } catch (error) {
+      fail(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button className={ready ? "row update ready" : "row update"} title={hint} disabled={busy} onClick={() => void update()}>
+      <Icon name="reload" />
+      {busy ? "Updating…" : ready ? "Update ready" : "Update"}
+    </button>
+  );
+}
+
 export function App() {
   const store = useStore();
   const settings = store.settings;
@@ -381,6 +419,7 @@ export function App() {
             <span className={!status ? "dot working" : ready > 0 ? "dot ok" : "dot needs"} />
             {!status ? "Checking agents" : ready === 0 ? (unchecked ? "Check agent setup" : "No agent ready") : ready === 1 ? "1 agent ready" : `${ready} agents ready`}
           </button>
+          <UpdateButton fail={fail} />
         </div>
       </aside>
 
