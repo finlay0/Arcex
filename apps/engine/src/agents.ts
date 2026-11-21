@@ -4,7 +4,7 @@ import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
-import type { Agent, AgentChoice, ModelOption, Settings } from "@arcex/contracts";
+import type { Agent, AgentChoice, ModelOption, Settings, SlashCommand } from "@arcex/contracts";
 
 const engineRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,10 +47,18 @@ function launchOf(agentId: string, settings: Settings): Launch {
   return { command, args: [], shell: true };
 }
 
-export type Models = { options: ModelOption[]; current: string | null; choices: AgentChoice[] };
+export type Models = { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] };
+
+function commandsOf(list: acp.AvailableCommand[]): SlashCommand[] {
+  return list.slice(0, 200).map((command) => ({
+    name: String(command.name).replace(/^\//, "").slice(0, 80),
+    description: String(command.description ?? "").slice(0, 300),
+    hint: command.input && "hint" in command.input && command.input.hint ? String(command.input.hint).slice(0, 120) : null,
+  })).filter((command) => command.name);
+}
 
 /** Agents describe their models as a "model" choice among the session's options. */
-function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Models & { configId: string }) | null {
+function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Omit<Models, "commands"> & { configId: string }) | null {
   const option = response.configOptions?.find((entry) => entry.type === "select" && (entry.category === "model" || entry.id === "model"));
   if (!option || option.type !== "select") return null;
   const flat = (option.options as unknown as ({ value?: string; name?: string; description?: string | null; options?: unknown[] })[]).flatMap(
@@ -82,7 +90,7 @@ export type AgentSession = {
   sessionId: string;
   /** False when a saved conversation could not be reopened and a fresh one was started instead. */
   resumed: boolean;
-  models: Models | null;
+  models: Omit<Models, "commands"> | null;
   defaultModel: string | null;
   setModel(value: string): Promise<void>;
   /** The agent's other settings, kept current as the agent reports changes. */
@@ -90,6 +98,10 @@ export type AgentSession = {
   setChoice(id: string, value: string): Promise<void>;
   /** Takes in settings the agent changed by itself, such as leaving plan mode. */
   noteChoices(update: { configOptions?: acp.SessionConfigOption[] | null }): void;
+  /** The agent's slash commands, as it last listed them. */
+  commands: SlashCommand[];
+  /** Waits up to `ms` for the agent's first command list. */
+  commandsReady(ms: number): Promise<void>;
   prompt(text: string): Promise<acp.PromptResponse>;
   cancel(): Promise<void>;
   close(): void;
@@ -157,9 +169,17 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
 
   // Reopening a session replays its history as updates. The timeline is already saved, so those are dropped.
   let live = false;
+  let commands: SlashCommand[] = [];
+  let commandsArrived = () => {};
+  const firstCommands = new Promise<void>((resolve) => (commandsArrived = resolve));
   const connection = acp
     .client()
     .onNotification("session/update", ({ params }) => {
+      // Agents send their command list just after the session opens, before Arcex treats updates as live.
+      if (params.update.sessionUpdate === "available_commands_update") {
+        commands = commandsOf(params.update.availableCommands ?? []);
+        commandsArrived();
+      }
       if (live) options.onUpdate(params.update);
     })
     .onRequest("session/request_permission", ({ params }) => options.onPermission(params))
@@ -248,6 +268,14 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         const next = choicesOf(update);
         if (next.length) choices = next;
       },
+      get commands() {
+        return commands;
+      },
+      async commandsReady(ms) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([firstCommands, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))]);
+        clearTimeout(timer);
+      },
       prompt: (text) => agent.request("session/prompt", { sessionId: id, prompt: [{ type: "text", text }] }),
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
       close: () => {
@@ -274,6 +302,7 @@ export async function listModels(agentId: string, settings: Settings, cwd: strin
     onPermission: async () => ({ outcome: { outcome: "cancelled" } }),
     onExit: () => {},
   });
+  await session.commandsReady(3000);
   session.close();
-  return { ...(session.models ?? { options: [], current: null }), choices: session.choices };
+  return { ...(session.models ?? { options: [], current: null }), choices: session.choices, commands: session.commands };
 }

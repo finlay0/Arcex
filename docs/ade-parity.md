@@ -57,7 +57,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K1 | Voice dictation | Mic button, live level, transcribe into the box | P0 | done | `Dictation.tsx` plus engine `speech.ts` (`transcribe-cpp`, Parakeet 110M, 135 MB on first press, checksum verified, unloads after 10 idle min). Streams 1 s chunks over the WebSocket. Enter finishes, Esc discards. Later: a keyboard shortcut, a bigger-model choice in Settings, dictation in the new-project box |
 | K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | open | ACP prompt `image` and `resource_link` blocks, checked against `promptCapabilities` |
 | K3 | @-mention files | `@` opens a fuzzy file picker and inserts a chip | P0 | open | `project.files` exists. Add a search request |
-| K4 | Slash commands and skills | `/` menu from the agent's commands | P0 | open | ACP `available_commands_update` |
+| K4 | Slash commands and skills | `/` menu from the agent's own commands and skills, ranked by name then word match; arrows, Enter or Tab, Esc | P0 | partial | Menu verified with Claude. Not yet checked: a command run end to end, Codex's list, project-only skills (the list is read in the data folder, then replaced by what a thread reports) |
 | K5 | Queue while working | Enter while the agent works queues the message above the box (edit or remove); the next one sends when the turn finishes cleanly. Kept in the engine, so it survives reloads | P0 | done | Stops and failures leave the queue waiting |
 | K6 | Permission / approval mode picker | Ask before edits · Auto-accept edits · Plan mode · Full access (Codex: read-only, auto, full) | P0 | open | ACP session modes (`current_mode_update`, `session/set_mode`). Pick friendly names for vibe coders |
 | K7 | Reasoning effort / speed | Effort picker (low to max), fast mode | P1 | open | ACP session config options. The adapter exposes effort |
@@ -125,6 +125,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · K4 slash command menu in the message box, from the agent's reported commands.
 - 2026-11-21 · K5 queue while working: queued messages sit above the box and send in order when a turn finishes.
 - 2026-11-21 · K6 mode, K7 effort and fast, A2 plan approval with the plan shown. Files outside the project (an agent's own plan notes) no longer count as changed.
 - 2026-11-21 · C6, C7 and C12 shipped: edit line counts with patches, command output and turn duration. C5 thinking rendering is in.
@@ -137,7 +138,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. K4 slash commands, K2 attachments, K3 @-mentions.
+1. K2 attachments, K3 @-mentions, then run a slash command end to end (K4).
 2. G1 diff pane upgrade (new files show +0 −0 today), C9 retry and edit-resend.
 3. C5 thinking stream (adapter or SDK setting), then K6 remembering picks across restarts.
 

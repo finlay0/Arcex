@@ -14,6 +14,9 @@ export type ModelOption = { value: string; name: string; description: string };
  * A setting the agent offers besides its model, such as how much it asks before acting ("mode"), how hard it
  * thinks ("thought_level"), fast mode ("model_config") or planning first ("collaboration_mode").
  */
+/** A slash command the agent offers, such as /review. `hint` describes what to type after it, when it takes input. */
+export type SlashCommand = { name: string; description: string; hint: string | null };
+
 export type AgentChoice = { id: string; name: string; category: string; current: string; values: ModelOption[] };
 
 export type Project = {
@@ -142,7 +145,7 @@ export type Requests = {
   "settings.set": { params: Partial<Settings>; result: Settings };
   "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
   /** The models an agent offers. Reading them starts the agent briefly but sends no message. */
-  "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[] } };
+  "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] } };
   "agents.add": { params: { name: string; command: string }; result: Settings };
   "agents.remove": { params: { agentId: string }; result: Settings };
   "toolbox.list": { params: Record<string, never>; result: Tool[] };
@@ -197,4 +200,6 @@ export type EventMessage =
   | { event: "gone"; kind: "project" | "thread"; id: string }
   /** An agent is using the project's browser, so the client shows the Browser tab. */
   | { event: "browse"; projectId: string }
-  | { event: "speech"; speech: SpeechState };
+  | { event: "speech"; speech: SpeechState }
+  /** An agent's slash commands changed, for example when it found a project's own skills. */
+  | { event: "commands"; agentId: string; commands: SlashCommand[] };

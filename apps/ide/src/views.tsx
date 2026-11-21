@@ -3,6 +3,7 @@ import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } 
 import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
+import { useSlashMenu } from "./SlashMenu.tsx";
 import { Md } from "./md.tsx";
 import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
@@ -459,6 +460,8 @@ export function Conversation(props: {
   const health = props.status?.find((entry) => entry.id === agentId);
   const notReady = health && (!health.installed || health.signedIn === false);
   const queueFull = working && (thread?.queued?.length ?? 0) >= 10;
+  const slash = useSlashMenu(agentId, draft, setDraft);
+  const enter = onEnter(() => void send());
   const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && draft.trim() && (!working || thread?.state !== "stopping"));
 
   const send = async () => {
@@ -481,6 +484,7 @@ export function Conversation(props: {
 
   const composer = (
     <div className="composer">
+      {slash.menu}
       <AutoText
         autoFocus
         rows={thread ? 1 : 2}
@@ -489,7 +493,7 @@ export function Conversation(props: {
         maxLength={20000}
         placeholder={thread ? `Reply to ${nameOf(thread.provider)}` : "Describe what you want done"}
         onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={onEnter(send)}
+        onKeyDown={(event) => slash.onKeyDown(event) || enter(event)}
       />
       <div className="tools">
         {!thread && <ProjectPicker projects={props.projects} project={project} pick={props.pickProject} create={props.newProject} />}

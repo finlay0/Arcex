@@ -297,6 +297,11 @@ export function createEngine(
       step.item.label = describe(step.kind, step.title, step.item.files);
       step.item.tool = /browser_[a-z]+/.test(step.title) ? "browser" : step.kind;
       put(thread, step.item);
+    } else if (update.sessionUpdate === "available_commands_update" && live.session) {
+      const commands = live.session.commands;
+      const cached = modelCache.get(thread.provider);
+      if (cached) cached.commands = commands;
+      emit({ event: "commands", agentId: thread.provider, commands });
     } else if (update.sessionUpdate === "config_option_update" && live.session) {
       live.session.noteChoices(update);
       followChoices(thread, live.session);

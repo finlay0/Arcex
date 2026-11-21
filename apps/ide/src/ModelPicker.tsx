@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { Agent, AgentChoice, ModelOption } from "@arcex/contracts";
+import type { Agent, AgentChoice, ModelOption, SlashCommand } from "@arcex/contracts";
 import { Icon } from "./shared.tsx";
-import { call } from "./store.ts";
+import { call, useStore } from "./store.ts";
 
 export type Choice = { agentId: string; model: { value: string; name: string } | null; /** Agent settings such as mode and effort, by choice id. */ choices?: Record<string, string> };
 
 // Model lists are read from each agent once and shared by every picker.
-const cache = new Map<string, { options: ModelOption[]; current: string | null; choices: AgentChoice[] }>();
+const cache = new Map<string, { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] }>();
 
 /** Hides an agent's own "default" entry, since the picker already offers the agent's default at the top. */
 const real = (options: ModelOption[]) => options.filter((option) => option.value !== "default");
@@ -189,6 +189,28 @@ function useAgentChoices(agentId: string) {
     };
   }, [agentId]);
   return choices;
+}
+
+/** An agent's slash commands: the list read when first asked, replaced by any newer list a thread reported. */
+export function useAgentCommands(agentId: string): SlashCommand[] {
+  const reported = useStore().commands[agentId];
+  const [commands, setCommands] = useState<SlashCommand[]>(cache.get(agentId)?.commands ?? []);
+  useEffect(() => {
+    const cached = cache.get(agentId);
+    if (cached) return setCommands(cached.commands ?? []);
+    setCommands([]);
+    let stale = false;
+    call("agents.models", { agentId })
+      .then((models) => {
+        cache.set(agentId, models);
+        if (!stale) setCommands(models.commands ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [agentId]);
+  return reported ?? commands;
 }
 
 /** A small menu that opens above or below its button, whichever has more room. */
