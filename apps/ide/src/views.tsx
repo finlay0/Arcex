@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
+import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, Requests, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
@@ -7,6 +7,7 @@ import { useSlashMenu } from "./SlashMenu.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
+import { highlight, languageOf } from "./highlight.ts";
 import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
 
@@ -893,6 +894,9 @@ export function Panel(props: {
   }, []);
   const settled = `${props.connected}:${nudged}:${threads.map((t) => `${t.id}:${t.state}`).join()}`;
   const [wide, setWide] = useState(false);
+  // A file opened from the Files list replaces the details until Back.
+  const [viewing, setViewing] = useState<string | null>(null);
+  useEffect(() => setViewing(null), [project.id]);
   const tabsId = useId();
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
   const found = useMemo(() => {
@@ -907,7 +911,7 @@ export function Panel(props: {
   }, [threads, props.items]);
 
   return (
-    <aside className={wide || props.tab === "browser" ? "panel wide" : "panel"}>
+    <aside className={wide || props.tab === "browser" || (viewing && props.tab === "details") ? "panel wide" : "panel"}>
       <div className="ptop">
         <div className="tabs" role="tablist" aria-label="Project panel" onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -923,7 +927,7 @@ export function Panel(props: {
           ))}
         </div>
         <span className="fill" />
-        {props.tab === "details" && (
+        {props.tab === "details" && !viewing && (
           <button className="icon" aria-pressed={wide} aria-label={wide ? "Make panel narrower" : "Make panel wider"} onClick={() => setWide(!wide)}>
             <Icon name="grow" />
           </button>
@@ -936,7 +940,9 @@ export function Panel(props: {
       {props.tab === "browser" ? (
         <Browser project={project} found={found} fail={fail} />
       ) : (
-        <div className="pbody">
+        <>
+        {viewing && <FileView project={project} path={viewing} refresh={settled} back={() => setViewing(null)} />}
+        <div className="pbody" hidden={!!viewing}>
           <div className="phero" title={project.cwd}>
             <Icon name="folder" />
             <b className="trunc">{project.name}</b>
@@ -949,7 +955,7 @@ export function Panel(props: {
             <span className="label">Building</span>
             <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
-          <Files project={project} refresh={settled} />
+          <Files project={project} refresh={settled} view={setViewing} />
           <Changes project={project} refresh={settled} fail={fail} />
           <Versions project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
@@ -979,6 +985,7 @@ export function Panel(props: {
             </section>
           )}
         </div>
+        </>
       )}
       </div>
     </aside>
@@ -986,7 +993,7 @@ export function Panel(props: {
 }
 
 /** The project's folders and files. Folders open in place; nothing here edits anything. */
-function Files({ project, refresh }: { project: Project; refresh: string }) {
+function Files({ project, refresh, view }: { project: Project; refresh: string; view(path: string): void }) {
   const [entries, setEntries] = useState<Record<string, FileEntry[] | string>>({});
   const [open, setOpen] = useState<Set<string>>(new Set());
   const load = (dir: string) =>
@@ -1018,9 +1025,9 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
       const path = dir ? `${dir}/${entry.name}` : entry.name;
       if (entry.kind === "file") {
         return (
-          <div key={path} className="file" title={path}>
+          <button key={path} className="file" title={path} onClick={() => view(path)}>
             <Icon name="file" /> <span className="trunc">{entry.name}</span>
-          </div>
+          </button>
         );
       }
       return (
@@ -1040,6 +1047,66 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
       <header><b>Files</b></header>
       <div className="files">{list("")}</div>
     </section>
+  );
+}
+
+/** One file, read-only, with line numbers and grey syntax tones. Esc or Back returns to the details. */
+function FileView({ project, path, refresh, back }: { project: Project; path: string; refresh: string; back(): void }) {
+  type Loaded = Requests["project.readFile"]["result"];
+  const [file, setFile] = useState<Loaded | { error: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    let current = true;
+    call("project.readFile", { projectId: project.id, path })
+      .then((result) => { if (current) setFile(result); })
+      .catch((error: Error) => { if (current) setFile({ error: error.message }); });
+    return () => { current = false; };
+  }, [project.id, path, refresh]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      // Only when focus is in the panel (or nowhere), so Esc in a menu or the message box stays theirs.
+      const target = event.target as Element | null;
+      if (event.key === "Escape" && !event.defaultPrevented && (target === document.body || target?.closest?.(".panel"))) back();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [back]);
+  const lines = useMemo(() => (file && "text" in file && file.text !== undefined ? highlight(file.text, languageOf(path)) : null), [file, path]);
+  const name = path.split("/").pop() ?? path;
+  return (
+    <div className="fileview">
+      <div className="fvtop">
+        <button className="icon" aria-label="Back to project details" title="Back" onClick={back}><Icon name="back" /></button>
+        <span className="fvname trunc" title={path}><b>{name}</b>{path !== name && <span className="muted"> {path.slice(0, -name.length - 1)}</span>}</span>
+        {lines && (
+          <button className="icon" aria-label={copied ? "Copied" : "Copy file contents"} title="Copy" onClick={() => {
+            if (file && "text" in file && file.text !== undefined) void navigator.clipboard.writeText(file.text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}>
+            <Icon name={copied ? "check" : "copy"} />
+          </button>
+        )}
+      </div>
+      {!file ? <p className="muted fvnote">Loading…</p>
+        : "error" in file ? <p className="muted fvnote">Couldn't open this file: {file.error}</p>
+        : file.tooLarge ? <p className="muted fvnote">This file is {Math.round(file.size / 1024 / 1024 * 10) / 10} MB, too large to show here.</p>
+        : file.binary ? <p className="muted fvnote">This file isn't text, so it can't be shown here.</p>
+        : lines && (
+          <div className="fvcode" role="region" aria-label={`Contents of ${name}`} tabIndex={0}>
+            <table>
+              <tbody>
+                {lines.map((line, index) => (
+                  <tr key={index}>
+                    <td className="ln">{index + 1}</td>
+                    <td className="lt">{line.map((token, at) => token.kind === "plain" ? token.text : <span key={at} className={`tk-${token.kind}`}>{token.text}</span>)}{"\n"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+    </div>
   );
 }
 

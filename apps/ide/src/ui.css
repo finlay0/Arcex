@@ -371,6 +371,21 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .l.gap { display: block; text-align: center; color: var(--ink-4); padding: 0; }
 .diff > .l:not(:has(.lt)):not(.gap) { display: block; padding: 0 12px; }
 .l.add { background: var(--ok-bg); } .l.del { background: var(--stop-bg); color: var(--ink-2); } .l.ctx { color: var(--ink-3); }
+/* File viewer in the side panel. Syntax tones stay grey: strings and comments recede, keywords stand out. */
+.pbody[hidden] { display: none; }
+.fileview { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.fvtop { display: flex; align-items: center; gap: 6px; padding: 6px 12px 6px 8px; border-bottom: 1px solid var(--line); min-width: 0; }
+.fvname { flex: 1; font-size: 14px; }
+.fvnote { padding: 16px 18px; }
+.fvcode { overflow: auto; font: 12.500px/20px var(--mono); padding: 8px 0 24px; }
+.fvcode table { border-collapse: collapse; min-width: 100%; }
+.fvcode .ln { color: var(--ink-4); text-align: right; padding: 0 12px 0 14px; user-select: none; font-variant-numeric: tabular-nums; vertical-align: top; width: 1%; }
+.fvcode .lt { white-space: pre; padding-right: 16px; color: var(--ink-2); }
+.fvcode tr:hover .lt { background: var(--hover); }
+.tk-keyword, .tk-tag { color: var(--ink); font-weight: 500; }
+.tk-string { color: var(--ink-3); }
+.tk-number { color: var(--ink); }
+.tk-comment { color: var(--ink-4); font-style: italic; }
 .act { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; height: 38px; width: calc(100% + 16px); margin: 0 -8px; padding: 0 8px; border-radius: 9px; text-align: left; }
 .act:hover { background: var(--hover); }
 .act > .i { color: var(--ink-2); }

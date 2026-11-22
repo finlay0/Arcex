@@ -6,6 +6,7 @@ import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
+import { open, realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
@@ -821,6 +822,30 @@ export function createEngine(
         .map((entry) => ({ name: entry.name, kind: entry.isDirectory() ? ("folder" as const) : ("file" as const) }))
         .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1))
         .slice(0, 300);
+    },
+
+    async "project.readFile"(params) {
+      const project = projectOf(params.projectId);
+      if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("pick a file");
+      // Stay inside the project folder, also through links.
+      const root = await realpath(project.cwd);
+      const file = await realpath(path.resolve(project.cwd, params.path)).catch(() => null);
+      if (!file || (file !== root && !file.startsWith(root + path.sep))) throw new Error("that file is outside the project or gone");
+      const stats = statSync(file);
+      if (!stats.isFile()) throw new Error("that isn't a file");
+      const relative = path.relative(root, file).split(path.sep).join("/");
+      const LIMIT = 1024 * 1024;
+      if (stats.size > LIMIT) return { path: relative, size: stats.size, tooLarge: true };
+      const handle = await open(file, "r");
+      try {
+        const buffer = Buffer.alloc(stats.size);
+        const { bytesRead } = await handle.read(buffer, 0, stats.size, 0);
+        const bytes = buffer.subarray(0, bytesRead);
+        if (bytes.subarray(0, 8000).includes(0)) return { path: relative, size: stats.size, binary: true };
+        return { path: relative, size: stats.size, text: bytes.toString("utf8") };
+      } finally {
+        await handle.close();
+      }
     },
 
     "project.search"(params) {

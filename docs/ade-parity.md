@@ -138,7 +138,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | P1 | Browser / preview pane with agent control | Preview with dev server start and agent browsing tools | P0 | done | a885e7a. Still missing: start the dev server from project config |
-| P2 | File viewer | Click a file in the tree to read it, with syntax highlighting | P1 | open | Audit: file rows are static |
+| P2 | File viewer | Click a file in the tree to read it, with syntax highlighting | P1 | done | Click a file in the side panel's Files list to read it there: line numbers, grey syntax tones for common languages (own small highlighter, no blue), Copy, Back or Esc. Binary files and files over 1 MB say so. Reads stay inside the project folder, also through links. Verified November 21 |
 | P3 | Terminal pane (opt-in) | A real shell per project, hidden by default | P1 | open | node-pty or ConPTY in the engine. Opt-in only |
 | P4 | Resizable and expandable panels | Drag to resize, expand a pane, split view | P1 | open | Audit: widths compete at 1100 px |
 | P5 | Tasks / background processes pane | Running background commands with timers | P2 | open | |
@@ -216,6 +216,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · G3 saved versions list with Go back.
 - 2026-11-21 · C14 "Open preview" on the last turn.
 - 2026-11-21 · C10 rewind the conversation and files to before any message.
+- 2026-11-21 · P2 file viewer in the side panel.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -237,7 +238,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-4. Then the P1 items: P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+4. Then the P1 items: P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

@@ -228,6 +228,11 @@ export type Requests = {
   /** Lists one folder of the project. `dir` is relative to the project folder; empty means the top. */
   "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
   /** Finds project files and folders by a few letters of their path, best first. Empty query lists the top ones. */
+  /**
+   * One project file to read in the side panel, at most 1 MB of it. `text` is missing for binary files and for files
+   * too large to show.
+   */
+  "project.readFile": { params: { projectId: string; path: string }; result: { path: string; size: number; text?: string; binary?: boolean; tooLarge?: boolean } };
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   /** Saves everything in the project folder as a version (a Git commit, kept out of sight). */
