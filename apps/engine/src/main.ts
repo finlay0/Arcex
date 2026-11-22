@@ -1,5 +1,5 @@
 // Engine entry point: serves the built client and one WebSocket that speaks @arcex/contracts.
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import os from "node:os";
@@ -12,7 +12,27 @@ import { TOOLBOX } from "./toolbox.ts";
 import { createAccountClient } from "./account.ts";
 
 const clientDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../ide/dist");
-const dataDir = process.env.ARCEX_DATA_DIR ?? path.join(process.env.APPDATA ?? os.homedir(), "Arcex");
+const argv = process.argv.slice(2);
+const flag = (name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
+const dataDir = flag("--data-dir") ?? process.env.ARCEX_DATA_DIR ?? path.join(process.env.APPDATA ?? os.homedir(), "Arcex");
+// A scheduled task starts the engine with --run-schedule <id>. If Arcex is open, its engine runs the schedule, so two
+// engines never share the database; otherwise this one runs it with no window and exits when the run is done.
+const scheduleRun = flag("--run-schedule");
+const handoffFile = path.join(dataDir, "engine.json");
+if (scheduleRun) {
+  try {
+    const open = JSON.parse(readFileSync(handoffFile, "utf8")) as { pid: number; port: number; key: string };
+    process.kill(open.pid, 0);
+    const reply = await fetch(`http://127.0.0.1:${open.port}/schedule/run`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-arcex-key": open.key },
+      body: JSON.stringify({ id: scheduleRun }),
+    });
+    if (reply.status !== 403) process.exit(0);
+  } catch {
+    // No engine is open. This one runs it.
+  }
+}
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png",
   ".svg": "image/svg+xml", ".woff2": "font/woff2", ".ico": "image/x-icon",
@@ -74,6 +94,8 @@ function desktopCall(channel: string, payload: Record<string, unknown>, waitMs: 
 // Agents reach the Browser tab through the Arcex connector, which calls back into this engine.
 // The key is made fresh for every run and only handed to the connector, so web pages can't use the route.
 const browserKey = randomBytes(32).toString("hex");
+// Lets a scheduled task hand its run to this engine. Kept in the data folder, which only this user can read.
+const handoffKey = randomBytes(32).toString("hex");
 const engineUrl = () => {
   const address = server.address();
   return address && typeof address === "object" ? `http://127.0.0.1:${address.port}` : "";
@@ -89,6 +111,8 @@ const engine = createEngine(openDb(dataDir), about, connector, (message) => {
   for (const socket of sockets) socket.send(data);
 }, account, {
   browser: browserBridge,
+  // On Windows, schedules get a Task Scheduler task that starts this engine the same way it runs now.
+  ...(process.platform === "win32" ? { launch: { node: process.execPath, cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), script: "src/main.ts", dataDir } } : {}),
   connectorEnv: () => [
     { name: "ARCEX_ENGINE_URL", value: engineUrl() },
     { name: "ARCEX_BROWSER_KEY", value: browserKey },
@@ -96,13 +120,13 @@ const engine = createEngine(openDb(dataDir), about, connector, (message) => {
 });
 
 /** A connector call: the Browser tab, or a suggested side thread. */
-function agentRoute(request: IncomingMessage, response: import("node:http").ServerResponse, act: (body: Record<string, unknown>) => Promise<unknown>) {
+function agentRoute(request: IncomingMessage, response: import("node:http").ServerResponse, act: (body: Record<string, unknown>) => Promise<unknown>, secret = browserKey) {
   const reply = (status: number, body: unknown) => {
     response.writeHead(status, { "content-type": "application/json" });
     response.end(JSON.stringify(body));
   };
   const key = Buffer.from(String(request.headers["x-arcex-key"] ?? ""));
-  if (key.length !== browserKey.length || !timingSafeEqual(key, Buffer.from(browserKey))) return reply(403, { error: "forbidden" });
+  if (key.length !== secret.length || !timingSafeEqual(key, Buffer.from(secret))) return reply(403, { error: "forbidden" });
   const chunks: Buffer[] = [];
   let size = 0;
   request.on("data", (chunk: Buffer) => {
@@ -138,6 +162,7 @@ const server = createServer((request, response) => {
   }
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
   if (pathname === "/agent/browser" && request.method === "POST") return agentRoute(request, response, (body) => engine.browse(body.projectId, body.action, body.args));
+  if (pathname === "/schedule/run" && request.method === "POST") return agentRoute(request, response, async (body) => (await engine.runSchedule(String(body.id))).id, handoffKey);
   if (pathname === "/agent/side" && request.method === "POST") return agentRoute(request, response, async (body) => engine.suggest(body.threadId, body.title, body.prompt));
   const agentIcon = /^\/agent-icons\/([\w.-]{1,80})\.svg$/.exec(pathname);
   if (agentIcon && request.method === "GET") {
@@ -194,16 +219,38 @@ wss.on("connection", (socket) => {
   });
 });
 
-server.listen(Number(process.env.ARCEX_ENGINE_PORT ?? 4517), "127.0.0.1", () => {
+server.listen(scheduleRun ? 0 : Number(process.env.ARCEX_ENGINE_PORT ?? 4517), "127.0.0.1", () => {
   const address = server.address();
-  if (address && typeof address === "object") console.log(`ARCEX_ENGINE_READY http://127.0.0.1:${address.port}/`);
+  if (!address || typeof address !== "object") return;
+  writeFileSync(handoffFile, JSON.stringify({ pid: process.pid, port: address.port, key: handoffKey }));
+  console.log(`ARCEX_ENGINE_READY http://127.0.0.1:${address.port}/`);
+  if (scheduleRun) void runAndExit(scheduleRun);
 });
+
+/** A scheduled run with Arcex closed: start the thread, wait for it and its wrap-up, then stop. At most three hours. */
+async function runAndExit(id: string) {
+  const started = Date.now();
+  await engine.runSchedule(id).catch((error: unknown) => console.error("[engine] scheduled run failed:", error));
+  let quiet = 0;
+  const check = setInterval(() => {
+    quiet = engine.busy() ? 0 : quiet + 1;
+    if (quiet >= 2 || Date.now() - started > 3 * 3_600_000) {
+      clearInterval(check);
+      shutdown();
+    }
+  }, 5000);
+}
 
 let closing = false;
 function shutdown() {
   if (closing) return;
   closing = true;
   engine.close();
+  try {
+    if ((JSON.parse(readFileSync(handoffFile, "utf8")) as { pid: number }).pid === process.pid) rmSync(handoffFile, { force: true });
+  } catch {
+    // Already gone.
+  }
   for (const socket of sockets) socket.terminate();
   wss.close();
   server.close();

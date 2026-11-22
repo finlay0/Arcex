@@ -240,6 +240,29 @@ export type Settings = {
   wrapUp: boolean;
 };
 
+/** When a schedule runs, in local time ("09:00"). `day` is 0 for Sunday to 6 for Saturday. */
+export type ScheduleWhen = { kind: "daily" | "weekdays"; time: string } | { kind: "weekly"; day: number; time: string } | { kind: "hourly"; every: number };
+
+/**
+ * A prompt that runs on a schedule as a new thread. `background`: "task" when Windows runs it even with Arcex closed,
+ * "app" when it runs only while Arcex is open, "failed" when the task couldn't be made (`problem` says why).
+ */
+export type Schedule = {
+  id: string;
+  name: string;
+  projectId: string;
+  prompt: string;
+  provider: ProviderId;
+  model: { value: string; name: string } | null;
+  when: ScheduleWhen;
+  on: boolean;
+  createdAt: number;
+  nextRun: number | null;
+  lastRun: { at: number; threadId: string | null; skipped?: string } | null;
+  background: "task" | "app" | "failed";
+  problem?: string;
+};
+
 /**
  * An MCP server the user added: a command Arcex's agents start, or a web address they reach. `scope` is "all" or one
  * project's id. Environment values and headers may hold the server's own keys; they stay on this computer.
@@ -315,6 +338,11 @@ export type Requests = {
   "settings.set": { params: Partial<Settings>; result: Settings };
   /** Adds or changes a connector (matched by id), removes one, or starts one to list its tools. */
   "connectors.save": { params: { connector: Partial<Connector> }; result: Settings };
+  /** Prompts that run on a schedule. Saving makes or updates the Windows task; removing deletes it. */
+  "schedules.list": { params: Record<string, never>; result: Schedule[] };
+  "schedules.save": { params: { schedule: Partial<Schedule> }; result: Schedule[] };
+  "schedules.remove": { params: { id: string }; result: Schedule[] };
+  "schedules.runNow": { params: { id: string }; result: Thread };
   "connectors.remove": { params: { id: string }; result: Settings };
   "connectors.test": { params: { connector: Partial<Connector> }; result: { tools: string[] } };
   "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
@@ -485,6 +513,7 @@ export type EventMessage =
   /** The thread's whole timeline, after a rewind removed part of it. */
   | { event: "items"; threadId: string; items: Item[] }
   | { event: "settings"; settings: Settings; agents: Agent[] }
+  | { event: "schedules"; schedules: Schedule[] }
   | { event: "gone"; kind: "project" | "thread"; id: string }
   /** An agent is using the project's browser, so the client shows the Browser tab. */
   | { event: "browse"; projectId: string }

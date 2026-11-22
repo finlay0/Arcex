@@ -822,3 +822,9 @@ textarea.textfield.cpairs { height: auto; min-height: 64px; padding: 8px 12px; r
 .fbpreview summary { cursor: pointer; color: var(--ink-3); font-size: 13px; }
 .fbpreview pre { margin: 8px 0 0; max-height: 200px; overflow: auto; padding: 10px; border-radius: 10px; background: var(--chrome); font: 12px/18px var(--mono); white-space: pre-wrap; color: var(--ink-2); }
 .palette.feedback .changeacts { justify-content: flex-end; }
+/* Schedules. */
+.schedules { grid-template-columns: minmax(0, 1fr); }
+.schedwhen { gap: 8px; }
+.schedwhen .textfield { width: auto; min-width: 120px; }
+textarea.textfield.schedprompt { width: 320px; font: inherit; font-size: 14px; line-height: 20px; }
+.warnnote { color: var(--warn); }

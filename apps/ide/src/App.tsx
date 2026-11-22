@@ -6,6 +6,7 @@ import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, plural, prefs, setAge
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
+import { SchedulesView } from "./Schedules.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { OPEN_FILE } from "./md.tsx";
 import { Feedback, OPEN_FEEDBACK } from "./Feedback.tsx";
@@ -16,6 +17,7 @@ type Screen =
   | { kind: "thread"; threadId: string | null }
   | { kind: "new-project" }
   | { kind: "toolbox" }
+  | { kind: "schedules" }
   | { kind: "settings"; section: Section };
 
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
@@ -428,6 +430,7 @@ export function App() {
         ...(settings?.terminal ? [{ id: "terminal", group: "Actions", label: "Show the terminal", icon: "code", keys: "Ctrl `", run: () => { setPanel(true); setTab("terminal"); } }] : []),
       ] : []),
       { id: "toolbox", group: "Actions", label: "Open the toolbox", icon: "box", run: () => setScreen({ kind: "toolbox" }) },
+      { id: "schedules", group: "Actions", label: "Schedules", icon: "bell", run: () => setScreen({ kind: "schedules" }) },
       { id: "feedback", group: "Actions", label: thread ? "Send feedback about this thread" : "Send feedback", icon: "chat", run: () => setFeedback({ threadId: thread?.id ?? null }) },
       ...(["dark", "light", "system"] as const).filter((value) => value !== settings?.theme).map((value) => ({
         id: `theme:${value}`, group: "Actions", label: value === "system" ? "Match the system theme" : `Switch to ${value} theme`, icon: value === "light" ? "sun" : "moon",
@@ -457,7 +460,7 @@ export function App() {
   if (!settings || !store.about) return <div className="lost">{store.status === "lost" ? connectionNotice : <span className="starting" role="status">Starting Arcex…</span>}{toast && <p role="alert">{toast}</p>}</div>;
 
   const showPanel = panelOpen && !!project && view.kind === "thread";
-  const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
+  const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "schedules" ? "Schedules" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
   const needle = query.trim().toLowerCase();
 
   return (
@@ -477,6 +480,9 @@ export function App() {
           </button>
           <button className="row" aria-current={view.kind === "settings" && view.section === "agents"} onClick={() => setScreen({ kind: "settings", section: "agents" })}>
             <Icon name="layers" /> Agents
+          </button>
+          <button className="row" aria-current={view.kind === "schedules"} onClick={() => setScreen({ kind: "schedules" })}>
+            <Icon name="bell" /> Schedules
           </button>
           <button className="row" aria-current={view.kind === "settings" && view.section !== "agents"} onClick={() => setScreen({ kind: "settings", section: "general" })}>
             <Icon name="gear" /> Settings
@@ -689,6 +695,17 @@ export function App() {
             projects={store.projects}
             threads={store.threads}
             recheck={() => void call("providers.status", {}).then(setStatus).catch(() => {})}
+            fail={fail}
+          />
+        ) : view.kind === "schedules" && settings ? (
+          <SchedulesView
+            projects={store.projects}
+            projectId={project?.id ?? null}
+            settings={settings}
+            open={(threadId) => {
+              const t = live.find((entry) => entry.id === threadId);
+              if (t) openThread(t);
+            }}
             fail={fail}
           />
         ) : view.kind === "toolbox" ? (

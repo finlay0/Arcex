@@ -11,6 +11,7 @@ import { listHooks, listSkills, toggleHook, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
 import { readCodexLimit } from "./codexLimits.ts";
+import { cleanWhen, nextRun, removeTask, saveTask, type Launch } from "./schedules.ts";
 import { openCodeSeesImages } from "./modelInputs.ts";
 import { cleanConnector, connectorServers, MAX_CONNECTORS, testConnector } from "./connectors.ts";
 import { bringIn, copyChanges, copyDiff, createCopy, removeCopy } from "./worktrees.ts";
@@ -20,7 +21,7 @@ import { open, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { About, AgentTask, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState, UsageLimit } from "@arcex/contracts";
+import type { About, AgentTask, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Schedule, Settings, Thread, ThreadState, UsageLimit } from "@arcex/contracts";
 import { BUILTIN, SignInNeeded, agentList, listModels, signIn, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
@@ -231,7 +232,7 @@ export type BrowserBridge = { act(action: string, args: Record<string, unknown>)
 export function createEngine(
   db: Db, about: About, connector: { script: string; toolboxFile: string }, emit: (message: EventMessage) => void,
   account = createAccountClient(),
-  extras: { browser?: BrowserBridge; connectorEnv?(): { name: string; value: string }[] } = {},
+  extras: { browser?: BrowserBridge; connectorEnv?(): { name: string; value: string }[]; launch?: Launch } = {},
 ) {
   let settings = db.settings();
   const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
@@ -906,6 +907,52 @@ export function createEngine(
     }
   }
 
+  // Schedules. With a Windows task, Windows starts the run (through this engine when it's open); without one, this
+  // engine runs them while it's open.
+  const schedules = new Map(db.schedules().map((schedule) => [schedule.id, schedule]));
+  const scheduleList = () => [...schedules.values()].sort((a, b) => a.createdAt - b.createdAt);
+  const emitSchedules = () => {
+    const list = scheduleList();
+    emit({ event: "schedules", schedules: list });
+    return list;
+  };
+  /** Starts a schedule's prompt as a new thread. Skipped while its last run is still going. */
+  async function runSchedule(id: string, byHand = false): Promise<Thread> {
+    const schedule = schedules.get(id);
+    if (!schedule) throw new Error("that schedule is gone");
+    const project = projectOf(schedule.projectId);
+    const previous = schedule.lastRun?.threadId ? threads.get(schedule.lastRun.threadId) : undefined;
+    const now = Date.now();
+    schedule.nextRun = schedule.on ? nextRun(schedule.when, now, schedule.createdAt) : null;
+    if (previous && busyState(previous)) {
+      schedule.lastRun = { at: now, threadId: previous.id, skipped: "the last run was still going" };
+      db.saveSchedule(schedule);
+      emitSchedules();
+      if (byHand) throw new Error("its last run is still going");
+      return publicThread(previous);
+    }
+    const created = await handlers["thread.create"]({ projectId: project.id, provider: schedule.provider, model: schedule.model, choices: {}, text: schedule.prompt });
+    const thread = threadOf(created.id);
+    thread.title = schedule.name;
+    thread.named = true;
+    db.saveThread(thread);
+    put(thread, { id: randomUUID(), kind: "note", text: byHand ? `Started by hand from the schedule “${schedule.name}”.` : `A scheduled run of “${schedule.name}”.` });
+    emit({ event: "thread", thread: publicThread(thread) });
+    schedule.lastRun = { at: now, threadId: thread.id };
+    db.saveSchedule(schedule);
+    emitSchedules();
+    return publicThread(thread);
+  }
+  // Schedules without a Windows task are due by this clock.
+  const scheduleClock = setInterval(() => {
+    const now = Date.now();
+    for (const schedule of schedules.values()) {
+      if (!schedule.on || schedule.background === "task" || !schedule.nextRun || schedule.nextRun > now || !projects.has(schedule.projectId)) continue;
+      void runSchedule(schedule.id).catch(() => {});
+    }
+  }, 30_000);
+  scheduleClock.unref?.();
+
   // After-turn wrap-ups being written, by thread, and agents found not to support them (no session forks).
   const wrapping = new Map<string, AbortController>();
   const noWrap = new Set<string>();
@@ -1048,6 +1095,57 @@ export function createEngine(
       emit({ event: "settings", settings, agents: agentList(settings) });
       return settings;
     },
+    "schedules.list": () => scheduleList(),
+    async "schedules.save"(params) {
+      const raw = (params.schedule ?? {}) as Partial<Schedule>;
+      const before = typeof raw.id === "string" ? schedules.get(raw.id) : undefined;
+      if (!before && schedules.size >= 30) throw new Error("that is the most schedules Arcex keeps (30)");
+      const project = projectOf(raw.projectId ?? before?.projectId);
+      const provider = String(raw.provider ?? before?.provider ?? settings.defaultProvider);
+      if (!agentList(settings).some((agent) => agent.id === provider)) throw new Error("unknown agent");
+      const now = Date.now();
+      const when = raw.when === undefined && before ? before.when : cleanWhen(raw.when);
+      const schedule: Schedule = {
+        id: before?.id ?? randomUUID(),
+        name: text(raw.name ?? before?.name, "name", 80),
+        projectId: project.id,
+        prompt: text(raw.prompt ?? before?.prompt, "prompt", 20_000),
+        provider,
+        model: raw.model === undefined ? (before?.model ?? settings.defaultModel) : pickedModel(raw.model),
+        when,
+        on: raw.on === undefined ? (before?.on ?? true) : raw.on === true,
+        createdAt: before?.createdAt ?? now,
+        nextRun: null,
+        lastRun: before?.lastRun ?? null,
+        background: "app",
+      };
+      // An hourly schedule counts its hours from when it was set up or last changed.
+      if (!before || JSON.stringify(before.when) !== JSON.stringify(when)) schedule.createdAt = now;
+      schedule.nextRun = schedule.on ? nextRun(schedule.when, now, schedule.createdAt) : null;
+      if (extras.launch) {
+        try {
+          await saveTask(schedule, extras.launch);
+          schedule.background = "task";
+        } catch (error) {
+          schedule.background = "failed";
+          schedule.problem = `Windows couldn't set it to run while Arcex is closed (${error instanceof Error ? error.message : String(error)}). It runs while Arcex is open.`;
+        }
+      }
+      schedules.set(schedule.id, schedule);
+      db.saveSchedule(schedule);
+      return emitSchedules();
+    },
+    async "schedules.remove"(params) {
+      const schedule = schedules.get(String(params.id));
+      if (schedule) {
+        if (extras.launch) await removeTask(schedule.id);
+        schedules.delete(schedule.id);
+        db.removeSchedule(schedule.id);
+      }
+      return emitSchedules();
+    },
+    "schedules.runNow": (params) => runSchedule(String(params.id), true),
+
     "connectors.test": (params) => testConnector(cleanConnector(params.connector, [], new Set(projects.keys()))),
 
     async "agents.models"(params) {
@@ -1846,6 +1944,9 @@ ${question}`;
   return {
     browse,
     suggest,
+    runSchedule: (id: string) => runSchedule(id),
+    /** True while any thread is working or a wrap-up is being written; a scheduled run waits for this before exiting. */
+    busy: () => [...threads.values()].some(busyState) || wrapping.size > 0,
     /** An agent's icon from the directory, as SVG text, or null. */
     agentIcon: (id: string) => directory.icon(id),
     /** A stored image for a thumbnail, or null. */
@@ -1856,6 +1957,7 @@ ${question}`;
       return Promise.resolve().then(() => handler((params ?? {}) as never));
     },
     close() {
+      clearInterval(scheduleClock);
       speech.close();
       processes.close();
       terminals.closeAll();

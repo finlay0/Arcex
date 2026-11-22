@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import type { Copy } from "./worktrees.ts";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Item, Project, QueuedMessage, Settings, Thread } from "@arcex/contracts";
+import type { Item, Project, QueuedMessage, Settings, Thread, Schedule } from "@arcex/contracts";
 
 /** `carry`: a recap for the agent's next fresh session (after a rewind or leaving a separate copy), kept until sent. */
 /** `named`: the user renamed the thread, so its agent no longer titles it. */
@@ -29,6 +29,7 @@ export function openDb(dataDir: string) {
     );
     CREATE INDEX IF NOT EXISTS items_by_thread ON items (thread_id, seq);
     CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, json TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS drafts (
       project_id TEXT NOT NULL REFERENCES projects(id), thread_id TEXT NOT NULL, text TEXT NOT NULL,
       PRIMARY KEY (project_id, thread_id)
@@ -97,6 +98,15 @@ export function openDb(dataDir: string) {
     settings(): Settings {
       const row = db.prepare("SELECT json FROM settings WHERE id = 1").get();
       return { ...DEFAULT_SETTINGS, ...(row ? (JSON.parse(row.json as string) as Partial<Settings>) : {}) };
+    },
+    schedules(): Schedule[] {
+      return db.prepare("SELECT json FROM schedules").all().map((row) => JSON.parse(row.json as string) as Schedule);
+    },
+    saveSchedule(schedule: Schedule) {
+      db.prepare("INSERT INTO schedules (id, json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET json = excluded.json").run(schedule.id, JSON.stringify(schedule));
+    },
+    removeSchedule(id: string) {
+      db.prepare("DELETE FROM schedules WHERE id = ?").run(id);
     },
     saveSettings(settings: Settings) {
       db.prepare("INSERT INTO settings (id, json) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET json = excluded.json").run(JSON.stringify(settings));
