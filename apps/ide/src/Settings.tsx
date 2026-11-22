@@ -761,8 +761,20 @@ function Skills(props: { projects: Project[]; start: string | null; draft(projec
               <Row title="No hooks" hint="Hooks run a command when something happens in a session, such as after each file edit. Claude Code reads them from .claude/settings.json."><span /></Row>
             )}
             {found.hooks.map((hook, index) => (
-              <Row key={index} title={`${hook.event}${hook.matcher ? ` · ${hook.matcher}` : ""}`} hint={`${hook.agent} · ${hook.scope === "project" ? "this project" : "every project"} · ${hook.file}${hook.off ? " · turned off in that file" : ""}`}>
+              <Row key={`${hook.id}${index}`} title={`${hook.event}${hook.matcher ? ` · ${hook.matcher}` : ""}`} hint={`${hook.agent} · ${hook.scope === "project" ? "this project" : "every project"} · ${hook.file}${hook.off ? " · all hooks turned off in that file" : ""}${hook.enabled ? "" : " · off, kept aside by Arcex"}`}>
                 <span className="mono hookrun" title={hook.run}>{hook.run}</span>
+                <Switch
+                  on={hook.enabled}
+                  onChange={(on) => {
+                    if (busyPath === hook.id) return;
+                    setBusyPath(hook.id);
+                    call("project.toggleHook", { projectId, id: hook.id, enabled: on })
+                      .then(({ hooks }) => setFound((current) => (current ? { ...current, hooks } : current)))
+                      .catch(props.fail)
+                      .finally(() => setBusyPath(null));
+                  }}
+                  label={`${hook.event} hook`}
+                />
               </Row>
             ))}
           </div>

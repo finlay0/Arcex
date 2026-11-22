@@ -64,7 +64,11 @@ export type MemoryNote = { name: string; text: string; changed: number };
 export type SkillEntry = { path: string; relative: string | null; name: string; description: string; agent: string; scope: "project" | "personal"; enabled: boolean };
 
 /** One hook from an agent's settings file. `off` means that file turns all its hooks off. */
-export type HookEntry = { event: string; matcher: string; run: string; agent: string; scope: "project" | "personal"; file: string; off: boolean };
+/**
+ * A Claude Code hook. `off`: the whole file has hooks turned off (disableAllHooks). `enabled`: false when the user turned
+ * this one off in Arcex, which keeps it aside in its data folder until it's turned back on.
+ */
+export type HookEntry = { id: string; event: string; matcher: string; run: string; agent: string; scope: "project" | "personal"; file: string; off: boolean; enabled: boolean };
 
 /** One run of a project script. `url` is the local address it printed, such as a dev server's. */
 export type ProcessInfo = {
@@ -367,6 +371,7 @@ export type Requests = {
   "project.skills": { params: { projectId: string }; result: { skills: SkillEntry[]; hooks: HookEntry[] } };
   /** Turns a listed skill on or off by renaming its SKILL.md. */
   "project.toggleSkill": { params: { projectId: string; path: string; enabled: boolean }; result: { skills: SkillEntry[] } };
+  "project.toggleHook": { params: { projectId: string; id: string; enabled: boolean }; result: { hooks: HookEntry[] } };
   /** Runs one script with no terminal window. Running it again while it runs returns the same run. */
   "process.run": { params: { projectId: string; script: string }; result: ProcessInfo };
   "process.stop": { params: { processId: string }; result: { ok: true } };

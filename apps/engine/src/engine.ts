@@ -7,7 +7,7 @@ import { createDirectory } from "./directory.ts";
 import { listEditors, openIn } from "./editors.ts";
 import { createProcesses } from "./processes.ts";
 import { createTerminals } from "./terminals.ts";
-import { listHooks, listSkills, toggleSkill } from "./skills.ts";
+import { listHooks, listSkills, toggleHook, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
 import { cleanConnector, connectorServers, MAX_CONNECTORS, testConnector } from "./connectors.ts";
@@ -1104,10 +1104,14 @@ export function createEngine(
 
     async "project.skills"(params) {
       const { cwd } = projectOf(params.projectId);
-      const [skills, hooks] = await Promise.all([listSkills(cwd), listHooks(cwd)]);
+      const [skills, hooks] = await Promise.all([listSkills(cwd), listHooks(cwd, about.dataDir)]);
       return { skills, hooks };
     },
 
+    async "project.toggleHook"(params) {
+      const { cwd } = projectOf(params.projectId);
+      return { hooks: await toggleHook(cwd, about.dataDir, text(params.id, "hook", 40), params.enabled === true) };
+    },
     async "project.toggleSkill"(params) {
       const { cwd } = projectOf(params.projectId);
       return { skills: await toggleSkill(cwd, text(params.path, "skill", 1000), params.enabled === true) };
