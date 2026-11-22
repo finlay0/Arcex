@@ -48,7 +48,7 @@ State on November 21, 2026, at commit `5b850fb` on `main`. Everything listed as 
 **Unverified or known gaps** (fix or verify before calling parity done)
 
 - C5: thinking never seen live.
-- Codex re-run on November 21 after its limit reset: full access (wrote a file with no prompt), K3 "@" mention (read the mentioned file), K2 pasted image ("Orange"), the K9 meter (Codex sends usage too) and H2 all work. Running a `$` skill is still untried.
+- Codex re-run on November 21 after its limit reset: full access (wrote a file with no prompt), K3 "@" mention (read the mentioned file), K2 pasted image ("Orange"), the K9 meter (Codex sends usage too) and H2 all work. November 22: a project skill in `.agents/skills` ran from `$say-pelican` ("I'm using the say-pelican skill", then the skill's exact reply).
 - Plan first with Claude: the switch is shown, but a plan approved into full access has not been run since the mode menu was removed.
 - C5: thinking now seen live with OpenCode. Still never seen with Claude.
 - K7: effort and fast picks reset for new threads after a restart.
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · Codex `$` skill verified end to end (no code change).
 - 2026-11-22 · H6 per-hook on/off switches.
 - 2026-11-22 · H3 Settings › Connectors: your own MCP servers, tested and handed to every agent.
 - 2026-11-22 · S9 side threads: agent-suggested or user-started, nested under the parent with live state.
@@ -279,8 +280,7 @@ Newest first. One line per shipped change, with its commit.
 Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
-2. Run a Codex `$` skill end to end.
-3. Remaining partial rows: X5 limits for agents other than Claude, C14 recap (a written recap would need a model call, so it waits on Finlay like K12).
+2. Remaining partial rows: X5 limits for agents other than Claude, C14 recap (a written recap would need a model call, so it waits on Finlay like K12).
 
 K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
