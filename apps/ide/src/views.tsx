@@ -264,7 +264,7 @@ function ThinkRow({ item }: { item: Extract<Item, { kind: "think" }> }) {
 const ENDINGS = { done: "Worked for", stopped: "Stopped after", failed: "Stopped with a problem after", interrupted: "Interrupted after" };
 
 /** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
-function TurnView({ thread, turn, live, last, actions, edit }: { thread: Thread; turn: Turn; live: boolean; last: boolean; actions: Actions; edit(turn: Turn): void }) {
+function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread: Thread; turn: Turn; live: boolean; last: boolean; preview: boolean; actions: Actions; edit(turn: Turn): void }) {
   const blocks: Block[] = [];
   for (const part of turn.parts) {
     const last = blocks[blocks.length - 1];
@@ -294,7 +294,7 @@ function TurnView({ thread, turn, live, last, actions, edit }: { thread: Thread;
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
-        if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} last={last} fail={actions.fail} />;
+        if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} last={last} preview={preview} fail={actions.fail} />;
         return (
           <p key={block.id} className="outcome">
             <Icon name="check" /> Changed {plural(block.files.length, "file")} <span>{block.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
@@ -756,7 +756,7 @@ export function Conversation(props: {
       >
         <div className="flow">
           {list.map((turn, index) => (
-            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} last={index === list.length - 1} actions={actions} edit={editTurn} />
+            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} last={index === list.length - 1} preview={!!project?.previewUrl} actions={actions} edit={editTurn} />
           ))}
           {thread.state === "interrupted" && <p className="oops">This turn was interrupted. Check the project for partial changes before you retry.</p>}
           {thread.state === "stopped" && <p className="muted">Turn stopped. Any changes already made may still be in the project.</p>}
@@ -1008,6 +1008,8 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
 
 /** Sent when the project's files change outside a turn, so the side panel looks again. */
 const FILES_CHANGED = "arcex:files-changed";
+/** Asks the app to open the side panel on the Browser tab, showing the project's running app. */
+export const OPEN_PREVIEW = "arcex:open-preview";
 
 /** "Save a version": commits the project's changes, out of sight. Says "Saved" for a moment afterwards. */
 function SaveVersion({ projectId, message, fail, className = "btn" }: { projectId: string; message: string; fail(error: unknown): void; className?: string }) {
@@ -1141,7 +1143,7 @@ function ChangeStat({ change }: { change: Change }) {
 }
 
 /** What one turn changed, from snapshots taken before and after it. Opens to each file's diff for that turn alone. */
-function TurnChanges({ thread, item, last, fail }: { thread: Thread; item: Extract<Item, { kind: "result" }>; last: boolean; fail(error: unknown): void }) {
+function TurnChanges({ thread, item, last, preview, fail }: { thread: Thread; item: Extract<Item, { kind: "result" }>; last: boolean; preview: boolean; fail(error: unknown): void }) {
   const changes = item.changes ?? [];
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<string | null>(null);
@@ -1193,6 +1195,7 @@ function TurnChanges({ thread, item, last, fail }: { thread: Thread; item: Extra
         {idle && !allUndone && <button className="link" onClick={() => start({ redo: false })}>Undo</button>}
         {idle && undoneFiles.size > 0 && <button className="link" onClick={() => start({ redo: true })}>Redo</button>}
         {idle && last && !allUndone && <SaveVersion className="link" projectId={thread.projectId} message={thread.title} fail={fail} />}
+        {last && preview && !busy(thread) && <button className="link" onClick={() => window.dispatchEvent(new Event(OPEN_PREVIEW))}>Open preview</button>}
       </div>
       {ask && ask.step !== "working" && (
         <div className="undoask">

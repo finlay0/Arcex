@@ -6,7 +6,7 @@ import { Icon, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type A
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
-import { Conversation, NewProject, Panel, type PanelTab } from "./views.tsx";
+import { Conversation, NewProject, OPEN_PREVIEW, Panel, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
 type Screen =
@@ -137,6 +137,15 @@ export function App() {
   const [sidebar, setSidebar] = useState(true);
   const [panel, setPanel] = useState<boolean | null>(null);
   const [tab, setTab] = useState<PanelTab>("details");
+  // "Open preview" in a turn shows the project's running app in the side panel.
+  useEffect(() => {
+    const show = () => {
+      setPanel(true);
+      setTab("browser");
+    };
+    window.addEventListener(OPEN_PREVIEW, show);
+    return () => window.removeEventListener(OPEN_PREVIEW, show);
+  }, []);
   const [query, setQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
