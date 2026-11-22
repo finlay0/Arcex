@@ -201,6 +201,11 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome.undone { background: var(--raised-2); color: var(--ink-2); }
 .undoask { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; max-width: 560px; }
 .undoask .btns { display: flex; gap: 8px; }
+.tcfile { display: flex; align-items: center; gap: 6px; }
+.tcfile > .file { flex: 1; min-width: 0; }
+.tcfile > .link { padding: 0 8px; font-size: 13px; }
+.file.undone .trunc { color: var(--ink-3); text-decoration: line-through; }
+.stat.muted { color: var(--ink-3); }
 .tcrow > .outcome .stat { font-size: 12.5px; }
 .tcrow > .outcome .i.chev { color: var(--ink-3); width: 13px; height: 13px; transition: transform .12s; }
 .tcrow > .outcome[aria-expanded="true"] .i.chev { transform: rotate(90deg); }

@@ -98,8 +98,8 @@ export type Item =
       /** What this turn changed, from snapshots of the folder taken before and after it. Absent for Git-less folders. */
       changes?: Change[];
       snapshots?: { before: string; after: string };
-      /** Set once the user has undone this turn's changes. */
-      undone?: boolean;
+      /** Files whose changes from this turn the user has undone (and not redone). `true` from older builds means all. */
+      undone?: string[] | boolean;
     }
   /** Closes every turn: how it ended and how long it took. */
   | { id: string; kind: "end"; outcome: "done" | "stopped" | "failed" | "interrupted"; seconds: number };
@@ -222,7 +222,11 @@ export type Requests = {
    * Puts the files one turn changed back the way they were before it. Files changed again since are listed in
    * `changedSince` and nothing is undone, unless `force` is set.
    */
-  "thread.undoTurn": { params: { threadId: string; itemId: string; force?: boolean }; result: { undone: string[]; changedSince: string[] } };
+  "thread.undoTurn": {
+    /** `path` limits it to one of the turn's files. `redo` puts undone changes back. */
+    params: { threadId: string; itemId: string; force?: boolean; path?: string; redo?: boolean };
+    result: { undone: string[]; changedSince: string[] };
+  };
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */

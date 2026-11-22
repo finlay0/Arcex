@@ -175,24 +175,26 @@ async function blobNow(cwd: string, file: string): Promise<string | null> {
  * since the turn are listed and left alone unless `force` is set, so later work isn't lost by accident. Uses a scratch
  * index, so the user's staging area is untouched.
  */
-export async function undoTurn(cwd: string, before: string, after: string, files: string[], scratchIndex: string, force: boolean): Promise<{ undone: string[]; changedSince: string[] }> {
+export async function undoTurn(cwd: string, before: string, after: string, files: string[], scratchIndex: string, force: boolean, redo = false): Promise<{ undone: string[]; changedSince: string[] }> {
   if (!TREE.test(before) || !TREE.test(after)) throw new Error("invalid snapshot");
   const turn = new Set((await turnChanges(cwd, before, after)).map((change) => change.path));
   const targets = files.filter((file) => turn.has(file));
+  // Undo goes from the turn's result back to before it. Redo goes the other way.
+  const [from, to] = redo ? [before, after] : [after, before];
   const changedSince: string[] = [];
   for (const file of targets) {
-    if ((await blobNow(cwd, file)) !== (await blobIn(cwd, after, file))) changedSince.push(file);
+    if ((await blobNow(cwd, file)) !== (await blobIn(cwd, from, file))) changedSince.push(file);
   }
   if (changedSince.length && !force) return { undone: [], changedSince };
   const env = { GIT_INDEX_FILE: scratchIndex };
-  await gitWith(cwd, ["read-tree", before], env);
+  await gitWith(cwd, ["read-tree", to], env);
   const undone: string[] = [];
   try {
     for (const file of targets) {
-      if (await blobIn(cwd, before, file)) {
+      if (await blobIn(cwd, to, file)) {
         await gitWith(cwd, ["checkout-index", "-f", "--", file], env);
       } else {
-        // The turn created this file, so undoing removes it.
+        // The file didn't exist at that point (the turn created or deleted it), so it's removed.
         const absolute = path.join(cwd, file);
         if ((await lstat(absolute).catch(() => null))?.isFile()) await rm(absolute);
       }

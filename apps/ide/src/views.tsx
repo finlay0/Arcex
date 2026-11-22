@@ -956,60 +956,80 @@ function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { k
   }, [thread.id, item.id, file, attempt]);
   const added = changes.reduce((sum, change) => sum + change.added, 0);
   const removed = changes.reduce((sum, change) => sum + change.removed, 0);
-  // Undo asks first. If files changed again after this turn, it says which and asks again before overwriting them.
-  const [undo, setUndo] = useState<{ step: "confirm" } | { step: "working" } | { step: "changedSince"; files: string[] } | null>(null);
+  const undoneFiles = new Set(item.undone === true ? item.files : Array.isArray(item.undone) ? item.undone : []);
+  const allUndone = changes.length > 0 && changes.every((change) => undoneFiles.has(change.path));
+  // Undo asks first. Redo doesn't, since it reverses the user's own undo. Either way, files changed again since are named
+  // and need a second yes before they're overwritten.
+  type Target = { redo: boolean; path?: string };
+  const [ask, setAsk] = useState<(Target & { step: "confirm" }) | (Target & { step: "working" }) | (Target & { step: "changedSince"; files: string[] }) | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
-  const runUndo = (force: boolean) => {
-    setUndo({ step: "working" });
+  const run = (target: Target, force: boolean) => {
+    setAsk({ ...target, step: "working" });
     setUndoError(null);
-    call("thread.undoTurn", { threadId: thread.id, itemId: item.id, force })
+    call("thread.undoTurn", { threadId: thread.id, itemId: item.id, force, redo: target.redo, ...(target.path ? { path: target.path } : {}) })
       .then((result) => {
-        setUndo(result.undone.length ? null : { step: "changedSince", files: result.changedSince });
+        setAsk(result.undone.length ? null : { ...target, step: "changedSince", files: result.changedSince });
         if (result.undone.length) window.dispatchEvent(new Event(FILES_CHANGED));
       })
       .catch((error: Error) => {
-        setUndo(null);
+        setAsk(null);
         setUndoError(error.message);
       });
   };
-  const canUndo = !item.undone && !busy(thread);
+  const start = (target: Target) => (target.redo ? run(target, false) : setAsk({ ...target, step: "confirm" }));
+  const idle = !busy(thread) && (!ask || ask.step === "changedSince");
+  const subject = (path?: string) => (path ? path : changes.length === 1 ? changes[0]!.path : plural(changes.length, "file"));
+  const one = (path?: string) => !!path || changes.length === 1;
   return (
     <div className="turnchanges">
       <div className="tcrow">
-        <button className={item.undone ? "outcome undone" : "outcome"} aria-expanded={open} onClick={() => setOpen(!open)}>
-          <Icon name={item.undone ? "reload" : "check"} /> {item.undone ? "Undid" : "Changed"} {plural(changes.length, "file")}
+        <button className={allUndone ? "outcome undone" : "outcome"} aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Icon name={allUndone ? "reload" : "check"} /> {allUndone ? "Undid" : "Changed"} {plural(changes.length, "file")}
           <span className="stat">+{added} <i>−{removed}</i></span>
           <Icon name="chev" />
         </button>
-        {canUndo && !undo && <button className="link" onClick={() => setUndo({ step: "confirm" })}>Undo</button>}
+        {idle && !allUndone && <button className="link" onClick={() => start({ redo: false })}>Undo</button>}
+        {idle && undoneFiles.size > 0 && <button className="link" onClick={() => start({ redo: true })}>Redo</button>}
       </div>
-      {undo && undo.step !== "working" && (
+      {ask && ask.step !== "working" && (
         <div className="undoask">
           <p>
-            {undo.step === "confirm"
-              ? `Put ${changes.length === 1 ? changes[0]!.path : plural(changes.length, "file")} back the way ${changes.length === 1 ? "it was" : "they were"} before this turn?`
-              : `${undo.files.length === 1 ? undo.files[0] : plural(undo.files.length, "file")} changed again after this turn. Undoing puts ${undo.files.length === 1 ? "it" : "them"} back too, and those later changes are lost.`}
+            {ask.step === "confirm"
+              ? `Put ${subject(ask.path)} back the way ${one(ask.path) ? "it was" : "they were"} before this turn?`
+              : `${ask.files.length === 1 ? ask.files[0] : plural(ask.files.length, "file")} changed again after this turn. ${ask.redo ? "Redoing" : "Undoing"} overwrites ${ask.files.length === 1 ? "it" : "them"}, and those later changes are lost.`}
           </p>
           <div className="btns">
-            <button className="btn primary" onClick={() => runUndo(undo.step === "changedSince")}>{undo.step === "confirm" ? "Undo changes" : "Undo anyway"}</button>
-            <button className="btn" onClick={() => setUndo(null)}>Cancel</button>
+            <button className="btn primary" onClick={() => run(ask, ask.step === "changedSince")}>
+              {ask.step === "confirm" ? "Undo changes" : ask.redo ? "Redo anyway" : "Undo anyway"}
+            </button>
+            <button className="btn" onClick={() => setAsk(null)}>Cancel</button>
           </div>
         </div>
       )}
-      {undo?.step === "working" && <p className="note">Undoing…</p>}
-      {undoError && <p className="oops">Couldn't undo: {undoError}</p>}
+      {ask?.step === "working" && <p className="note">{ask.redo ? "Redoing…" : "Undoing…"}</p>}
+      {undoError && <p className="oops">Couldn't {undoError.includes("redo") ? "redo" : "undo"}: {undoError}</p>}
       {open && (
         <div className="files">
-          {changes.map((change) => (
-            <div key={change.path}>
-              <button className="file" aria-expanded={file === change.path} title={change.path} onClick={() => setFile(file === change.path ? null : change.path)}>
-                <Icon name="file" />
-                <span className="trunc">{change.path}</span>
-                <ChangeStat change={change} />
-              </button>
-              {file === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
-            </div>
-          ))}
+          {changes.map((change) => {
+            const undone = undoneFiles.has(change.path);
+            return (
+              <div key={change.path}>
+                <div className="tcfile">
+                  <button className={undone ? "file undone" : "file"} aria-expanded={file === change.path} title={change.path} onClick={() => setFile(file === change.path ? null : change.path)}>
+                    <Icon name="file" />
+                    <span className="trunc">{change.path}</span>
+                    {undone ? <span className="stat muted">undone</span> : <ChangeStat change={change} />}
+                  </button>
+                  {idle && changes.length > 1 && (
+                    <button className="link" aria-label={`${undone ? "Redo" : "Undo"} ${change.path}`} onClick={() => start({ redo: undone, path: change.path })}>
+                      {undone ? "Redo" : "Undo"}
+                    </button>
+                  )}
+                </div>
+                {file === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

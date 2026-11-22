@@ -799,16 +799,27 @@ export function createEngine(
       if (busyState(thread)) throw new Error("wait for this thread to finish before undoing a turn");
       const item = db.items(thread.id).find((entry) => entry.id === params.itemId);
       if (item?.kind !== "result" || !item.snapshots) throw new Error("that turn has no snapshot to undo from");
-      if (item.undone) throw new Error("that turn is already undone");
+      const redo = params.redo === true;
+      const wasUndone = new Set(item.undone === true ? item.files : Array.isArray(item.undone) ? item.undone : []);
+      if (params.path !== undefined && (typeof params.path !== "string" || !item.files.includes(params.path))) throw new Error("that file didn't change in this turn");
+      // Undo the files not yet undone; redo the ones that are.
+      const wanted = (params.path ? [params.path] : item.files).filter((file) => wasUndone.has(file) === redo);
+      if (!wanted.length) throw new Error(redo ? "nothing here to redo" : "that's already undone");
       const project = projectOf(thread.projectId);
       const scratch = path.join(snapshotsDir, `${thread.id}.undo.index`);
-      const result = await git.undoTurn(project.cwd, item.snapshots.before, item.snapshots.after, item.files, scratch, params.force === true);
+      const result = await git.undoTurn(project.cwd, item.snapshots.before, item.snapshots.after, wanted, scratch, params.force === true, redo);
       if (!result.undone.length) return result;
       if (!threads.has(thread.id)) throw new Error("thread not found");
-      put(thread, { ...item, undone: true });
-      put(thread, { id: randomUUID(), kind: "note", text: `Undid this turn's changes to ${result.undone.length === 1 ? result.undone[0] : `${result.undone.length} files`}.` });
+      for (const file of result.undone) redo ? wasUndone.delete(file) : wasUndone.add(file);
+      put(thread, { ...item, undone: [...wasUndone] });
+      const which = result.undone.length === 1 ? result.undone[0] : `${result.undone.length} files`;
+      put(thread, { id: randomUUID(), kind: "note", text: redo ? `Redid this turn's changes to ${which}.` : `Undid this turn's changes to ${which}.` });
       // The agent doesn't see the folder change, so the next message tells it.
-      liveOf(thread.id).undoNote = `(Note from Arcex: the user undid your changes to ${result.undone.join(", ").slice(0, 2000)}. Those files are back the way they were before that turn.)`;
+      const list = result.undone.join(", ").slice(0, 2000);
+      liveOf(thread.id).undoNote = [
+        liveOf(thread.id).undoNote,
+        redo ? `(Note from Arcex: the user put back your changes to ${list}.)` : `(Note from Arcex: the user undid your changes to ${list}. Those files are back the way they were before that turn.)`,
+      ].filter(Boolean).join(" ").slice(0, 4000);
       return result;
     },
     async "thread.turnDiff"(params) {

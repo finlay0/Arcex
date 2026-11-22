@@ -128,7 +128,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | G2 | Inline review comments | Comment on a diff line and send it to the agent | P1 | open | |
 | G3 | Commit, push and PR from the app | Buttons with a generated message, PR status and CI | P1 | open | Hidden by default for vibe coders. Show a "Save a version" button |
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
-| G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | partial | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. The note to the agent is untested. Still missing: undoing a single file, and redo |
+| G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | done | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. Each file in a multi-file turn has its own Undo, and undone changes have Redo (whole turn or one file); redo also checks for later changes. Verified November 21: redo of two turns, then undo of one file out of two |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | open | Desktop `shell.openPath` |
 | G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | open | |
 | G8 | Start from a pull request | Open a thread on a PR, with its description and diff as context (T3 `PullRequestThreadDialog`) | P2 | open | Hidden by default |
@@ -208,6 +208,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · G1 numbered diff viewer and line counts for new files.
 - 2026-11-21 · G1 per-turn changes from before/after snapshots, opened from the conversation.
 - 2026-11-21 · G5 undo a turn's changes, with a warning when files changed again since.
+- 2026-11-21 · G5 undo one file, and redo.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -227,7 +228,7 @@ Newest first. One line per shipped change, with its commit.
 Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
-2. G1 whole-branch view; G5 undo one file and redo.
+2. G1 whole-branch view.
 3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
 5. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
