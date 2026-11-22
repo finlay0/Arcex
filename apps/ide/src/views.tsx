@@ -1175,6 +1175,7 @@ export function Panel(props: {
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
           <Publish project={project} refresh={settled} fail={fail} startDraft={props.startDraft} />
+          <AgentTasks threads={threads} open={props.open} fail={fail} />
           {props.thread && <Folders thread={props.thread} fail={fail} />}
           {recent.length > 0 && (
             <section className="sec">
@@ -1499,6 +1500,52 @@ function Publish({ project, refresh, fail, startDraft }: { project: Project; ref
             <span className="when">{switching === entry.number ? "Switching…" : entry.author}</span>
           </button>
         ))}
+    </section>
+  );
+}
+
+/** How long something has run, as "45s", "3m 10s" or "1h 4m". */
+function took(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
+}
+
+/** Work agents left running in the background (a dev server, a long build), across the project's threads. */
+function AgentTasks({ threads, open, fail }: { threads: Thread[]; open(thread: Thread): void; fail(error: unknown): void }) {
+  const [now, setNow] = useState(Date.now());
+  const [all, setAll] = useState(false);
+  const entries = threads
+    .flatMap((thread) => (thread.tasks ?? []).map((task) => ({ thread, task })))
+    .sort((a, b) => Number(b.task.state === "running") - Number(a.task.state === "running") || b.task.startedAt - a.task.startedAt);
+  const running = entries.some((entry) => entry.task.state === "running");
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+  if (!entries.length) return null;
+  const shown = all ? entries : entries.slice(0, 5);
+  return (
+    <section className="sec">
+      <header><b>Background work</b></header>
+      {shown.map(({ thread, task }) => (
+        <div key={task.id} className="taskrow" title={[task.description, task.summary].filter(Boolean).join("\n")}>
+          {task.state === "running" ? <Loader work /> : <Icon name={task.state === "completed" ? "check" : "x"} />}
+          <button className="tasktext" onClick={() => open(thread)}>
+            <span className="trunc">{task.name || task.description || "Background task"}</span>
+            <span className="when">
+              {task.state === "running" ? `Running for ${took(now - task.startedAt)}` : task.state === "completed" ? `Finished in ${took((task.endedAt ?? now) - task.startedAt)}` : task.state === "failed" ? "Failed" : "Stopped"}
+              {" · "}{thread.title}
+            </span>
+          </button>
+          {task.state === "running" && task.canStop && (
+            <button className="link" onClick={() => void call("thread.stopTask", { threadId: thread.id, taskId: task.id }).catch(fail)}>Stop</button>
+          )}
+        </div>
+      ))}
+      {entries.length > 5 && <button className="link" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${entries.length}`}</button>}
     </section>
   );
 }

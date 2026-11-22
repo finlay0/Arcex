@@ -32,6 +32,8 @@ export type ProjectScript = { name: string; command: string };
  * An agent's plan limit, as the agent last reported it during a turn. `used` is 0 to 1 when known; `resetsAt` is a
  * time in ms. Only agents that report limits have one (Claude does).
  */
+/** Work an agent left running in the background, such as a dev server it started. Only while the engine runs. */
+export type AgentTask = { id: string; name: string; description: string; kind: string; state: "running" | "completed" | "failed" | "stopped"; startedAt: number; endedAt: number | null; canStop: boolean; summary: string };
 export type UsageLimit = { status: "ok" | "warning" | "reached"; window: "five_hour" | "weekly" | "other"; used: number | null; resetsAt: number | null; at: number };
 
 /**
@@ -112,6 +114,8 @@ export type Thread = {
   foldersSupported?: boolean;
   /** The thread's running agent takes messages into a turn that is under way. */
   steering?: boolean;
+  /** Background work the thread's agent started, newest first. */
+  tasks?: AgentTask[];
   /** How full the agent's context window is, as its last report gave it. Missing until the agent reports it. */
   context?: { used: number; size: number };
   createdAt: number;
@@ -389,6 +393,8 @@ export type Requests = {
   "thread.items": { params: { threadId: string }; result: Item[] };
   /** Asks a throwaway copy of the thread's conversation a question, without touching the thread or its running turn. */
   "thread.aside": { params: { threadId: string; text: string }; result: { asideId: string } };
+  /** Stops background work the thread's agent started. */
+  "thread.stopTask": { params: { threadId: string; taskId: string }; result: { ok: true } };
   "thread.asideStop": { params: { asideId: string }; result: { ok: true } };
   "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean; /** While the agent works, add it to the running turn when the agent can take it, else queue it. */ steer?: boolean }; result: { ok: true; queued?: boolean; steered?: boolean } };
   /** Takes a message out of the queue, returning it so the client can put it back in the message box. */

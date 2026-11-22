@@ -157,6 +157,8 @@ export type AgentSession = {
   /** Adds a message to the running turn. "later" means no turn could take it, so it should go as a normal prompt. */
   steer(blocks: acp.ContentBlock[]): Promise<"steered" | "later">;
   cancel(): Promise<void>;
+  /** Stops background work the agent reported as an async task. */
+  stopTask(taskId: string): Promise<boolean>;
   close(): void;
 };
 
@@ -222,13 +224,31 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
   });
   const wait = <T>(request: Promise<T>) => Promise.race([request, failed, aborted]);
 
-  const stream = acp.ndJsonStream(
+  const raw = acp.ndJsonStream(
     Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
     Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
   );
-
-  // Reopening a session replays its history as updates. The timeline is already saved, so those are dropped.
+  // Reopening a session replays its history as updates. The timeline is already saved, so those are dropped (`live`).
+  // Claude's background task updates (AIR `async_task_*`) aren't in the ACP schema, so the SDK would reject them.
+  // They are taken out of the stream here and handed over as they are.
   let live = false;
+  const stream = {
+    writable: raw.writable,
+    readable: raw.readable.pipeThrough(
+      new TransformStream<acp.AnyMessage, acp.AnyMessage>({
+        transform(message, controller) {
+          const params = "method" in message && message.method === "session/update" ? (message.params as { update?: { sessionUpdate?: unknown } } | undefined) : undefined;
+          const kind = params?.update?.sessionUpdate;
+          if (typeof kind === "string" && kind.startsWith("async_task_")) {
+            if (live) options.onUpdate(params!.update as unknown as acp.SessionUpdate);
+            return;
+          }
+          controller.enqueue(message);
+        },
+      }),
+    ),
+  };
+
   let commands: SlashCommand[] = [];
   let commandsArrived = () => {};
   const firstCommands = new Promise<void>((resolve) => (commandsArrived = resolve));
@@ -253,7 +273,9 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         protocolVersion: acp.PROTOCOL_VERSION,
         // Arcex answers form questions (question cards). It doesn't take URL ones.
         // Compaction and notices arrive as their own updates, shown as plain notes, instead of a made-up tool call.
-        clientCapabilities: { elicitation: { form: {} }, session: { compaction: {}, notices: {} } },
+        // The AIR extension's async tasks: Claude reports background work (a server it started, a long build) with its
+        // own start, progress and end, and takes a stop for it.
+        clientCapabilities: { elicitation: { form: {} }, session: { compaction: {}, notices: {} }, _meta: { jetbrains: { air: { version: 1, capabilities: ["asyncTasks"] } } } } as acp.ClientCapabilities,
         clientInfo: { name: "arcex", title: "Arcex", version: "0.1.0" },
       }),
     );
@@ -381,6 +403,10 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         return outcome === "injected" ? "steered" : "later";
       },
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
+      async stopTask(taskId) {
+        const result = await (agent.request as (method: string, params: unknown) => Promise<unknown>)("_session/async_task/stop", { sessionId: id, asyncTaskId: taskId });
+        return !!result && typeof result === "object" && (result as { stopped?: unknown }).stopped !== false;
+      },
       close: () => {
         child.removeAllListeners("exit");
         connection.close();

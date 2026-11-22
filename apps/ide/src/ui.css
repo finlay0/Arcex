@@ -771,3 +771,9 @@ body.resizing iframe { pointer-events: none; }
 /* Compare: a second model for a new thread's first message. */
 .compare { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
 .compare .vs { color: var(--ink-4); font-size: 12.5px; padding: 0 4px; }
+/* Background work agents started. */
+.taskrow { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 14px; color: var(--ink-2); }
+.tasktext { flex: 1; min-width: 0; display: grid; text-align: left; gap: 1px; }
+.tasktext .trunc { color: var(--ink); }
+.tasktext .when { color: var(--ink-4); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taskrow .link { font-size: 13px; }

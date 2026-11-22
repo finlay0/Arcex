@@ -16,7 +16,7 @@ import { open, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { About, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState, UsageLimit } from "@arcex/contracts";
+import type { About, AgentTask, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState, UsageLimit } from "@arcex/contracts";
 import { BUILTIN, SignInNeeded, agentList, listModels, signIn, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
@@ -54,6 +54,8 @@ type Live = {
   rewindNote?: string;
   /** The thread's folders changed during a turn, so the next message reopens the session with them. */
   reopen?: boolean;
+  /** Background work the agent reported, by its task id. */
+  tasks?: Map<string, AgentTask>;
 };
 
 /** Checks the extra folders a thread may use: up to five absolute, existing folders, other than the project itself. */
@@ -365,6 +367,7 @@ export function createEngine(
     ...thread,
     steering: lives.get(thread.id)?.session?.steering === true,
     ...(thread.folders.length && lives.get(thread.id)?.session?.folders === false ? { foldersSupported: false } : {}),
+    ...(lives.get(thread.id)?.tasks?.size ? { tasks: [...lives.get(thread.id)!.tasks!.values()].sort((a, b) => b.startedAt - a.startedAt) } : {}),
   });
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
@@ -419,6 +422,7 @@ export function createEngine(
 
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
     const live = lives.get(thread.id);
+    if (live && onTaskUpdate(thread, live, update as unknown as Record<string, unknown>)) return;
     if (update.sessionUpdate === "usage_update") {
       const limit = limitOf((update as { _meta?: Record<string, unknown> })._meta?.["_claude/rateLimit"]);
       if (limit) {
@@ -603,6 +607,48 @@ export function createEngine(
     const session = live.session;
     live.session = null;
     session?.close();
+    // Background work ends with the agent's process.
+    const running = [...(live.tasks?.values() ?? [])].filter((task) => task.state === "running");
+    for (const task of running) Object.assign(task, { state: "stopped", endedAt: Date.now(), canStop: false });
+    const threadId = [...lives.entries()].find(([, entry]) => entry === live)?.[0];
+    const thread = threadId ? threads.get(threadId) : undefined;
+    if (running.length && thread) emit({ event: "thread", thread: publicThread(thread) });
+  }
+
+  /** Claude's async task updates (the AIR extension): background work starting, changing and ending. */
+  function onTaskUpdate(thread: ThreadRow, live: Live, update: Record<string, unknown>): boolean {
+    const kind = update.sessionUpdate;
+    if (kind !== "async_task_spawned" && kind !== "async_task_progress" && kind !== "async_task_state_update") return false;
+    const id = String(update.asyncTaskId ?? "").slice(0, 200);
+    if (!id) return true;
+    live.tasks ??= new Map();
+    let task = live.tasks.get(id);
+    if (!task) {
+      // Only the newest 50 are kept; finished ones go first.
+      if (live.tasks.size >= 50) {
+        const oldest = [...live.tasks.values()].filter((entry) => entry.state !== "running").sort((a, b) => a.startedAt - b.startedAt)[0];
+        if (!oldest) return true;
+        live.tasks.delete(oldest.id);
+      }
+      task = { id, name: "", description: "", kind: "", state: "running", startedAt: Date.now(), endedAt: null, canStop: false, summary: "" };
+      live.tasks.set(id, task);
+    }
+    const text = (value: unknown, max: number) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+    if (text(update.name, 200)) task.name = text(update.name, 200);
+    if (text(update.description, 600)) task.description = text(update.description, 600);
+    if (text(update.taskType, 40)) task.kind = text(update.taskType, 40);
+    if (typeof update.canStop === "boolean") task.canStop = update.canStop;
+    if (kind === "async_task_state_update") {
+      const state = update.state;
+      if (state === "completed" || state === "failed" || state === "stopped") {
+        task.state = state;
+        task.endedAt = Date.now();
+        task.canStop = false;
+      } else if (state === "running") task.state = "running";
+      if (text(update.summary, 600)) task.summary = text(update.summary, 600);
+    }
+    emit({ event: "thread", thread: publicThread(thread) });
+    return true;
   }
 
   function dismissAsks(thread: ThreadRow, live: Live, answer: string, save = true) {
@@ -1392,6 +1438,16 @@ ${question}`;
         }
       })();
       return { asideId };
+    },
+
+    async "thread.stopTask"(params) {
+      const thread = threadOf(params.threadId);
+      const live = lives.get(thread.id);
+      const task = live?.tasks?.get(String(params.taskId));
+      if (!task || task.state !== "running") return { ok: true as const };
+      if (!live?.session || !task.canStop) throw new Error("this background task can't be stopped from Arcex");
+      await live.session.stopTask(task.id);
+      return { ok: true as const };
     },
 
     "thread.asideStop"(params) {
