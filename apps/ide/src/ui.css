@@ -194,9 +194,9 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .oops { color: var(--stop); }
 .note { color: var(--ink-3); font-size: 13px; }
 .answered { color: var(--ink-3); font-size: 14px; }
-.outcome { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 14px 0 10px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 500; font-size: 14px; }
+.outcome { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; min-height: 34px; max-width: 100%; flex-wrap: wrap; padding: 6px 14px 6px 10px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 500; font-size: 14px; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
-.outcome span { color: var(--ink-2); font-weight: 400; }
+.outcome span { color: var(--ink-2); font-weight: 400; overflow-wrap: anywhere; min-width: 0; }
 .turnchanges { display: grid; gap: 6px; align-self: stretch; }
 .tcrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .tcrow > * { white-space: nowrap; }
@@ -705,3 +705,9 @@ body.resizing iframe { pointer-events: none; }
 .linecomment .btns { display: flex; gap: 6px; justify-content: flex-end; }
 .limitnote { max-width: 300px; color: var(--ink-2); font-size: 13.5px; text-align: right; }
 .notice.limit { color: var(--ink-2); }
+/* Split view: two threads side by side. */
+.single, .split, .pane { min-width: 0; min-height: 0; display: grid; }
+.split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.pane.second { border-left: 1px solid var(--line); grid-template-rows: auto minmax(0, 1fr); }
+.panehead { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13.5px; }
+.panehead .trunc { flex: 1; }

@@ -658,6 +658,10 @@ export function Conversation(props: {
     if (!thread) return;
     const onKey = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "f" && !document.querySelector(".palette")) {
+        // In split view only the pane the user is in answers.
+        const pane = flow.current?.closest(".pane");
+        const other = [...document.querySelectorAll(".pane")].find((entry) => entry !== pane && entry.contains(document.activeElement));
+        if (other) return;
         event.preventDefault();
         setFinding(true);
       }

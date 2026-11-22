@@ -99,6 +99,8 @@ export function App() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
+  // Split view: a second thread beside the open one.
+  const [split, setSplit] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   // The last agent, model and options picked for a new thread, kept across restarts like the other apps do.
   const [choice, setChoiceState] = useState<Choice | null>(() => {
@@ -165,6 +167,10 @@ export function App() {
   }, [seen]);
   const unread = (t: Thread) => t.id !== thread?.id && !busy(t) && t.state !== "needs_you" && t.updatedAt > (seen[t.id] ?? Infinity);
   const threads = useMemo(() => live.filter((t) => t.projectId === project?.id), [live, project?.id]);
+  const splitThread = screen.kind === "thread" && split && split !== thread?.id ? live.find((t) => t.id === split) ?? null : null;
+  useEffect(() => {
+    if (split && store.status === "ready") void loadItems(split).catch(() => {});
+  }, [split, store.status]);
   const view: Screen = store.projects.length === 0 && screen.kind === "thread" ? { kind: "new-project" } : screen;
   const panelOpen = panel ?? settings?.showDetails ?? true;
   const preferred = status?.find((agent) => agent.id === settings?.defaultProvider);
@@ -314,6 +320,7 @@ export function App() {
         setRenaming(t.id);
       },
     },
+    ...(t.id !== thread?.id && screen.kind === "thread" ? [{ label: "Open beside", run: () => setSplit(t.id) }] : []),
     { label: t.pinned ? "Unpin" : "Pin to top", run: () => void call("thread.update", { threadId: t.id, pinned: !t.pinned }).catch(fail) },
     { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
@@ -603,6 +610,8 @@ export function App() {
             }}
           />
         ) : (
+          <div className={splitThread ? "split" : "single"}>
+          <div className="pane">
           <Conversation
             key={thread?.id ?? `new:${project?.id ?? ""}`}
             seed={thread ? "" : seed}
@@ -626,6 +635,44 @@ export function App() {
             setUnassignedDraft={setUnassignedDraft}
             connected={store.status === "ready"}
           />
+          </div>
+          {splitThread && (
+            <div className="pane second">
+              <header className="panehead">
+                <span className="trunc" title={splitThread.title}>{splitThread.title}</span>
+                <button className="icon" aria-label="Open this thread on its own" title="Open on its own" onClick={() => { openThread(splitThread); setSplit(null); }}>
+                  <Icon name="out" />
+                </button>
+                <button className="icon" aria-label="Close split view" title="Close split view" onClick={() => setSplit(null)}>
+                  <Icon name="x" />
+                </button>
+              </header>
+          <Conversation
+            key={`split:${splitThread.id}`}
+            seed=""
+            consumeSeed={() => {}}
+            projects={store.projects}
+            project={store.projects.find((p) => p.id === splitThread.projectId) ?? null}
+            thread={splitThread}
+            items={store.items[splitThread.id] ?? []}
+            agents={store.agents}
+            status={status}
+            choice={picked}
+            setChoice={setChoice}
+            pickProject={pickProject}
+            newProject={() => setScreen({ kind: "new-project" })}
+            manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
+            actions={actions}
+            start={startThread}
+            name={settings.name}
+            drafts={store.drafts}
+            unassignedDraft={unassignedDraft}
+            setUnassignedDraft={setUnassignedDraft}
+            connected={store.status === "ready"}
+          />
+            </div>
+          )}
+          </div>
         )}
           </div>
           {showPanel && project && (
