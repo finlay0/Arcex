@@ -296,6 +296,8 @@ export type Requests = {
   /** The project's own scripts and the package manager that runs them. */
   "project.scripts": { params: { projectId: string }; result: { runner: string; scripts: ProjectScript[] } };
   "project.publishState": { params: { projectId: string }; result: PublishState };
+  /** The current branch and the branch it grew from, with how many saved versions it has beyond that. */
+  "project.branch": { params: { projectId: string }; result: { branch: string | null; base: string | null; ahead: number } };
   /** Pushes saved versions to the remote with the user's own Git sign-in. */
   "project.push": { params: { projectId: string }; result: PublishState };
   /** Opens a pull request for the current branch with the GitHub CLI. */

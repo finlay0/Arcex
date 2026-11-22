@@ -962,7 +962,8 @@ export function Panel(props: {
   setTab(tab: PanelTab): void;
   open(thread: Thread): void;
   /** Starts a thread that reviews the project's unsaved changes. */
-  review(): void;
+  /** Starts a review thread: of the unsaved changes, or with the given prompt (a branch review). */
+  review(prompt?: string): void;
   /** A file a reply asked to show, with a changing `nonce` so the same file can be asked for again. */
   openFile: { path: string; line: number | null; nonce: number } | null;
   /** The user turned on the opt-in terminal. */
@@ -1636,6 +1637,15 @@ function TurnChanges({ thread, item, last, preview, fail }: { thread: Thread; it
 }
 
 /** What a review thread asks for. The agent only reads; findings come back as a list the user can act on. */
+/** Asks for a review of everything a branch changed since it left its base branch. */
+export const branchReviewPrompt = (branch: string, base: string) =>
+  [
+    `Review the branch ${branch}: every change since it left ${base} (use git diff ${base}...HEAD), plus any unsaved changes.`,
+    "List what's wrong, most serious first. For each finding give the file and line, what goes wrong and when, and how to fix it.",
+    "Cover bugs, security problems, broken behaviour and anything likely to confuse a user. Skip style nitpicks.",
+    "Don't change any files. If nothing is wrong, say so in one line.",
+  ].join(" ");
+
 export const REVIEW_PROMPT = [
   "Review the unsaved changes in this project: everything that differs from the last commit, including new files Git doesn't track yet.",
   "List what's wrong, most serious first. For each finding give the file and line, what goes wrong and when, and how to fix it.",
@@ -1643,7 +1653,15 @@ export const REVIEW_PROMPT = [
   "Don't change any files. If nothing is wrong, say so in one line.",
 ].join(" ");
 
-function Changes({ project, refresh, fail, review }: { project: Project; refresh: string; fail(error: unknown): void; review(): void }) {
+function Changes({ project, refresh, fail, review }: { project: Project; refresh: string; fail(error: unknown): void; review(prompt?: string): void }) {
+  const [branch, setBranch] = useState<{ branch: string | null; base: string | null; ahead: number } | null>(null);
+  useEffect(() => {
+    let current = true;
+    call("project.branch", { projectId: project.id })
+      .then((result) => { if (current) setBranch(result); })
+      .catch(() => { if (current) setBranch(null); });
+    return () => { current = false; };
+  }, [project.id, refresh]);
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -1684,7 +1702,17 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
       {changes && changes.length > 0 && (
         <div className="changeacts">
           <SaveVersion projectId={project.id} message={`Save ${plural(changes.length, "changed file")}`} fail={fail} className="btn savever" />
-          <button className="btn" title="Start a thread where the agent checks these changes for problems, without changing anything" onClick={review}>Review changes</button>
+          <button className="btn" title="Start a thread where the agent checks these changes for problems, without changing anything" onClick={() => review()}>Review changes</button>
+        </div>
+      )}
+      {branch?.branch && branch.base && branch.ahead > 0 && (
+        <div className="vrow branchrow">
+          <span className="trunc" title={`On ${branch.branch}, ${plural(branch.ahead, "saved version")} beyond ${branch.base}`}>
+            On <span className="mono">{branch.branch}</span> · {plural(branch.ahead, "saved version")} beyond {branch.base}
+          </span>
+          <button className="link" title={`Start a thread where the agent checks everything on ${branch.branch} since ${branch.base}, without changing anything`} onClick={() => review(branchReviewPrompt(branch.branch!, branch.base!))}>
+            Review branch
+          </button>
         </div>
       )}
       {problem ? <p className="muted">{problem} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>

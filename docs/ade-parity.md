@@ -130,7 +130,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
 | G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | done | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. Each file in a multi-file turn has its own Undo, and undone changes have Redo (whole turn or one file); redo also checks for later changes. Verified November 21: redo of two turns, then undo of one file out of two |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | done | "Open in" on the side panel's project card and in the file viewer lists the editors found on this computer (VS Code, Cursor, Windsurf, Zed, from PATH or their usual install folders) plus File Explorer or Finder. Done by the engine (`editors.ts`): launchers start detached, paths stay inside the project, and paths with characters cmd.exe would read are refused. Verified November 22: the menu lists Cursor and File Explorer. Not pressed in testing, since it opens a window on Finlay's PC |
-| G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | partial | "Review changes" beside "Save a version" in the side panel starts a thread with the picked agent that reviews every unsaved change (including new untracked files), lists findings most serious first with file, line, when it goes wrong and the fix, and changes nothing. Verified November 22 with Claude Haiku: found the off-by-one in a test file. Still missing: reviewing a branch against main, and findings as clickable cards |
+| G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | done | "Review changes" beside "Save a version" in the side panel starts a thread with the picked agent that reviews every unsaved change (including new untracked files), lists findings most serious first with file, line, when it goes wrong and the fix, and changes nothing. Verified November 22 with Claude Haiku: found the off-by-one in a test file. November 22: on a branch other than main (or the remote's default), Unsaved changes shows "On <branch> · N saved versions beyond main · Review branch", which starts a review of `git diff main...HEAD` plus unsaved changes. Findings name file:line, which already open the file at that line (C8). Verified with a test branch |
 | G8 | Start from a pull request | Open a thread on a PR, with its description and diff as context (T3 `PullRequestThreadDialog`) | P2 | open | Hidden by default |
 
 ### Panes and layout
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · G7 review a branch against main.
 - 2026-11-22 · G2 comment on diff lines into the message box.
 - 2026-11-22 · G3 push and pull requests in the side panel when a project has a remote.
 - 2026-11-22 · H6 Settings › Skills and hooks: list, switch, open and write skills; list hooks.
@@ -259,7 +260,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: X5 usage limits, then the partial rows (G7, P4, P5, H6).
+4. Remaining P1 rows: X5 usage limits, then the partial rows (P4 split view, P5, H6, C14 recap, K10 steering).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

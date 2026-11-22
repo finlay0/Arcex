@@ -8,7 +8,7 @@ import { listEditors, openIn } from "./editors.ts";
 import { createProcesses } from "./processes.ts";
 import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleSkill } from "./skills.ts";
-import { createPullRequest, publishState, push } from "./github.ts";
+import { branchInfo, createPullRequest, publishState, push } from "./github.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -867,6 +867,7 @@ export function createEngine(
     },
 
     "project.publishState": (params) => publishState(projectOf(params.projectId).cwd),
+    "project.branch": (params) => branchInfo(projectOf(params.projectId).cwd),
     async "project.push"(params) {
       const project = projectOf(params.projectId);
       if ([...threads.values()].some((thread) => thread.projectId === project.id && busyState(thread))) throw new Error("wait for the agents in this project to finish first");

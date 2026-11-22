@@ -88,3 +88,22 @@ export async function createPullRequest(cwd: string): Promise<PublishState> {
   }
   return publishState(cwd);
 }
+
+/** The branch the project is on and the branch it grew from (the remote's default, else a local main or master). */
+export async function branchInfo(cwd: string): Promise<{ branch: string | null; base: string | null; ahead: number }> {
+  const branch = (await run("git", cwd, ["rev-parse", "--abbrev-ref", "HEAD"])).out.trim();
+  if (!BRANCH.test(branch) || branch === "HEAD") return { branch: null, base: null, ahead: 0 };
+  const remoteHead = (await run("git", cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])).out.trim();
+  const candidates = [remoteHead.startsWith("origin/") ? remoteHead.slice(7) : "", "main", "master"].filter(Boolean);
+  let base: string | null = null;
+  for (const name of candidates) {
+    if (!BRANCH.test(name)) continue;
+    if ((await run("git", cwd, ["rev-parse", "--verify", "--quiet", `refs/heads/${name}`])).ok) {
+      base = name;
+      break;
+    }
+  }
+  if (!base || base === branch) return { branch, base: null, ahead: 0 };
+  const ahead = Number((await run("git", cwd, ["rev-list", "--count", `refs/heads/${base}..HEAD`])).out.trim()) || 0;
+  return { branch, base, ahead };
+}

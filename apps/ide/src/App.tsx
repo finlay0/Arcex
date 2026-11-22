@@ -629,7 +629,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={(prompt) => void startThread(prompt ?? REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>
