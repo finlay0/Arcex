@@ -702,15 +702,23 @@ export function Conversation(props: {
   const mention = useMentionMenu(project?.id ?? null, draft, setDraft);
   const files = useAttachments(draftKey ?? "", actions.fail);
   const enter = onEnter(() => void send());
-  const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && !files.uploading && (draft.trim() || files.list.length) && (!working || thread?.state !== "stopping"));
+  // Agents that take messages mid-turn get them straight away; Tab still queues one for after the turn.
+  const steerable = working && thread?.steering === true && thread.state !== "stopping";
+  const queueKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Tab" || event.shiftKey || !steerable || queueFull || !draft.trim()) return false;
+    event.preventDefault();
+    void send("queue");
+    return true;
+  };
+  const canSend = Boolean(target && props.connected && !notReady && (!queueFull || steerable) && !sending && !files.uploading && (draft.trim() || files.list.length) && (!working || thread?.state !== "stopping"));
 
-  const send = async () => {
+  const send = async (mode?: "queue") => {
     if (!canSend || !target || pendingSend.current) return;
     pendingSend.current = true;
     setSending(true);
     const attachments = files.list.map((attachment) => attachment.id);
     try {
-      if (thread && working) await call("thread.prompt", { threadId: thread.id, text: draft, attachments, queue: true });
+      if (thread && working) await call("thread.prompt", { threadId: thread.id, text: draft, attachments, ...(steerable && mode !== "queue" ? { steer: true } : { queue: true }) });
       else if (thread) await actions.prompt(thread.id, draft, attachments);
       else await props.start(draft, attachments);
       clearSentDraft(target, draft);
@@ -740,7 +748,7 @@ export function Conversation(props: {
           mention.onSelect(event);
           setDraft(event.target.value);
         }}
-        onKeyDown={(event) => slash.onKeyDown(event) || mention.onKeyDown(event) || recall(event) || enter(event)}
+        onKeyDown={(event) => slash.onKeyDown(event) || mention.onKeyDown(event) || recall(event) || queueKey(event) || enter(event)}
         onSelect={mention.onSelect}
         onKeyUp={mention.onSelect}
         onClick={mention.onSelect}
@@ -908,7 +916,9 @@ export function Conversation(props: {
         {notice || (
           <p className="hint">
             {working
-              ? queueFull ? "The queue is full. It sends as this turn finishes." : `${prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter" : "Enter"} to queue · it sends when this turn finishes`
+              ? steerable
+                ? `${prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter" : "Enter"} to send now${queueFull ? "" : " · Tab to queue for after this turn"}`
+                : queueFull ? "The queue is full. It sends as this turn finishes." : `${prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter" : "Enter"} to queue · it sends when this turn finishes`
               : prefs.sendWith === "ctrl-enter" ? "Ctrl + Enter to send" : "Enter to send · Shift + Enter for a new line"}
           </p>
         )}

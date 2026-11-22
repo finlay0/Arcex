@@ -357,6 +357,7 @@ export function SettingsView(props: {
                   ["Agent commands", "/"],
                   ["Mention a file", "@"],
                   ["Earlier messages you sent (in an empty box)", "↑ ↓"],
+                  ["While the agent works: queue for after this turn", "Tab"],
                 ].map(([what, keys]) => (
                   <Row key={what} title={what!}>
                     <span className="keys">{keys!.split(" ").map((key) => <kbd key={key}>{key}</kbd>)}</span>

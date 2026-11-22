@@ -104,7 +104,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K7 | Reasoning effort / speed | Effort picker (low to max), fast mode | P1 | done | Effort chip with levels plus switches for fast mode and Codex plan-first. The user's pick is set again at each turn start, because the Claude adapter resets effort on a model switch. The last agent, model and options picked for a new thread are remembered across restarts (verified November 21) |
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | done | Up in an empty message box brings back this thread's earlier messages, newest first; Down steps forward and ends at an empty box. Typing stops the stepping. Verified November 22 |
 | K9 | Context and usage meter | Context % used, plan usage limits | P1 | partial | Context: a thin grey ring by the message box fills from the agent's ACP `usage_update` (Claude and Codex both send it); hover gives "3% of the agent's memory for this thread used (30k of 1M tokens)", the percentage shows from 50% and the ring brightens from 80%. Verified November 21 with Claude Haiku. Still to do: plan usage limits (X5), which ACP doesn't report |
-| K10 | Stop and steer | Stop. Sending while working steers or queues | P0 | partial | Stop exists, and sending while working queues (K5). Steering (inject into the running turn) is missing |
+| K10 | Stop and steer | Stop. Sending while working steers or queues | P0 | done | While a turn runs, agents that advertise the ACP `_session/steering` extension (Claude and Codex adapters both do) take the message into that turn: Enter sends it now and it shows in the thread where it went in; Tab queues it for after the turn instead. If no turn can take it, it queues. Other agents queue as before (K5). Verified November 22 with Claude Haiku (a 1-to-1500 count steered to stop and say STEERED in the same turn). Codex steering not run yet |
 | K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | open | |
 | K12 | Suggested next prompts | One-click follow-ups after a turn (T3 `usePromptSuggestion`, Claude next-step buttons) | P1 | decide | Generating them spends usage. Ask Finlay (background intelligence rule) |
 | K13 | Expand an attached image | Click a thumbnail to see it full size (T3 `ExpandedImageDialog`) | P2 | done | Clicking a sent image opens it full size over the app; a click or Esc closes it. Verified November 22 with a pasted image (Claude Haiku answered "Orange") |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · K10 steer a running turn (Enter), Tab queues.
 - 2026-11-22 · G7 review a branch against main.
 - 2026-11-22 · G2 comment on diff lines into the message box.
 - 2026-11-22 · G3 push and pull requests in the side panel when a project has a remote.
@@ -260,7 +261,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: X5 usage limits, then the partial rows (P4 split view, P5, H6, C14 recap, K10 steering).
+4. Remaining P1 rows: X5 usage limits, then the partial rows (P4 split view, P5, H6, C14 recap).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

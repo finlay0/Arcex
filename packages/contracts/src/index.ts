@@ -93,6 +93,8 @@ export type Thread = {
   archived: boolean;
   /** Pinned threads stay at the top of their project in the sidebar. */
   pinned: boolean;
+  /** The thread's running agent takes messages into a turn that is under way. */
+  steering?: boolean;
   /** How full the agent's context window is, as its last report gave it. Missing until the agent reports it. */
   context?: { used: number; size: number };
   createdAt: number;
@@ -356,7 +358,7 @@ export type Requests = {
   /** Threads whose messages contain `query`, with a snippet around the first match. */
   "thread.search": { params: { query: string }; result: { threadId: string; snippet: string }[] };
   "thread.items": { params: { threadId: string }; result: Item[] };
-  "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean }; result: { ok: true; queued?: boolean } };
+  "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean; /** While the agent works, add it to the running turn when the agent can take it, else queue it. */ steer?: boolean }; result: { ok: true; queued?: boolean; steered?: boolean } };
   /** Takes a message out of the queue, returning it so the client can put it back in the message box. */
   "thread.unqueue": { params: { threadId: string; index: number }; result: QueuedMessage };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };

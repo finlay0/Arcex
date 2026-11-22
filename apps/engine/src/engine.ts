@@ -319,7 +319,7 @@ export function createEngine(
     }
   }
 
-  const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
+  const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => ({ ...thread, steering: lives.get(thread.id)?.session?.steering === true });
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
     if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), compactions: new Map(), asks: new Map(), questions: new Map() }));
@@ -1224,9 +1224,25 @@ export function createEngine(
       return reply ? [...items, reply] : items;
     },
 
-    "thread.prompt"(params) {
+    async "thread.prompt"(params) {
       const thread = threadOf(params.threadId);
-      if (busyState(thread) && params.queue === true) {
+      const live = lives.get(thread.id);
+      const session = live?.session;
+      // Steering adds the message to the turn under way, the way typing into a running Claude Code or Codex session does.
+      if (params.steer === true && session?.steering && live?.turn && !live.turn.signal.aborted && (thread.state === "working" || thread.state === "needs_you")) {
+        const attached = files.resolve(params.attachments);
+        const text = message(params.text, attached);
+        const project = projectOf(thread.projectId);
+        const outcome = await session.steer([...files.blocks(text, attached, session.promptCapabilities), ...mentionLinks(project.cwd, text, session.promptCapabilities)]).catch(() => "later" as const);
+        if (outcome === "steered" && lives.get(thread.id)?.session === session) {
+          // The reply so far ends here, so what the agent says next shows after the new message.
+          endSay(thread);
+          put(thread, attached.length ? { id: randomUUID(), kind: "user", text, attachments: attached } : { id: randomUUID(), kind: "user", text });
+          db.clearSentDraft(thread.projectId, thread.id, params.text);
+          return { ok: true, steered: true };
+        }
+      }
+      if (busyState(thread) && (params.queue === true || params.steer === true)) {
         if (thread.queued.length >= 10) throw new Error("ten messages are already waiting. Remove one first");
         const attached = files.resolve(params.attachments);
         thread.queued = [...thread.queued, { text: message(params.text, attached), attachments: attached }];

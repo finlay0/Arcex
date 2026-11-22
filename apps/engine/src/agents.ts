@@ -150,6 +150,10 @@ export type AgentSession = {
   /** What a message may carry besides text, as the agent reported it. */
   promptCapabilities: { image?: boolean; embeddedContext?: boolean } | undefined;
   prompt(blocks: acp.ContentBlock[]): Promise<acp.PromptResponse>;
+  /** The agent takes messages into a running turn (the `_session/steering` extension). */
+  steering: boolean;
+  /** Adds a message to the running turn. "later" means no turn could take it, so it should go as a normal prompt. */
+  steer(blocks: acp.ContentBlock[]): Promise<"steered" | "later">;
   cancel(): Promise<void>;
   close(): void;
 };
@@ -349,6 +353,17 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         clearTimeout(timer);
       },
       prompt: (blocks) => agent.request("session/prompt", { sessionId: id, prompt: blocks }),
+      steering: (init as { _meta?: { steering?: { supported?: unknown } } })._meta?.steering?.supported === true,
+      async steer(blocks) {
+        const result = await (agent.request as (method: string, params: unknown) => Promise<unknown>)("_session/steering", {
+          sessionId: id,
+          prompt: blocks,
+          // Without this an idle agent would start a turn Arcex isn't tracking; this way it answers and Arcex sends it.
+          _meta: { steering: { idleBehavior: "promptRequired" } },
+        });
+        const outcome = result && typeof result === "object" ? (result as { outcome?: unknown }).outcome : null;
+        return outcome === "injected" ? "steered" : "later";
+      },
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
       close: () => {
         child.removeAllListeners("exit");
