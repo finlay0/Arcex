@@ -102,7 +102,9 @@ export type AgentSession = {
   commands: SlashCommand[];
   /** Waits up to `ms` for the agent's first command list. */
   commandsReady(ms: number): Promise<void>;
-  prompt(text: string): Promise<acp.PromptResponse>;
+  /** What a message may carry besides text, as the agent reported it. */
+  promptCapabilities: { image?: boolean; embeddedContext?: boolean } | undefined;
+  prompt(blocks: acp.ContentBlock[]): Promise<acp.PromptResponse>;
   cancel(): Promise<void>;
   close(): void;
 };
@@ -228,6 +230,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     return {
       sessionId: id,
       resumed,
+      promptCapabilities: init.agentCapabilities?.promptCapabilities ?? undefined,
       models,
       defaultModel: resumed ? null : models?.current ?? null,
       async setModel(value) {
@@ -276,7 +279,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         await Promise.race([firstCommands, new Promise<void>((resolve) => (timer = setTimeout(resolve, ms)))]);
         clearTimeout(timer);
       },
-      prompt: (text) => agent.request("session/prompt", { sessionId: id, prompt: [{ type: "text", text }] }),
+      prompt: (blocks) => agent.request("session/prompt", { sessionId: id, prompt: blocks }),
       cancel: () => agent.notify("session/cancel", { sessionId: id }),
       close: () => {
         child.removeAllListeners("exit");

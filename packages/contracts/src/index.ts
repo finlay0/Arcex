@@ -19,6 +19,12 @@ export type SlashCommand = { name: string; description: string; hint: string | n
 
 export type AgentChoice = { id: string; name: string; category: string; current: string; values: ModelOption[] };
 
+/** A file the user attached to a message. The engine keeps a copy; images are served at `/attachments/<id>` for thumbnails. */
+export type Attachment = { id: string; name: string; mime: string; size: number; image: boolean };
+
+/** A message waiting for the current turn to finish. */
+export type QueuedMessage = { text: string; attachments: Attachment[] };
+
 export type Project = {
   id: string;
   name: string;
@@ -41,7 +47,7 @@ export type Thread = {
   /** The thread's agent settings by choice id, such as { mode: "acceptEdits", effort: "high" }. Missing means the agent's default. */
   choices: Record<string, string>;
   /** Messages the user sent while the agent was working. The first goes out when the turn finishes. */
-  queued: string[];
+  queued: QueuedMessage[];
   title: string;
   state: ThreadState;
   /** Archived threads are hidden from the sidebar and the board but keep their history. */
@@ -54,7 +60,7 @@ export type AskOption = { id: string; name: string; kind: string };
 
 /** One entry in a thread's timeline. Items are upserted by id, so a step or a reply can grow in place. */
 export type Item =
-  | { id: string; kind: "user"; text: string }
+  | { id: string; kind: "user"; text: string; attachments?: Attachment[] }
   | { id: string; kind: "say"; text: string }
   | {
       id: string;
@@ -158,13 +164,16 @@ export type Requests = {
   "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
-  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string }; result: Thread };
+  /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
+  "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
+  /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
+  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[] }; result: Thread };
   "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   "thread.items": { params: { threadId: string }; result: Item[] };
-  "thread.prompt": { params: { threadId: string; text: string; /** While the agent works, add it to the queue instead. */ queue?: boolean }; result: { ok: true; queued?: boolean } };
-  /** Takes a message out of the queue, returning its text so the client can put it back in the message box. */
-  "thread.unqueue": { params: { threadId: string; index: number }; result: { text: string } };
+  "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean }; result: { ok: true; queued?: boolean } };
+  /** Takes a message out of the queue, returning it so the client can put it back in the message box. */
+  "thread.unqueue": { params: { threadId: string; index: number }; result: QueuedMessage };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };
   "ask.answer": { params: { threadId: string; itemId: string; optionId: string | null }; result: { ok: true } };
   /** Voice dictation runs on this computer. The speech model downloads once, when the user first asks for it. */

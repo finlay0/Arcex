@@ -249,7 +249,7 @@ export function App() {
   const fail = (error: unknown) => setToast(error instanceof Error ? error.message : String(error));
   const actions: Actions = {
     fail,
-    prompt: (id, text) => call("thread.prompt", { threadId: id, text }),
+    prompt: (id, text, attachments) => call("thread.prompt", { threadId: id, text, attachments }),
     cancel: (id) => call("thread.cancel", { threadId: id }).catch(fail),
     answer: (id, itemId, optionId) => call("ask.answer", { threadId: id, itemId, optionId }).catch(fail),
   };
@@ -274,9 +274,9 @@ export function App() {
     }
     setProjectId(id);
   };
-  const startThread = async (text: string) => {
+  const startThread = async (text: string, attachments: string[] = []) => {
     if (!project) throw new Error("Choose a project for this thread.");
-    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text });
+    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text, attachments });
     void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
     setSeed("");
     setExpanded((open) => new Set(open).add(project.id));

@@ -1,9 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { Agent, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
+import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
+import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
@@ -101,12 +102,12 @@ export function NewProject(props: {
 
 /** One message from the user and everything the agent did in response, in the order it happened. */
 type Plan = Extract<Item, { kind: "plan" }>;
-type Turn = { id: string; user: string | null; parts: Exclude<Item, { kind: "user" | "plan" }>[]; plan: Plan | null };
+type Turn = { id: string; user: string | null; files: Attachment[]; parts: Exclude<Item, { kind: "user" | "plan" }>[]; plan: Plan | null };
 
 function turns(items: Item[]): Turn[] {
   const out: Turn[] = [];
   for (const item of items) {
-    if (item.kind === "user" || out.length === 0) out.push({ id: item.id, user: item.kind === "user" ? item.text : null, parts: [], plan: null });
+    if (item.kind === "user" || out.length === 0) out.push({ id: item.id, user: item.kind === "user" ? item.text : null, files: item.kind === "user" ? item.attachments ?? [] : [], parts: [], plan: null });
     const turn = out[out.length - 1]!;
     if (item.kind === "plan") turn.plan = item;
     else if (item.kind !== "user") turn.parts.push(item);
@@ -271,7 +272,12 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
   const thinking = live && blocks.at(-1)?.kind === "think";
   return (
     <>
-      {turn.user !== null && <div className="you"><Md text={turn.user} /></div>}
+      {turn.files.length > 0 && (
+        <ul className="attached sent" aria-label="Attached files">
+          {turn.files.map((attachment) => <li key={attachment.id}><AttachmentChip attachment={attachment} /></li>)}
+        </ul>
+      )}
+      {turn.user !== null && turn.user !== "" && <div className="you"><Md text={turn.user} /></div>}
       {blocks.map((block, index) => {
         if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} live={live && index === blocks.length - 1} />;
         if (block.kind === "say") return <Reply key={block.id} text={block.text} />;
@@ -417,7 +423,7 @@ export function Conversation(props: {
   newProject(): void;
   manageAgents(): void;
   actions: Actions;
-  start(text: string): Promise<void>;
+  start(text: string, attachments: string[]): Promise<void>;
   name: string;
   seed: string;
   consumeSeed(): void;
@@ -461,18 +467,21 @@ export function Conversation(props: {
   const notReady = health && (!health.installed || health.signedIn === false);
   const queueFull = working && (thread?.queued?.length ?? 0) >= 10;
   const slash = useSlashMenu(agentId, draft, setDraft);
+  const files = useAttachments(draftKey ?? "", actions.fail);
   const enter = onEnter(() => void send());
-  const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && draft.trim() && (!working || thread?.state !== "stopping"));
+  const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && !files.uploading && (draft.trim() || files.list.length) && (!working || thread?.state !== "stopping"));
 
   const send = async () => {
     if (!canSend || !target || pendingSend.current) return;
     pendingSend.current = true;
     setSending(true);
+    const attachments = files.list.map((attachment) => attachment.id);
     try {
-      if (thread && working) await call("thread.prompt", { threadId: thread.id, text: draft, queue: true });
-      else if (thread) await actions.prompt(thread.id, draft);
-      else await props.start(draft);
+      if (thread && working) await call("thread.prompt", { threadId: thread.id, text: draft, attachments, queue: true });
+      else if (thread) await actions.prompt(thread.id, draft, attachments);
+      else await props.start(draft, attachments);
       clearSentDraft(target, draft);
+      files.clear();
       setAway(false);
     } catch (error) {
       actions.fail(error);
@@ -483,8 +492,9 @@ export function Conversation(props: {
   };
 
   const composer = (
-    <div className="composer">
+    <div className={files.dragging ? "composer dropping" : "composer"} {...files.dropProps}>
       {slash.menu}
+      {files.chips}
       <AutoText
         autoFocus
         rows={thread ? 1 : 2}
@@ -494,8 +504,10 @@ export function Conversation(props: {
         placeholder={thread ? `Reply to ${nameOf(thread.provider)}` : "Describe what you want done"}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => slash.onKeyDown(event) || enter(event)}
+        onPaste={files.onPaste}
       />
       <div className="tools">
+        {files.button(!props.connected)}
         {!thread && <ProjectPicker projects={props.projects} project={project} pick={props.pickProject} create={props.newProject} />}
         <ModelPicker
           agents={props.agents}
@@ -606,17 +618,21 @@ export function Conversation(props: {
         {pendingAsk && <AskCard thread={thread} item={pendingAsk} actions={actions} active />}
         {(thread.queued?.length ?? 0) > 0 && (
           <ol className="queue" aria-label="Queued messages">
-            {thread.queued.map((text, index) => (
+            {thread.queued.map(({ text, attachments }, index) => (
               <li key={`${index}:${text.slice(0, 40)}`}>
                 <Icon name="up" />
-                <span className="qtext" title={text}>{text}</span>
+                <span className="qtext" title={text}>{text || attachments.map((attachment) => attachment.name).join(", ")}</span>
+                {attachments.length > 0 && <span className="qfiles" title={`${attachments.length} attached`}><Icon name="clip" />{attachments.length}</span>}
                 <button
                   className="qbtn"
                   title="Edit"
                   aria-label="Edit queued message"
                   onClick={() =>
                     call("thread.unqueue", { threadId: thread.id, index })
-                      .then(({ text: back }) => setDraft([back, draft].filter((part) => part.trim()).join("\n\n")))
+                      .then((back) => {
+                        files.set((current) => [...back.attachments, ...current].slice(0, 10));
+                        setDraft([back.text, draft].filter((part) => part.trim()).join("\n\n"));
+                      })
                       .catch(actions.fail)
                   }
                 >

@@ -1,11 +1,12 @@
 // Projects, threads and their timelines. Clients only see what this module emits.
 import { createSpeech } from "./speech.ts";
+import { createAttachments } from "./attachments.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { About, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
+import type { About, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
 import { BUILTIN, agentList, listModels, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
@@ -34,6 +35,12 @@ type Live = {
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
 };
 
+
+/** A message's text. It may be empty only when files are attached. */
+function message(value: unknown, attachments: Attachment[]): string {
+  if (attachments.length && (value === undefined || value === null || (typeof value === "string" && !value.trim()))) return "";
+  return text(value, "message", 20_000);
+}
 
 function text(value: unknown, name: string, max: number): string {
   if (typeof value !== "string" || !value.trim() || value.length > max) throw new Error(`${name} must be 1 to ${max} characters`);
@@ -152,6 +159,7 @@ export function createEngine(
 ) {
   let settings = db.settings();
   const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
+  const files = createAttachments(about.dataDir);
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
@@ -416,7 +424,7 @@ export function createEngine(
     return session;
   }
 
-  async function run(thread: ThreadRow, prompt: string) {
+  async function run(thread: ThreadRow, prompt: string, attached: Attachment[] = []) {
     const project = projectOf(thread.projectId);
     const live = liveOf(thread.id);
     const turn = new AbortController();
@@ -425,7 +433,7 @@ export function createEngine(
     live.plan = null;
     const started = Date.now();
     setState(thread, live.session ? "working" : "starting");
-    put(thread, { id: randomUUID(), kind: "user", text: prompt });
+    put(thread, attached.length ? { id: randomUUID(), kind: "user", text: prompt, attachments: attached } : { id: randomUUID(), kind: "user", text: prompt });
     let outcome: ThreadState = "idle";
     try {
       const session = await ensureSession(thread, project, live, turn.signal);
@@ -440,7 +448,7 @@ export function createEngine(
       await applyChoices(thread, session, thread.choices);
       turn.signal.throwIfAborted();
       setState(thread, "working");
-      const result = await session.prompt(prompt);
+      const result = await session.prompt(files.blocks(prompt, attached, session.promptCapabilities));
       if (result.stopReason === "cancelled") outcome = "stopped";
       if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
         const reason = result.stopReason === "refusal" ? "declined the request" : "reached a turn limit";
@@ -480,7 +488,7 @@ export function createEngine(
       const [next, ...rest] = thread.queued;
       thread.queued = rest;
       db.saveThread(thread);
-      void run(thread, next!);
+      void run(thread, next!.text, next!.attachments);
     }
   }
 
@@ -646,15 +654,16 @@ export function createEngine(
       if (!agentList(settings).some((agent) => agent.id === params.provider)) throw new Error("unknown agent");
       const model = pickedModel(params.model);
       const choices = pickedChoices(params.choices);
-      const prompt = text(params.text, "message", 20_000);
+      const attached = files.resolve(params.attachments);
+      const prompt = message(params.text, attached);
       const now = Date.now();
       const thread: ThreadRow = {
-        id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: titleFrom(prompt),
+        id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: prompt ? titleFrom(prompt) : attached[0]!.name.slice(0, 60),
         state: "starting", archived: false, sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
       threads.set(thread.id, thread);
-      void run(thread, prompt);
+      void run(thread, prompt, attached);
       db.clearSentDraft(project.id, "", params.text);
       return publicThread(thread);
     },
@@ -719,7 +728,8 @@ export function createEngine(
       const thread = threadOf(params.threadId);
       if (busyState(thread) && params.queue === true) {
         if (thread.queued.length >= 10) throw new Error("ten messages are already waiting. Remove one first");
-        thread.queued = [...thread.queued, text(params.text, "message", 20_000)];
+        const attached = files.resolve(params.attachments);
+        thread.queued = [...thread.queued, { text: message(params.text, attached), attachments: attached }];
         db.saveThread(thread);
         db.clearSentDraft(thread.projectId, thread.id, params.text);
         emit({ event: "thread", thread: publicThread(thread) });
@@ -727,7 +737,8 @@ export function createEngine(
       }
       if (busyState(thread)) throw new Error("this thread is still working");
       if (changingModels.has(thread.id)) throw new Error("wait for the model to finish switching");
-      void run(thread, text(params.text, "message", 20_000));
+      const attached = files.resolve(params.attachments);
+      void run(thread, message(params.text, attached), attached);
       db.clearSentDraft(thread.projectId, thread.id, params.text);
       return { ok: true };
     },
@@ -740,7 +751,7 @@ export function createEngine(
       thread.queued = thread.queued.filter((_, at) => at !== index);
       db.saveThread(thread);
       emit({ event: "thread", thread: publicThread(thread) });
-      return { text: removed };
+      return removed;
     },
 
     "thread.cancel"(params) {
@@ -767,6 +778,8 @@ export function createEngine(
     "speech.chunk": (params) => speech.chunk(params),
     "speech.finish": (params) => speech.finish(params),
     "speech.cancel": (params) => speech.cancel(params),
+
+    "attachment.add": (params) => files.add(params),
 
     "ask.answer"(params) {
       const thread = threadOf(params.threadId);
@@ -812,6 +825,8 @@ export function createEngine(
 
   return {
     browse,
+    /** A stored image for a thumbnail, or null. */
+    attachmentImage: (id: string) => files.image(id),
     handle: (method: string, params: unknown): Promise<unknown> => {
       const handler = (handlers as Record<string, ((params: never) => unknown) | undefined>)[method];
       if (!Object.hasOwn(handlers, method) || !handler) return Promise.reject(new Error("unknown request"));

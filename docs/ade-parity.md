@@ -49,7 +49,8 @@ State on November 21, 2026, at commit `5b850fb` on `main`. Everything listed as 
 - K4: a picked slash command actually running, and Codex's list.
 - K6: mode and effort picks reset for new threads after a restart.
 - New files show +0 −0 in the Details changes list (G1).
-- Nothing has been run with Codex in this stretch.
+- Nothing has been run with Codex in this stretch, including K2 attachments.
+- K2: a PDF or other binary file (sent as `resource_link`) is untested, and stored attachments are never pruned.
 
 **Finlay's running copy** gets new builds when he presses Update in Arcex, and only when no thread is working. Tell him in each summary when there is something to update.
 
@@ -85,7 +86,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | ID | Feature | Claude / Codex behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | K1 | Voice dictation | Mic button, live level, transcribe into the box | P0 | done | `Dictation.tsx` plus engine `speech.ts` (`transcribe-cpp`, Parakeet 110M, 135 MB on first press, checksum verified, unloads after 10 idle min). Streams 1 s chunks over the WebSocket. Enter finishes, Esc discards. Later: a keyboard shortcut, a bigger-model choice in Settings, dictation in the new-project box |
-| K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | open | ACP prompt `image` and `resource_link` blocks, checked against `promptCapabilities` |
+| K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | done | `Attachments.tsx` (paste, drop, paperclip picker, chips with thumbnails, per draft) plus engine `attachments.ts`. Files up to 10 MB, 10 per message, copied to `<data>/attachments/<id>/<name>`. Sent as ACP `image` (PNG, JPEG, GIF, WebP), embedded `resource` for text up to 256 KB, otherwise `resource_link` to the stored copy, checked against the agent's `promptCapabilities`. Thumbnails served at `/attachments/<id>` (images only, nosniff). Queued messages keep their files. Verified with Claude Haiku: image and text file read correctly, image-only message works. Not yet: Codex, a binary file (PDF) via `resource_link`, pruning old stored files |
 | K3 | @-mention files | `@` opens a fuzzy file picker and inserts a chip | P0 | open | `project.files` exists. Add a search request |
 | K4 | Slash commands and skills | `/` menu from the agent's own commands and skills, ranked by name then word match; arrows, Enter or Tab, Esc | P0 | partial | Menu verified with Claude. Not yet checked: a command run end to end, Codex's list, project-only skills (the list is read in the data folder, then replaced by what a thread reports) |
 | K5 | Queue while working | Enter while the agent works queues the message above the box (edit or remove); the next one sends when the turn finishes cleanly. Kept in the engine, so it survives reloads | P0 | done | Stops and failures leave the queue waiting |
@@ -155,6 +156,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · K2 image and file attachments: paste, drop or pick files; thumbnails in the box and the thread; queued messages keep them.
 - 2026-11-21 · K4 slash command menu in the message box, from the agent's reported commands.
 - 2026-11-21 · K5 queue while working: queued messages sit above the box and send in order when a turn finishes.
 - 2026-11-21 · K6 mode, K7 effort and fast, A2 plan approval with the plan shown. Files outside the project (an agent's own plan notes) no longer count as changed.
@@ -168,13 +170,12 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. K2 image and file attachments (paste, drop, thumbnails; ACP `image` and `resource_link` blocks, checked against the agent's `promptCapabilities`).
-2. K3 @-mention files (a `project.search` request in the engine, a fuzzy picker like `SlashMenu.tsx`).
-3. Verify K4 end to end, plus A1 in Manual mode with Claude and Read-only with Codex.
-4. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
-5. C5 thinking stream, then remember K6 and K7 picks for new threads across restarts.
-6. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
-7. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions.
+1. K3 @-mention files (a `project.search` request in the engine, a fuzzy picker like `SlashMenu.tsx`).
+2. Verify K4 end to end, plus A1 in Manual mode with Claude and Read-only with Codex.
+3. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
+4. C5 thinking stream, then remember K6 and K7 picks for new threads across restarts.
+5. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
+6. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions.
 
 G4 (worktree per thread) needs Finlay's decision before any work.
 

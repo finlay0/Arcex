@@ -451,3 +451,23 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .slash li.on { background: var(--active); }
 .slash .cmd { flex: none; color: var(--ink); font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; }
 .slash .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); }
+
+/* Attached files (K2) */
+.composer.dropping { outline: 1px dashed var(--ink-3); outline-offset: -1px; }
+.composer > .attached { margin: -6px 0 10px -8px; }
+.attached { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.attached li { position: relative; display: flex; align-items: center; }
+.attached li > .qbtn { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 50%; background: var(--raised-2); color: var(--ink-2); cursor: pointer; opacity: 0; transition: opacity .12s; }
+.attached li:hover > .qbtn, .attached li > .qbtn:focus-visible { opacity: 1; }
+.attached li > .qbtn .i { width: 11px; height: 11px; }
+.attached .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line-2); display: block; background: var(--raised-2); }
+.attached .fchip { display: inline-flex; align-items: center; gap: 8px; height: 40px; max-width: 240px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised-2); font-size: 13px; }
+.attached .fchip .i { width: 15px; height: 15px; flex: none; color: var(--ink-2); }
+.attached .fname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attached .fsize { flex: none; color: var(--ink-3); font-size: 12px; }
+.attached .busy { height: 40px; padding: 0 12px; border: 1px dashed var(--line-2); border-radius: 10px; color: var(--ink-3); font-size: 13px; }
+.attached.sent { align-self: flex-end; justify-content: flex-end; margin: 18px 0 -12px; max-width: 80%; }
+.attached.sent .thumb { width: 120px; height: 120px; }
+.queue .qfiles { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--ink-3); font-size: 12px; }
+.queue .qfiles .i { width: 12px; height: 12px; }
+@media (prefers-reduced-motion: reduce) { .attached li > .qbtn { transition: none; } }

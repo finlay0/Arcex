@@ -29,7 +29,7 @@ export const prefs: { sendWith: "enter" | "ctrl-enter" } = { sendWith: "enter" }
 
 export type Actions = {
   fail(error: unknown): void;
-  prompt(threadId: string, text: string): Promise<unknown>;
+  prompt(threadId: string, text: string, attachments?: string[]): Promise<unknown>;
   cancel(threadId: string): Promise<unknown>;
   answer(threadId: string, itemId: string, optionId: string | null): Promise<unknown>;
 };

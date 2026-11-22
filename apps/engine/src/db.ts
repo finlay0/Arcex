@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { Item, Project, Settings, Thread } from "@arcex/contracts";
+import type { Item, Project, QueuedMessage, Settings, Thread } from "@arcex/contracts";
 
 export type ThreadRow = Thread & { sessionId: string | null };
 
@@ -53,7 +53,8 @@ export function openDb(dataDir: string) {
     projectId: row.project_id as string,
     provider: row.provider as Thread["provider"],
     model: row.model ? (JSON.parse(row.model as string) as Thread["model"]) : null,
-    queued: row.queued ? (JSON.parse(row.queued as string) as string[]) : [],
+    // Older builds queued plain text.
+    queued: row.queued ? (JSON.parse(row.queued as string) as (string | QueuedMessage)[]).map((entry) => (typeof entry === "string" ? { text: entry, attachments: [] } : entry)) : [],
     choices: row.choices ? (JSON.parse(row.choices as string) as Thread["choices"]) : {},
     title: row.title as string,
     state: row.state as Thread["state"],

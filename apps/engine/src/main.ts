@@ -136,6 +136,14 @@ const server = createServer((request, response) => {
   }
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
   if (pathname === "/agent/browser" && request.method === "POST") return agentBrowser(request, response);
+  const attached = /^\/attachments\/([0-9a-f-]{36})$/.exec(pathname);
+  if (attached && request.method === "GET") {
+    // Thumbnails of images the user attached. Only plain image types are ever served.
+    const image = engine.attachmentImage(attached[1]!);
+    if (!image) return void response.writeHead(404).end("Not found");
+    response.writeHead(200, { "content-type": image.mime, "x-content-type-options": "nosniff", "cache-control": "private, max-age=86400" });
+    return void response.end(image.bytes);
+  }
   const file = path.join(clientDir, pathname === "/" ? "index.html" : pathname);
   // Stay inside the client folder.
   if (!file.startsWith(clientDir + path.sep) || !existsSync(file) || !statSync(file).isFile()) {
@@ -149,7 +157,8 @@ const server = createServer((request, response) => {
 // Only the engine's own page may connect, plus the client dev server when one is named.
 const wss = new WebSocketServer({
   server,
-  maxPayload: 1_000_000,
+  // Room for one attached file (10 MB, base64) per message.
+  maxPayload: 15_000_000,
   verifyClient: ({ origin, req }: { origin: string; req: IncomingMessage }) =>
     !!localHost(req.headers.host) && (origin === `http://${req.headers.host}` || (!!process.env.ARCEX_DEV_ORIGIN && origin === process.env.ARCEX_DEV_ORIGIN)),
 });
