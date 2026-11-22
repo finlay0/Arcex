@@ -404,6 +404,7 @@ export function App() {
       settingsAt("general", "General settings", "gear"),
       settingsAt("agents", "Agents and sign-in", "layers"),
       settingsAt("skills", "Skills and hooks", "spark"),
+      settingsAt("memory", "Memory and personal instructions", "edit"),
       settingsAt("appearance", "Appearance", "sun"),
       settingsAt("voice", "Voice dictation", "mic"),
       settingsAt("notifications", "Notifications", "bell"),

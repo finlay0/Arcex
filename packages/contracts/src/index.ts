@@ -51,6 +51,12 @@ export type PublishState = {
   github: boolean;
 };
 
+/** An agent's personal instructions file, read in every project. `text` is null when there is none yet. */
+export type AgentMemory = { agent: string; path: string; text: string | null; available: boolean };
+
+/** A note an agent saved for itself about a project. */
+export type MemoryNote = { name: string; text: string; changed: number };
+
 /** A skill an agent can load: a folder with a SKILL.md. `relative` is set for skills inside the project. */
 export type SkillEntry = { path: string; relative: string | null; name: string; description: string; agent: string; scope: "project" | "personal"; enabled: boolean };
 
@@ -310,6 +316,10 @@ export type Requests = {
   "project.push": { params: { projectId: string }; result: PublishState };
   /** Opens a pull request for the current branch with the GitHub CLI. */
   "project.createPr": { params: { projectId: string }; result: PublishState };
+  "memory.personal": { params: Record<string, never>; result: AgentMemory[] };
+  "memory.savePersonal": { params: { agent: string; text: string }; result: { ok: true } };
+  /** Notes Claude saved for itself about the project, read only. */
+  "memory.notes": { params: { projectId: string }; result: MemoryNote[] };
   /** Skills and hooks the project's agents will load, from the project and the user's home folder. */
   "project.skills": { params: { projectId: string }; result: { skills: SkillEntry[]; hooks: HookEntry[] } };
   /** Turns a listed skill on or off by renaming its SKILL.md. */

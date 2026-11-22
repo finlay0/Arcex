@@ -1,17 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, DirectoryAgent, HookEntry, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
+import type { About, Agent, AgentMemory, DirectoryAgent, HookEntry, MemoryNote, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
 import { Icon, ago, limitText, nameOf, plural } from "./shared.tsx";
 import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
 
-export type Section = "profile" | "general" | "appearance" | "agents" | "skills" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
+export type Section = "profile" | "general" | "appearance" | "agents" | "skills" | "memory" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
   ["profile", "Profile"],
   ["general", "General"],
   ["appearance", "Appearance"],
   ["agents", "Agents"],
   ["skills", "Skills and hooks"],
+  ["memory", "Memory"],
   ["voice", "Voice"],
   ["notifications", "Notifications"],
   ["projects", "Projects"],
@@ -266,6 +267,7 @@ export function SettingsView(props: {
           )}
 
           {props.section === "voice" && <Voice fail={fail} />}
+          {props.section === "memory" && <Memory projects={props.projects} start={props.projectId} fail={fail} />}
           {props.section === "skills" && <Skills projects={props.projects} start={props.projectId} draft={props.draft} openFile={props.openFile} fail={fail} />}
 
           {props.section === "appearance" && (
@@ -763,6 +765,112 @@ function Skills(props: { projects: Project[]; start: string | null; draft(projec
           </div>
         </>
       )}
+    </>
+  );
+}
+
+/** What agents carry between sessions: your personal instructions for each, and the notes Claude keeps per project. */
+function Memory(props: { projects: Project[]; start: string | null; fail(error: unknown): void }) {
+  const [personal, setPersonal] = useState<AgentMemory[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [projectId, setProjectId] = useState(props.start && props.projects.some((p) => p.id === props.start) ? props.start : (props.projects[0]?.id ?? null));
+  const [notes, setNotes] = useState<MemoryNote[] | null>(null);
+  const load = () => call("memory.personal", {}).then(setPersonal).catch(props.fail);
+  useEffect(() => {
+    void load();
+  }, []);
+  useEffect(() => {
+    setNotes(null);
+    if (projectId) call("memory.notes", { projectId }).then(setNotes).catch(() => setNotes([]));
+  }, [projectId]);
+  const save = () => {
+    if (!editing) return;
+    setSaving(true);
+    call("memory.savePersonal", { agent: editing, text: draft })
+      .then(() => {
+        setEditing(null);
+        return load();
+      })
+      .catch(props.fail)
+      .finally(() => setSaving(false));
+  };
+  const project = props.projects.find((p) => p.id === projectId);
+  return (
+    <>
+      <h2>Memory</h2>
+      <p className="sdesc">What your agents carry from one session to the next. Project rules live in each project's instructions (Settings › Projects).</p>
+      <h3>Your instructions, in every project</h3>
+      <div className="card">
+        {!personal && <p className="muted">Looking…</p>}
+        {personal?.filter((entry) => entry.available).map((entry) => (
+          <div key={entry.agent}>
+            <Row
+              title={entry.agent}
+              hint={`${entry.text?.trim() ? `${entry.text.trim().split(/\s+/).length} words` : "Nothing yet"} · ${entry.path}`}
+            >
+              {editing !== entry.agent && (
+                <button className="btn" onClick={() => { setEditing(entry.agent); setDraft(entry.text ?? ""); }}>
+                  {entry.text?.trim() ? "Edit" : "Write"}
+                </button>
+              )}
+            </Row>
+            {editing === entry.agent && (
+              <div className="ieditor">
+                <textarea
+                  className="textfield"
+                  value={draft}
+                  autoFocus
+                  spellCheck
+                  maxLength={200_000}
+                  rows={12}
+                  placeholder={"For example:\n- Explain changes in plain words.\n- Ask before adding a paid service."}
+                  aria-label={`${entry.agent}'s instructions for every project`}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setEditing(null);
+                    if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      save();
+                    }
+                  }}
+                />
+                <div className="btns">
+                  <button className="btn primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
+                  <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
+                  <span className="muted">Only {entry.agent} reads this file, in every project.</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {personal && !personal.some((entry) => entry.available) && <p className="muted">Set up an agent first; its instructions file appears here.</p>}
+      </div>
+      <h3>What Claude remembers{project ? ` about ${project.name}` : ""}</h3>
+      {props.projects.length > 1 && (
+        <label className="field skproj">
+          <span>Project</span>
+          <select value={projectId ?? ""} onChange={(event) => setProjectId(event.target.value)}>
+            {props.projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      <div className="card">
+        {!notes && <p className="muted">Looking…</p>}
+        {notes?.length === 0 && <p className="muted">Claude hasn't saved notes for this project. It writes them as it learns how you like to work.</p>}
+        {notes?.map((note) => (
+          <details key={note.name} className="memnote">
+            <summary>
+              <span className="trunc">{note.name.replace(/\.md$/, "")}</span>
+              <span className="when">{ago(note.changed)}</span>
+            </summary>
+            <pre>{note.text}</pre>
+          </details>
+        ))}
+      </div>
     </>
   );
 }

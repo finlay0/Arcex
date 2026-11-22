@@ -730,3 +730,9 @@ body.resizing iframe { pointer-events: none; }
 .minimap .mmark::after { content: ""; position: absolute; left: 3px; right: 3px; top: 3px; height: 3px; border-radius: 2px; background: var(--ink-3); }
 .minimap .mmark:hover::after, .minimap .mmark:focus-visible::after { background: var(--ink); }
 .ptoggle .pinmark svg { width: 12px; height: 12px; }
+.memnote { border-top: 1px solid var(--line); }
+.memnote:first-child { border-top: 0; }
+.memnote summary { display: flex; align-items: center; gap: 10px; height: 44px; cursor: pointer; list-style: none; color: var(--ink); }
+.memnote summary::-webkit-details-marker { display: none; }
+.memnote summary .trunc { flex: 1; }
+.memnote pre { margin: 0 0 12px; padding: 10px 12px; max-height: 320px; overflow: auto; border-radius: 10px; background: var(--chrome); color: var(--ink-2); font: 12.5px/19px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }

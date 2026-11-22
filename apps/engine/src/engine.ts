@@ -9,6 +9,7 @@ import { createProcesses } from "./processes.ts";
 import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleSkill } from "./skills.ts";
 import { branchInfo, createPullRequest, publishState, push } from "./github.ts";
+import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -891,6 +892,12 @@ export function createEngine(
     },
 
     "agents.limits": () => Object.fromEntries(limits),
+    "memory.personal": () => personalMemory(),
+    async "memory.savePersonal"(params) {
+      await savePersonalMemory(text(params.agent, "agent", 40), params.text);
+      return { ok: true as const };
+    },
+    "memory.notes": (params) => claudeNotes(projectOf(params.projectId).cwd),
     "project.publishState": (params) => publishState(projectOf(params.projectId).cwd),
     "project.branch": (params) => branchInfo(projectOf(params.projectId).cwd),
     async "project.push"(params) {
