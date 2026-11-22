@@ -163,3 +163,73 @@ export function Menu({ label, items, icon = "dots", text }: { label: string; ite
     </span>
   );
 }
+
+/** Saved widths of the resizable columns, applied as CSS variables before the first paint. */
+const WIDTHS_KEY = "arcex:widths";
+const widths: Record<string, number> = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(WIDTHS_KEY) ?? "{}") as Record<string, number>;
+  } catch {
+    return {};
+  }
+})();
+for (const [name, value] of Object.entries(widths)) if (Number.isFinite(value)) document.documentElement.style.setProperty(`--${name}`, `${value}px`);
+
+/**
+ * A thin handle on a column's edge. Drag to resize, double-click to go back to the default.
+ * `edge` is the side of the column it sits on; `name` is the CSS variable (and saved key) it sets.
+ */
+export function Resizer({ name, edge, min, max, label }: { name: string; edge: "left" | "right"; min: number; max(): number; label: string }) {
+  const set = (value: number | null) => {
+    if (value === null) {
+      delete widths[name];
+      document.documentElement.style.removeProperty(`--${name}`);
+    } else {
+      widths[name] = value;
+      document.documentElement.style.setProperty(`--${name}`, `${value}px`);
+    }
+    try {
+      localStorage.setItem(WIDTHS_KEY, JSON.stringify(widths));
+    } catch {
+      // Only this session keeps the width.
+    }
+  };
+  const clamp = (value: number) => Math.round(Math.min(Math.max(value, min), Math.max(min, max())));
+  return (
+    <div
+      className={`resizer ${edge}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      title={`${label}. Double-click to reset.`}
+      tabIndex={0}
+      onDoubleClick={() => set(null)}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        event.preventDefault();
+        const column = (event.currentTarget.parentElement as HTMLElement).getBoundingClientRect().width;
+        const grow = (event.key === "ArrowRight") === (edge === "right");
+        set(clamp(column + (grow ? 16 : -16)));
+      }}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        const handle = event.currentTarget;
+        const start = event.clientX;
+        const startWidth = (handle.parentElement as HTMLElement).getBoundingClientRect().width;
+        handle.setPointerCapture(event.pointerId);
+        document.body.classList.add("resizing");
+        const move = (next: PointerEvent) => set(clamp(startWidth + (edge === "right" ? next.clientX - start : start - next.clientX)));
+        const up = () => {
+          document.body.classList.remove("resizing");
+          handle.removeEventListener("pointermove", move);
+          handle.removeEventListener("pointerup", up);
+          handle.removeEventListener("pointercancel", up);
+        };
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", up);
+        handle.addEventListener("pointercancel", up);
+      }}
+    />
+  );
+}

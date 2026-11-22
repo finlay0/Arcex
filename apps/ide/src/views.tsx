@@ -9,7 +9,7 @@ import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { highlight, languageOf } from "./highlight.ts";
-import { AutoText, Icon, Loader, Menu, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -960,8 +960,16 @@ export function Panel(props: {
     return [...new Set(urls.reverse())].slice(0, 4);
   }, [threads, props.items]);
 
+  const isWide = !!(wide || props.tab === "browser" || ((viewing || watching) && props.tab === "details"));
   return (
-    <aside className={wide || props.tab === "browser" || ((viewing || watching) && props.tab === "details") ? "panel wide" : "panel"}>
+    <aside className={isWide ? "panel wide" : "panel"}>
+      <Resizer
+        name={isWide ? "panel-wide-w" : "panel-w"}
+        edge="left"
+        min={280}
+        max={() => window.innerWidth - (document.querySelector(".sidebar:not(.shut)")?.getBoundingClientRect().width ?? 0) - 440}
+        label="Resize the side panel"
+      />
       <div className="ptop">
         <div className="tabs" role="tablist" aria-label="Project panel" onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;

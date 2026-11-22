@@ -60,7 +60,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .icon[aria-pressed="true"] { background: var(--active); color: var(--ink); }
 
 /* ── Sidebar */
-.sidebar { width: 292px; display: grid; grid-template-rows: 64px auto minmax(0, 1fr) auto; min-height: 0; border-right: 1px solid var(--line); }
+.sidebar { position: relative; width: var(--side-w, 292px); display: grid; grid-template-rows: 64px auto minmax(0, 1fr) auto; min-height: 0; border-right: 1px solid var(--line); }
 .sidebar.shut { display: none; }
 .brand { display: flex; align-items: center; padding: 6px 12px 0 20px; -webkit-app-region: drag; }
 .brand img { height: 34px; width: auto; }
@@ -334,8 +334,8 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .pick button[aria-pressed="true"] { background: var(--raised-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
 
 /* ── Right panel */
-.panel { width: clamp(300px, 27vw, 372px); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--line); }
-.panel.wide { width: clamp(300px, calc(100vw - 800px), 760px); }
+.panel { position: relative; width: var(--panel-w, clamp(300px, 27vw, 372px)); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--line); }
+.panel.wide { width: var(--panel-wide-w, clamp(300px, calc(100vw - 800px), 760px)); }
 .panel-content { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
 .ptop { display: flex; align-items: center; gap: 4px; padding: 14px 14px 8px 18px; }
 .tabs { display: flex; gap: 2px; }
@@ -649,3 +649,13 @@ button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(-
 .filelink code { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 .filelink:hover code { text-decoration-color: var(--ink-3); }
 .fvcode tr.at td { background: var(--active); }
+
+/* Drag handles on column edges. */
+.resizer { position: absolute; top: 0; bottom: 0; width: 7px; z-index: 20; cursor: col-resize; touch-action: none; }
+.resizer.right { right: -4px; }
+.resizer.left { left: -4px; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .15s; }
+.resizer:hover::after, .resizer:focus-visible::after, body.resizing .resizer::after { background: var(--line-2); }
+.resizer:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe { pointer-events: none; }

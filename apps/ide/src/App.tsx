@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderStatus, Thread } from "@arcex/contracts";
 import type { Choice } from "./ModelPicker.tsx";
 import { SettingsView, initials, type Section } from "./Settings.tsx";
-import { Icon, Menu, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
+import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
@@ -454,6 +454,7 @@ export function App() {
           {needle && !live.some((t) => t.title.toLowerCase().includes(needle)) && <div className="none flat">No thread matches "{query}".</div>}
         </div>
         <UpdateButton fail={fail} />
+        <Resizer name="side-w" edge="right" min={220} max={() => Math.min(460, window.innerWidth - 640)} label="Resize the sidebar" />
         <div className="foot">
           <button className="row profile" title="Profile and settings" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
             <span className="avatar">{initials(settings.name)}</span>
