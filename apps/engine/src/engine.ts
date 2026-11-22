@@ -351,6 +351,14 @@ export function createEngine(
 
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
     const live = lives.get(thread.id);
+    if (update.sessionUpdate === "usage_update") {
+      // Kept in memory only: it changes every turn and comes back with the next one.
+      const { used, size } = update;
+      if (!live || !Number.isFinite(used) || !Number.isFinite(size) || size <= 0 || used < 0) return;
+      thread.context = { used: Math.round(used), size: Math.round(size) };
+      emit({ event: "thread", thread: publicThread(thread) });
+      return;
+    }
     if (!live?.turn) return;
     if (update.sessionUpdate === "agent_thought_chunk") {
       if (update.content.type !== "text") return;
@@ -936,6 +944,7 @@ export function createEngine(
         ? `(Note from Arcex: the user rewound this conversation, so you are starting fresh. Here is the conversation so far, most recent last. The project files are back the way they were at this point.)\n\n${recap.length > 12000 ? `…${recap.slice(-12000)}` : recap}`
         : undefined;
       thread.sessionId = null;
+      thread.context = undefined;
       thread.queued = [];
       db.saveThread(thread);
       setState(thread, "idle");

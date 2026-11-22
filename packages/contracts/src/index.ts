@@ -52,6 +52,8 @@ export type Thread = {
   state: ThreadState;
   /** Archived threads are hidden from the sidebar and the board but keep their history. */
   archived: boolean;
+  /** How full the agent's context window is, as its last report gave it. Missing until the agent reports it. */
+  context?: { used: number; size: number };
   createdAt: number;
   updatedAt: number;
 };

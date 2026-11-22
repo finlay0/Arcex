@@ -586,3 +586,11 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .dirtext b { font-weight: 500; font-size: 14px; }
 .dirtext span { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agentmark { flex: none; width: 20px; height: 20px; background: var(--ink-2); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+/* Context meter by the message box: a thin grey ring that fills as the agent's context fills. */
+.ctxmeter { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 6px; color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; cursor: default; }
+.ctxmeter svg { width: 16px; height: 16px; }
+.ctxmeter circle { fill: none; stroke-width: 2.2; }
+.ctxmeter .track { stroke: var(--line-2); }
+.ctxmeter .fillring { stroke: var(--ink-3); stroke-linecap: round; }
+.ctxmeter.high .fillring { stroke: var(--ink); }
+.ctxmeter.high { color: var(--ink-2); }

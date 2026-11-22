@@ -103,7 +103,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K6 | Permission / approval mode picker | Ask before edits · Auto-accept edits · Plan mode · Full access | P0 | done | Replaced by Finlay's decision: always full access, no picker. Claude's plan mode is a "Plan first" switch in the effort menu, beside Codex's own plan-first switch. Existing threads in Manual mode were verified to switch to full access on their next turn |
 | K7 | Reasoning effort / speed | Effort picker (low to max), fast mode | P1 | done | Effort chip with levels plus switches for fast mode and Codex plan-first. The user's pick is set again at each turn start, because the Claude adapter resets effort on a model switch. The last agent, model and options picked for a new thread are remembered across restarts (verified November 21) |
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | open | |
-| K9 | Context and usage meter | Context % used, plan usage limits | P1 | open | ACP `usage_update` |
+| K9 | Context and usage meter | Context % used, plan usage limits | P1 | partial | Context: a thin grey ring by the message box fills from the agent's ACP `usage_update` (Claude and Codex both send it); hover gives "3% of the agent's memory for this thread used (30k of 1M tokens)", the percentage shows from 50% and the ring brightens from 80%. Verified November 21 with Claude Haiku. Still to do: plan usage limits (X5), which ACP doesn't report |
 | K10 | Stop and steer | Stop. Sending while working steers or queues | P0 | partial | Stop exists, and sending while working queues (K5). Steering (inject into the running turn) is missing |
 | K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | open | |
 | K12 | Suggested next prompts | One-click follow-ups after a turn (T3 `usePromptSuggestion`, Claude next-step buttons) | P1 | decide | Generating them spends usage. Ask Finlay (background intelligence rule) |
@@ -217,6 +217,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · C14 "Open preview" on the last turn.
 - 2026-11-21 · C10 rewind the conversation and files to before any message.
 - 2026-11-21 · P2 file viewer in the side panel.
+- 2026-11-21 · K9 context meter by the message box.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -238,7 +239,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-4. Then the P1 items: P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+4. Then the P1 items: P3 opt-in terminal, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
