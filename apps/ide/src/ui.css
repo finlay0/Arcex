@@ -711,3 +711,4 @@ body.resizing iframe { pointer-events: none; }
 .pane.second { border-left: 1px solid var(--line); grid-template-rows: auto minmax(0, 1fr); }
 .panehead { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13.5px; }
 .panehead .trunc { flex: 1; }
+.quotebtn { position: fixed; z-index: 60; transform: translateX(-50%); box-shadow: var(--shadow); background: var(--raised-2); }

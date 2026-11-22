@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, PublishState, Requests, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
@@ -635,10 +635,18 @@ export function Conversation(props: {
     latestDraft.current = next;
   };
   useEffect(() => {
-    const onAdd = (event: Event) => addLine.current(String((event as CustomEvent<string>).detail ?? ""));
+    // A string goes to the main pane; { text, threadId } goes to that thread's pane (split view has two).
+    const onAdd = (event: Event) => {
+      const detail = (event as CustomEvent<string | { text: string; threadId: string }>).detail;
+      if (typeof detail === "string") {
+        if (!flow.current?.closest(".pane.second")) addLine.current(detail);
+      } else if (detail && detail.threadId === threadIdRef.current) addLine.current(detail.text);
+    };
     window.addEventListener(ADD_TO_DRAFT, onAdd);
     return () => window.removeEventListener(ADD_TO_DRAFT, onAdd);
   }, []);
+  const threadIdRef = useRef(thread?.id);
+  threadIdRef.current = thread?.id;
   useEffect(() => {
     if (target && props.seed) {
       const seeded = [draft, props.seed].filter(Boolean).join("\n\n");
@@ -853,6 +861,7 @@ export function Conversation(props: {
   return (
     <div className="convo">
       {finding && <FindBar root={flow} watch={props.items} close={() => setFinding(false)} />}
+      <QuoteSelection root={flow} threadId={thread.id} />
       <div
         className="scroll"
         ref={scroller}
@@ -1459,8 +1468,49 @@ function diffRows(text: string): DiffRow[] {
   return rows;
 }
 
-/** Adds text to the open thread's message box, such as a review comment on a diff line. `detail` is the text. */
+/**
+ * Adds text to a message box, such as a review comment on a diff line. `detail` is the text (for the main pane) or
+ * { text, threadId } for a given thread's pane.
+ */
 export const ADD_TO_DRAFT = "arcex:add-to-draft";
+
+/** Selecting text in the agent's replies shows a Quote button that puts it in the message box as a quote. */
+function QuoteSelection({ root, threadId }: { root: RefObject<HTMLElement | null>; threadId: string }) {
+  const [at, setAt] = useState<{ x: number; y: number; text: string } | null>(null);
+  useEffect(() => {
+    const update = () => {
+      const selection = document.getSelection();
+      const text = selection?.toString().trim() ?? "";
+      const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+      const inReply = (node: Node | null | undefined) => !!node && !!root.current?.contains(node) && !!(node instanceof Element ? node : node.parentElement)?.closest(".reply");
+      if (!text || !range || !inReply(selection?.anchorNode) || !inReply(selection?.focusNode)) return setAt(null);
+      const box = range.getBoundingClientRect();
+      // Kept inside the conversation, so a selection at its edge doesn't push the button under the sidebar.
+      const area = root.current?.getBoundingClientRect();
+      const x = area ? Math.min(Math.max(box.left + box.width / 2, area.left + 50), area.right - 50) : box.left + box.width / 2;
+      setAt({ x, y: box.top, text: text.slice(0, 4000) });
+    };
+    document.addEventListener("selectionchange", update);
+    return () => document.removeEventListener("selectionchange", update);
+  }, []);
+  if (!at) return null;
+  return (
+    <button
+      className="btn small quotebtn"
+      style={{ left: at.x, top: Math.max(8, at.y - 38) }}
+      // Keeps the selection while pressing.
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => {
+        const quoted = at.text.split(/\r?\n/).map((line) => `> ${line}`).join("\n");
+        window.dispatchEvent(new CustomEvent(ADD_TO_DRAFT, { detail: { text: `${quoted}\n`, threadId } }));
+        document.getSelection()?.removeAllRanges();
+        setAt(null);
+      }}
+    >
+      <Icon name="chat" /> Quote
+    </button>
+  );
+}
 
 /**
  * A diff as numbered rows, or why there's nothing to show. Clicking a line (or Enter on it) opens a comment box; the

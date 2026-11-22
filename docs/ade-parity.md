@@ -86,7 +86,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C13 | Subagents | Rows for subagents working, with their progress | P2 | open | |
 | C14 | Wrap-up / next-step box | Recap plus buttons (commit, PR, verify) at the end of a turn | P1 | partial | A turn that changed files ends with "Changed N files +X −Y", Undo/Redo and, on the last turn, "Save a version" and "Open preview" (when the project has a running-app address; opens the side panel's Browser tab). Verified November 21. Still missing: a recap (the agent's last reply serves for now) |
 | C15 | Side question | Ask a quick question beside the thread without derailing the running turn (T3 `useSideChat`, `SideThreadPane`) | P2 | open | |
-| C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | open | |
+| C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | done | Selecting text in an agent reply shows a Quote button above it; it puts the text in that thread's message box as "> " lines (in split view, the right pane's box). Verified November 22 |
 | C17 | Rich media in replies | Mermaid diagrams, math, zoomable images, rendered HTML preview (T3 `MermaidDiagram`, `MathTypeset`, `HtmlRenderDialog`) | P2 | open | Pairs with C8 |
 | C18 | Context compaction | Summarise a long thread to free context, by hand or automatically (Claude `/compact`, T3 `compaction.logic`) | P1 | done | Arcex advertises ACP `session.compaction` (and `notices`), so a compaction shows as a plain note, "Summarising older messages…" then "Summarised older messages to free up the agent's memory", instead of a fake tool call. By hand: click the context meter (K9) and confirm, which sends the agent's own `/compact` (only offered when the agent lists that command). Agent notices show as notes too. Verified November 21 with Claude Haiku. Codex's own compaction not yet seen |
 | C19 | Timeline minimap | A strip beside long threads to jump to any turn (T3 `TimelineMinimap`) | P2 | open | |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · C16 quote selected reply text.
 - 2026-11-22 · P4 split view of two threads.
 - 2026-11-22 · X5 Claude plan limits in Settings › Agents and a notice near the limit.
 - 2026-11-22 · K10 steer a running turn (Enter), Tab queues.
