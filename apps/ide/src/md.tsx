@@ -1,7 +1,8 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import { highlight, languageOf } from "./highlight.ts";
 import { Icon } from "./shared.tsx";
 
 /** Text inside a React subtree, for copying a code block. */
@@ -14,8 +15,12 @@ function textOf(node: ReactNode): string {
 
 function CodeBlock({ language, children }: { language: string | null; children: ReactNode }) {
   const [copied, setCopied] = useState(false);
+  // The same quiet grey tones as the file viewer, for languages the highlighter knows.
+  const source = textOf(children).replace(/\n$/, "");
+  const family = language ? languageOf(language) : null;
+  const lines = useMemo(() => (family ? highlight(source, family) : null), [source, family]);
   const copy = () => {
-    void navigator.clipboard.writeText(textOf(children).replace(/\n$/, "")).then(() => {
+    void navigator.clipboard.writeText(source).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     });
@@ -28,7 +33,18 @@ function CodeBlock({ language, children }: { language: string | null; children: 
           <Icon name={copied ? "check" : "copy"} /> {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre>{children}</pre>
+      <pre>
+        {lines ? (
+          <code>
+            {lines.map((line, index) => (
+              <span key={index}>
+                {line.map((token, at) => (token.kind === "plain" ? token.text : <span key={at} className={`tk-${token.kind}`}>{token.text}</span>))}
+                {index < lines.length - 1 ? "\n" : ""}
+              </span>
+            ))}
+          </code>
+        ) : children}
+      </pre>
     </div>
   );
 }
