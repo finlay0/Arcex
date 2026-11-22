@@ -49,6 +49,37 @@ function CodeBlock({ language, children }: { language: string | null; children: 
   );
 }
 
+/** Asks the app to show a project file in the side panel. `detail` is { path, line }. */
+export const OPEN_FILE = "arcex:open-file";
+
+// Words that look like files but are web addresses when there is no folder in front of them.
+const DOMAINS = new Set(["com", "org", "net", "io", "dev", "ai", "app", "co", "me", "so", "sh", "xyz"]);
+
+/** A file path the agent mentioned, such as `src/app.ts`, `calc.js:3` or a full path, or null. */
+export function fileRef(text: string): { path: string; line: number | null } | null {
+  const trimmed = text.trim();
+  if (trimmed.length > 300 || /\s/.test(trimmed.replace(/ /g, "")) || trimmed.includes("://")) return null;
+  const match = /^((?:[A-Za-z]:[\\/]|\.{0,2}[\\/])?(?:[\w@()[\]+ .-]+[\\/])*[\w@()[\]+.-]+\.([A-Za-z][A-Za-z0-9]{0,9}))(?::(\d+)(?::\d+)?)?$/.exec(trimmed);
+  if (!match) return null;
+  const [, file, extension, line] = match;
+  if (!/[\\/]/.test(file!) && DOMAINS.has(extension!.toLowerCase())) return null;
+  if (/ /.test(file!) && !/[\\/]/.test(file!)) return null;
+  return { path: file!, line: line ? Number(line) : null };
+}
+
+function FileLink({ target, children }: { target: { path: string; line: number | null }; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      className="filelink"
+      title={`Open ${target.path}${target.line ? ` at line ${target.line}` : ""}`}
+      onClick={() => window.dispatchEvent(new CustomEvent(OPEN_FILE, { detail: target }))}
+    >
+      <code>{children}</code>
+    </button>
+  );
+}
+
 /** Web links open in the user's browser. Anything else (a file path, a relative link) shows as its text for now. */
 function openLink(href: string) {
   if (window.arcex?.openExternal) window.arcex.openExternal(href);
@@ -61,12 +92,17 @@ const components: Components = {
     const className = code && typeof code === "object" && "props" in code ? String((code.props as { className?: string }).className ?? "") : "";
     return <CodeBlock language={/language-([\w+#.-]+)/.exec(className)?.[1] ?? null}>{children}</CodeBlock>;
   },
-  a: ({ href, children }) =>
-    href && /^https?:\/\//i.test(href) ? (
-      <a href={href} title={href} onClick={(event) => { event.preventDefault(); openLink(href); }}>{children}</a>
-    ) : (
-      <code title={href}>{children}</code>
-    ),
+  a: ({ href, children }) => {
+    if (href && /^https?:\/\//i.test(href)) return <a href={href} title={href} onClick={(event) => { event.preventDefault(); openLink(href); }}>{children}</a>;
+    const target = href ? fileRef(decodeURIComponent(href)) : null;
+    return target ? <FileLink target={target}>{children}</FileLink> : <code title={href}>{children}</code>;
+  },
+  // Inline code that names a file opens it. Code inside a block (with a language or several lines) stays as it is.
+  code: ({ className, children }) => {
+    const text = typeof children === "string" ? children : Array.isArray(children) && children.every((part) => typeof part === "string") ? children.join("") : null;
+    const target = !className && text && !text.includes("\n") ? fileRef(text) : null;
+    return target ? <FileLink target={target}>{children}</FileLink> : <code className={className}>{children}</code>;
+  },
   // Remote images are not fetched: a reply should not make the app load things from the web on its own.
   img: ({ alt, src }) => <span className="mdimg" title={typeof src === "string" ? src : undefined}>{alt || "image"}</span>,
   table: ({ children }) => <div className="mdtable"><table>{children}</table></div>,

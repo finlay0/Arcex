@@ -7,6 +7,7 @@ import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
+import { OPEN_FILE } from "./md.tsx";
 import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
@@ -80,6 +81,19 @@ export function App() {
     };
     window.addEventListener(OPEN_PREVIEW, show);
     return () => window.removeEventListener(OPEN_PREVIEW, show);
+  }, []);
+  // A file named in a reply opens in the side panel's file viewer.
+  const [openFile, setOpenFile] = useState<{ path: string; line: number | null; nonce: number } | null>(null);
+  useEffect(() => {
+    const show = (event: Event) => {
+      const detail = (event as CustomEvent<{ path: string; line: number | null }>).detail;
+      if (!detail?.path) return;
+      setPanel(true);
+      setTab("details");
+      setOpenFile({ path: detail.path, line: detail.line, nonce: Date.now() });
+    };
+    window.addEventListener(OPEN_FILE, show);
+    return () => window.removeEventListener(OPEN_FILE, show);
   }, []);
   const [query, setQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -571,7 +585,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} openFile={openFile} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>

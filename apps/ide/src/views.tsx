@@ -911,6 +911,8 @@ export function Panel(props: {
   open(thread: Thread): void;
   /** Starts a thread that reviews the project's unsaved changes. */
   review(): void;
+  /** A file a reply asked to show, with a changing `nonce` so the same file can be asked for again. */
+  openFile: { path: string; line: number | null; nonce: number } | null;
   fail(error: unknown): void;
   close(): void;
 }) {
@@ -932,12 +934,19 @@ export function Panel(props: {
   const [wide, setWide] = useState(false);
   // A file opened from the Files list replaces the details until Back.
   const [viewing, setViewing] = useState<string | null>(null);
+  const [viewLine, setViewLine] = useState<number | null>(null);
   // A script's output also replaces the details until Back.
   const [watching, setWatching] = useState<string | null>(null);
   useEffect(() => {
     setViewing(null);
     setWatching(null);
   }, [project.id]);
+  useEffect(() => {
+    if (!props.openFile) return;
+    setWatching(null);
+    setViewing(props.openFile.path);
+    setViewLine(props.openFile.line);
+  }, [props.openFile?.nonce]);
   const tabsId = useId();
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
   const found = useMemo(() => {
@@ -982,7 +991,7 @@ export function Panel(props: {
         <Browser project={project} found={found} fail={fail} />
       ) : (
         <>
-        {viewing && <FileView project={project} path={viewing} refresh={settled} back={() => setViewing(null)} fail={fail} />}
+        {viewing && <FileView project={project} path={viewing} line={viewLine} refresh={settled} back={() => { setViewing(null); setViewLine(null); }} fail={fail} />}
         {!viewing && watching && <RunOutput runId={watching} back={() => setWatching(null)} fail={fail} />}
         <div className="pbody" hidden={!!viewing || !!watching}>
           <div className="phero" title={project.cwd}>
@@ -999,7 +1008,7 @@ export function Panel(props: {
             <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
           <Scripts project={project} refresh={settled} fail={fail} show={setWatching} preview={() => props.setTab("browser")} />
-          <Files project={project} refresh={settled} view={setViewing} />
+          <Files project={project} refresh={settled} view={(file) => { setViewLine(null); setViewing(file); }} />
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
@@ -1095,10 +1104,11 @@ function Files({ project, refresh, view }: { project: Project; refresh: string; 
 }
 
 /** One file, read-only, with line numbers and grey syntax tones. Esc or Back returns to the details. */
-function FileView({ project, path, refresh, back, fail }: { project: Project; path: string; refresh: string; back(): void; fail(error: unknown): void }) {
+function FileView({ project, path, line: focus, refresh, back, fail }: { project: Project; path: string; line?: number | null; refresh: string; back(): void; fail(error: unknown): void }) {
   type Loaded = Requests["project.readFile"]["result"];
   const [file, setFile] = useState<Loaded | { error: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const code = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let current = true;
     call("project.readFile", { projectId: project.id, path })
@@ -1116,7 +1126,11 @@ function FileView({ project, path, refresh, back, fail }: { project: Project; pa
     return () => window.removeEventListener("keydown", onKey);
   }, [back]);
   const lines = useMemo(() => (file && "text" in file && file.text !== undefined ? highlight(file.text, languageOf(path)) : null), [file, path]);
-  const name = path.split("/").pop() ?? path;
+  const name = path.split(/[\\/]/).pop() ?? path;
+  // Opened from a reply that named a line: bring that line into view.
+  useEffect(() => {
+    if (focus && lines) code.current?.querySelector(`tr:nth-child(${focus})`)?.scrollIntoView({ block: "center" });
+  }, [focus, lines]);
   return (
     <div className="fileview">
       <div className="fvtop">
@@ -1138,11 +1152,11 @@ function FileView({ project, path, refresh, back, fail }: { project: Project; pa
         : file.tooLarge ? <p className="muted fvnote">This file is {Math.round(file.size / 1024 / 1024 * 10) / 10} MB, too large to show here.</p>
         : file.binary ? <p className="muted fvnote">This file isn't text, so it can't be shown here.</p>
         : lines && (
-          <div className="fvcode" role="region" aria-label={`Contents of ${name}`} tabIndex={0}>
+          <div className="fvcode" role="region" aria-label={`Contents of ${name}`} tabIndex={0} ref={code}>
             <table>
               <tbody>
                 {lines.map((line, index) => (
-                  <tr key={index}>
+                  <tr key={index} className={focus === index + 1 ? "at" : undefined}>
                     <td className="ln">{index + 1}</td>
                     <td className="lt">{line.map((token, at) => token.kind === "plain" ? token.text : <span key={at} className={`tk-${token.kind}`}>{token.text}</span>)}{"\n"}</td>
                   </tr>
