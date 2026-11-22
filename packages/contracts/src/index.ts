@@ -110,6 +110,8 @@ export type Thread = {
   pinned: boolean;
   /** Folders outside the project the agent may also read and write in this thread. */
   folders: string[];
+  /** The thread works in a separate copy of the project (a Git worktree) instead of the project folder. */
+  copy?: { path: string } | null;
   /** False once the thread's agent has said it can't use extra folders. */
   foldersSupported?: boolean;
   /** The thread's running agent takes messages into a turn that is under way. */
@@ -388,7 +390,14 @@ export type Requests = {
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
-  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[] }; result: Thread };
+  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[]; /** Work in a separate copy of the project. */ separate?: boolean }; result: Thread };
+  /** What a thread changed in its separate copy, and one file's diff there. */
+  "thread.copyChanges": { params: { threadId: string }; result: Change[] };
+  "thread.copyDiff": { params: { threadId: string; path: string }; result: { text: string } };
+  /** Brings a separate copy's changes into the project folder as unsaved changes, then removes the copy. */
+  "thread.bringIn": { params: { threadId: string }; result: { files: string[]; overlaps: string[] } };
+  /** Removes a separate copy without bringing its changes in. */
+  "thread.discardCopy": { params: { threadId: string }; result: { ok: true } };
   "thread.update": { params: { threadId: string; title?: string; archived?: boolean; pinned?: boolean; folders?: string[]; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   /** Threads whose messages contain `query`, with a snippet around the first match. */

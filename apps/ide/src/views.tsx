@@ -650,6 +650,9 @@ export function Conversation(props: {
   /** A second agent or model a new thread's first message also goes to (main pane only). */
   compare?: Choice | null;
   setCompare?(choice: Choice | null): void;
+  /** The new thread works in a separate copy of the project (main pane only). */
+  separate?: boolean;
+  setSeparate?(on: boolean): void;
   name: string;
   seed: string;
   consumeSeed(): void;
@@ -825,6 +828,17 @@ export function Conversation(props: {
             else props.setChoice(choice);
           }}
         />
+        {!thread && props.setSeparate && (
+          <button
+            className={props.separate ? "icon on" : "icon"}
+            aria-pressed={!!props.separate}
+            aria-label="Work in a separate copy"
+            title={props.separate ? "This thread will work in a separate copy of the project, so it can't collide with other threads. Click to work in the project folder instead." : "Work in a separate copy of the project, so this thread can't collide with others working at the same time"}
+            onClick={() => props.setSeparate!(!props.separate)}
+          >
+            <Icon name="branch" />
+          </button>
+        )}
         {!thread && props.setCompare && (props.compare ? (
           <span className="compare">
             <span className="vs">and</span>
@@ -1176,6 +1190,7 @@ export function Panel(props: {
           <Versions project={project} refresh={settled} fail={fail} />
           <Publish project={project} refresh={settled} fail={fail} startDraft={props.startDraft} />
           <AgentTasks threads={threads} open={props.open} fail={fail} />
+          {props.thread?.copy && <CopySection thread={props.thread} refresh={settled} fail={fail} />}
           {props.thread && <Folders thread={props.thread} fail={fail} />}
           {recent.length > 0 && (
             <section className="sec">
@@ -1567,7 +1582,7 @@ function Folders({ thread, fail }: { thread: Thread; fail(error: unknown): void 
         {thread.folders.length < 5 && <button className="link" onClick={() => void addThreadFolder(thread, fail)}>Add a folder</button>}
       </header>
       {thread.folders.length === 0 ? (
-        <p className="folderhint">This thread works in the project folder. Add another folder to let the agent use it too.</p>
+        <p className="folderhint">{thread.copy ? "Add a folder outside the project to let the agent use it too." : "This thread works in the project folder. Add another folder to let the agent use it too."}</p>
       ) : (
         thread.folders.map((folder) => (
           <div key={folder} className="vrow" title={folder}>
@@ -1907,7 +1922,7 @@ function TurnChanges({ thread, item, last, preview, fail }: { thread: Thread; it
         </button>
         {idle && !allUndone && <button className="link" onClick={() => start({ redo: false })}>Undo</button>}
         {idle && undoneFiles.size > 0 && <button className="link" onClick={() => start({ redo: true })}>Redo</button>}
-        {idle && last && !allUndone && <SaveVersion className="link" projectId={thread.projectId} message={thread.title} fail={fail} />}
+        {idle && last && !allUndone && !thread.copy && <SaveVersion className="link" projectId={thread.projectId} message={thread.title} fail={fail} />}
         {last && preview && !busy(thread) && <button className="link" onClick={() => window.dispatchEvent(new Event(OPEN_PREVIEW))}>Open preview</button>}
       </div>
       {ask && ask.step !== "working" && (
@@ -2050,6 +2065,80 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
               {open === change.path && <DiffLines diff={diff} path={change.path} retry={() => setAttempt(attempt + 1)} />}
             </div>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** A thread's separate copy: what it changed, and buttons to bring that into the project folder or discard it. */
+function CopySection({ thread, refresh, fail }: { thread: Thread; refresh: string; fail(error: unknown): void }) {
+  const [changes, setChanges] = useState<Change[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [diff, setDiff] = useState<{ text: string; error?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [doing, setDoing] = useState<"bring" | "discard" | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const busyNow = thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
+  useEffect(() => {
+    let current = true;
+    call("thread.copyChanges", { threadId: thread.id })
+      .then((result) => { if (current) setChanges(result); })
+      .catch(() => { if (current) setChanges([]); });
+    return () => { current = false; };
+  }, [thread.id, thread.state, refresh, attempt]);
+  useEffect(() => {
+    setDiff(null);
+    if (!open) return;
+    let current = true;
+    call("thread.copyDiff", { threadId: thread.id, path: open })
+      .then((result) => { if (current) setDiff(result); })
+      .catch(() => { if (current) setDiff({ text: "Couldn't load this diff.", error: true }); });
+    return () => { current = false; };
+  }, [thread.id, open, refresh, attempt]);
+  const act = (kind: "bring" | "discard") => {
+    setDoing(kind);
+    setConfirm(false);
+    (kind === "bring" ? call("thread.bringIn", { threadId: thread.id }) : call("thread.discardCopy", { threadId: thread.id }))
+      .then(() => window.dispatchEvent(new Event(FILES_CHANGED)))
+      .catch(fail)
+      .finally(() => setDoing(null));
+  };
+  const added = changes?.reduce((sum, change) => sum + change.added, 0) ?? 0;
+  const removed = changes?.reduce((sum, change) => sum + change.removed, 0) ?? 0;
+  return (
+    <section className="sec copysec">
+      <header>
+        <b>Separate copy</b>
+        {changes && changes.length > 0 && <span className="stat">+{added} <i>−{removed}</i></span>}
+      </header>
+      <p className="folderhint" title={thread.copy?.path}>This thread works in its own copy of the project, so other threads can't collide with it.</p>
+      {!changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="folderhint">No changes in the copy yet.</p> : (
+        <div className="files">
+          {changes.map((change) => (
+            <div key={change.path}>
+              <button className="file" aria-expanded={open === change.path} title={change.path} onClick={() => setOpen(open === change.path ? null : change.path)}>
+                <Icon name="file" />
+                <span className="trunc">{change.path.split("/").pop()}</span>
+                <ChangeStat change={change} />
+              </button>
+              {open === change.path && <DiffLines diff={diff} path={change.path} retry={() => setAttempt(attempt + 1)} />}
+            </div>
+          ))}
+        </div>
+      )}
+      {confirm ? (
+        <div className="changeacts">
+          <span className="folderhint">Discard the copy and its changes?</span>
+          <button className="btn danger" disabled={doing !== null} onClick={() => act("discard")}>Discard</button>
+          <button className="btn" onClick={() => setConfirm(false)}>Keep</button>
+        </div>
+      ) : (
+        <div className="changeacts">
+          <button className="btn savever" disabled={busyNow || doing !== null || !changes?.length} title="Apply these changes to the project folder as unsaved changes, then remove the copy" onClick={() => act("bring")}>
+            {doing === "bring" ? "Bringing in…" : "Bring changes in"}
+          </button>
+          <button className="btn" disabled={busyNow || doing !== null} onClick={() => setConfirm(true)}>{doing === "discard" ? "Discarding…" : "Discard copy"}</button>
         </div>
       )}
     </section>

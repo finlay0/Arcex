@@ -1,9 +1,11 @@
 import { mkdirSync } from "node:fs";
+import type { Copy } from "./worktrees.ts";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { Item, Project, QueuedMessage, Settings, Thread } from "@arcex/contracts";
 
-export type ThreadRow = Thread & { sessionId: string | null };
+/** `carry`: a recap for the agent's next fresh session (after a rewind or leaving a separate copy), kept until sent. */
+export type ThreadRow = Thread & { sessionId: string | null; worktree: Copy | null; carry: string | null };
 
 export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false, terminal: false };
 
@@ -39,6 +41,8 @@ export function openDb(dataDir: string) {
   if (!columns.includes("choices")) db.exec("ALTER TABLE threads ADD COLUMN choices TEXT");
   if (!columns.includes("pinned")) db.exec("ALTER TABLE threads ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
   if (!columns.includes("folders")) db.exec("ALTER TABLE threads ADD COLUMN folders TEXT");
+  if (!columns.includes("copy")) db.exec("ALTER TABLE threads ADD COLUMN copy TEXT");
+  if (!columns.includes("carry")) db.exec("ALTER TABLE threads ADD COLUMN carry TEXT");
   if (!columns.includes("state")) db.exec("ALTER TABLE threads ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'");
   db.exec("UPDATE threads SET state = 'interrupted' WHERE state IN ('starting', 'working', 'needs_you', 'stopping')");
 
@@ -63,6 +67,8 @@ export function openDb(dataDir: string) {
     archived: row.archived === 1,
     pinned: row.pinned === 1,
     folders: row.folders ? (JSON.parse(row.folders as string) as string[]) : [],
+    worktree: row.copy ? (JSON.parse(row.copy as string) as Copy) : null,
+    carry: (row.carry as string | null) ?? null,
     sessionId: (row.session_id as string | null) ?? null,
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
@@ -112,8 +118,8 @@ export function openDb(dataDir: string) {
       ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.title, t.sessionId, t.createdAt, t.updatedAt, t.state);
     },
     saveThread(t: ThreadRow) {
-      db.prepare("UPDATE threads SET title = ?, archived = ?, pinned = ?, folders = ?, model = ?, choices = ?, queued = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
-        t.title, t.archived ? 1 : 0, t.pinned ? 1 : 0, t.folders.length ? JSON.stringify(t.folders) : null, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.sessionId, t.updatedAt, t.state, t.id,
+      db.prepare("UPDATE threads SET title = ?, archived = ?, pinned = ?, folders = ?, copy = ?, carry = ?, model = ?, choices = ?, queued = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
+        t.title, t.archived ? 1 : 0, t.pinned ? 1 : 0, t.folders.length ? JSON.stringify(t.folders) : null, t.worktree ? JSON.stringify(t.worktree) : null, t.carry, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.sessionId, t.updatedAt, t.state, t.id,
       );
     },
     removeThread(id: string) {

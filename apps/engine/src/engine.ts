@@ -10,6 +10,7 @@ import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
+import { bringIn, copyChanges, copyDiff, createCopy, removeCopy } from "./worktrees.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -50,8 +51,6 @@ type Live = {
   questions: Map<string, { item: QuestionItem; schema: Parameters<typeof questionsOf>[0]; resolve(response: acp.CreateElicitationResponse): void }>;
   /** Told to the agent with the next message, after the user undoes a turn. */
   undoNote?: string;
-  /** After a rewind, the next message starts a fresh agent session with this recap of the kept conversation. */
-  rewindNote?: string;
   /** The thread's folders changed during a turn, so the next message reopens the session with them. */
   reopen?: boolean;
   /** Background work the agent reported, by its task id. */
@@ -363,8 +362,9 @@ export function createEngine(
       at: Date.now(),
     };
   };
-  const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => ({
+  const publicThread = ({ sessionId: _sessionId, worktree, ...thread }: ThreadRow): Thread => ({
     ...thread,
+    copy: worktree ? { path: worktree.path } : null,
     steering: lives.get(thread.id)?.session?.steering === true,
     ...(thread.folders.length && lives.get(thread.id)?.session?.folders === false ? { foldersSupported: false } : {}),
     ...(lives.get(thread.id)?.tasks?.size ? { tasks: [...lives.get(thread.id)!.tasks!.values()].sort((a, b) => b.startedAt - a.startedAt) } : {}),
@@ -412,12 +412,15 @@ export function createEngine(
   /** Paths are kept relative to the project; anything that climbs out of it (an agent's own notes) is not project work. */
   const insideProject = (file: string) => !file.startsWith("..") && !path.isAbsolute(file);
 
-  function filesOf(project: Project, update: { locations?: acp.ToolCallLocation[] | null; content?: acp.ToolCallContent[] | null }) {
+  /** The folder a thread's agent works in: its separate copy, or the project folder. */
+  const where = (thread: ThreadRow, project: Project) => thread.worktree?.path ?? project.cwd;
+
+  function filesOf(cwd: string, update: { locations?: acp.ToolCallLocation[] | null; content?: acp.ToolCallContent[] | null }) {
     const found = [
       ...(update.locations ?? []).map((location) => location.path),
       ...(update.content ?? []).flatMap((content) => (content.type === "diff" ? [content.path] : [])),
     ];
-    return [...new Set(found.map((file) => path.relative(project.cwd, file) || file))];
+    return [...new Set(found.map((file) => path.relative(cwd, file) || file))];
   }
 
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
@@ -489,7 +492,7 @@ export function createEngine(
       }
       if (update.kind) step.kind = update.kind;
       if (update.title) step.title = update.title;
-      const files = filesOf(project, update);
+      const files = filesOf(where(thread, project), update);
       if (files.length) step.item.files = [...new Set([...step.item.files, ...files])];
       if (update.status === "completed") step.item.status = "done";
       else if (update.status === "failed") step.item.status = "failed";
@@ -563,7 +566,7 @@ export function createEngine(
         kind: "ask",
         title: plan
           ? "Here's the plan. Go ahead?"
-          : describe(call.kind ?? "other", call.title ?? "", filesOf(project, call)).replace(/^(Changed|Ran|Removed|Moved|Looked at)/, (verb) =>
+          : describe(call.kind ?? "other", call.title ?? "", filesOf(where(thread, project), call)).replace(/^(Changed|Ran|Removed|Moved|Looked at)/, (verb) =>
             ({ Changed: "Change", Ran: "Run", Removed: "Remove", Moved: "Move", "Looked at": "Look at" })[verb] ?? verb,
           ),
         detail: (call.title ?? "").slice(0, 2000),
@@ -592,6 +595,29 @@ export function createEngine(
       put(thread, item);
       setState(thread, "needs_you");
     });
+  }
+
+  /**
+   * Ends a thread's separate copy. The agent's session was opened in the copy, so the next message starts a fresh one
+   * in the project folder with a recap of the conversation.
+   */
+  async function leaveCopy(thread: ThreadRow, project: Project, note: string, what: string) {
+    const copy = thread.worktree;
+    if (!copy) return;
+    const live = liveOf(thread.id);
+    closeSession(live);
+    await removeCopy(project.cwd, copy);
+    thread.worktree = null;
+    const recap = db.items(thread.id)
+      .map((entry) => entry.kind === "user" ? `User: ${entry.text}` : entry.kind === "say" ? `You: ${entry.text}` : "")
+      .filter(Boolean)
+      .join("\n\n");
+    thread.carry = `(Note from Arcex: you were working in a separate copy of the project. Its changes were ${what}, and you now work in the project folder, ${project.cwd}. You are starting fresh, so here is the conversation so far, most recent last.)\n\n${recap.length > 12000 ? `…${recap.slice(-12000)}` : recap}`;
+    thread.sessionId = null;
+    thread.context = undefined;
+    db.saveThread(thread);
+    put(thread, { id: randomUUID(), kind: "note", text: note });
+    emit({ event: "thread", thread: publicThread(thread) });
   }
 
   function stopAside(id: string) {
@@ -671,7 +697,7 @@ export function createEngine(
     const session = await startSession({
       agentId: thread.provider,
       settings,
-      cwd: project.cwd,
+      cwd: where(thread, project),
       folders: thread.folders.filter((folder) => existsSync(folder)),
       resumeId: thread.sessionId,
       signal,
@@ -729,7 +755,7 @@ export function createEngine(
     const snapshotFile = path.join(snapshotsDir, `${thread.id}.index`);
     let before: string | null = null;
     try {
-      before = await git.snapshot(project.cwd, snapshotFile);
+      before = await git.snapshot(where(thread, project), snapshotFile);
       const session = await ensureSession(thread, project, live, turn.signal);
       if (thread.model && thread.model.value !== session.models?.current) {
         try {
@@ -749,10 +775,13 @@ export function createEngine(
         put(thread, { id: randomUUID(), kind: "note", text: `${model} can't see images, so ${one ? "the image was" : "the images were"} sent as ${one ? "a file" : "files"} it may not open. Choose a model that sees images to have ${one ? "it" : "them"} looked at.` });
       }
       // Files the message mentions with "@" go along as links the agent can open.
-      const undoNote = [live.rewindNote, live.undoNote].filter(Boolean).join("\n\n");
+      const undoNote = [thread.carry, live.undoNote].filter(Boolean).join("\n\n");
       live.undoNote = undefined;
-      live.rewindNote = undefined;
-      const result = await session.prompt([...(undoNote ? [{ type: "text" as const, text: undoNote }] : []), ...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
+      if (thread.carry) {
+        thread.carry = null;
+        db.saveThread(thread);
+      }
+      const result = await session.prompt([...(undoNote ? [{ type: "text" as const, text: undoNote }] : []), ...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(where(thread, project), prompt, session.promptCapabilities)]);
       if (result.stopReason === "cancelled") outcome = "stopped";
       if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
         const reason = result.stopReason === "refusal" ? "declined the request" : "reached a turn limit";
@@ -791,9 +820,9 @@ export function createEngine(
     live.steps.clear();
     // The snapshots show everything the turn changed, including what its commands did. Without Git, list the edits
     // the agent reported.
-    const after = before ? await git.snapshot(project.cwd, snapshotFile) : null;
+    const after = before ? await git.snapshot(where(thread, project), snapshotFile) : null;
     if (!threads.has(thread.id)) return;
-    const turnChanges = before && after ? await git.turnChanges(project.cwd, before, after).catch(() => null) : null;
+    const turnChanges = before && after ? await git.turnChanges(where(thread, project), before, after).catch(() => null) : null;
     if (turnChanges && before && after) {
       if (turnChanges.length) put(thread, { id: randomUUID(), kind: "result", files: turnChanges.map((change) => change.path), changes: turnChanges, snapshots: { before, after } });
     } else if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
@@ -1077,7 +1106,10 @@ export function createEngine(
 
     "project.remove"(params) {
       const project = projectOf(params.projectId);
-      for (const thread of [...threads.values()].filter((t) => t.projectId === project.id)) dropThread(thread);
+      for (const thread of [...threads.values()].filter((t) => t.projectId === project.id)) {
+        if (thread.worktree) void removeCopy(project.cwd, thread.worktree).catch(() => {});
+        dropThread(thread);
+      }
       processes.stopProject(project.id);
       terminals.closeProject(project.id);
       db.removeProject(project.id);
@@ -1211,7 +1243,7 @@ export function createEngine(
       if (!wanted.length) throw new Error(redo ? "nothing here to redo" : "that's already undone");
       const project = projectOf(thread.projectId);
       const scratch = path.join(snapshotsDir, `${thread.id}.undo.index`);
-      const result = await git.undoTurn(project.cwd, item.snapshots.before, item.snapshots.after, wanted, scratch, params.force === true, redo);
+      const result = await git.undoTurn(where(thread, project), item.snapshots.before, item.snapshots.after, wanted, scratch, params.force === true, redo);
       if (!result.undone.length) return result;
       if (!threads.has(thread.id)) throw new Error("thread not found");
       for (const file of result.undone) redo ? wasUndone.delete(file) : wasUndone.add(file);
@@ -1249,7 +1281,7 @@ export function createEngine(
       }
       const project = projectOf(thread.projectId);
       const result = plan.size
-        ? await git.rewindFiles(project.cwd, [...plan.values()], path.join(snapshotsDir, `${thread.id}.undo.index`), params.force === true)
+        ? await git.rewindFiles(where(thread, project), [...plan.values()], path.join(snapshotsDir, `${thread.id}.undo.index`), params.force === true)
         : { restored: [], changedSince: [] };
       if (result.changedSince.length && !result.restored.length) return result;
       if (!threads.has(thread.id) || busyState(thread)) throw new Error("this thread changed while rewinding");
@@ -1262,9 +1294,9 @@ export function createEngine(
         .map((entry) => entry.kind === "user" ? `User: ${entry.text}` : entry.kind === "say" ? `You: ${entry.text}` : "")
         .filter(Boolean)
         .join("\n\n");
-      live.rewindNote = recap
+      thread.carry = recap
         ? `(Note from Arcex: the user rewound this conversation, so you are starting fresh. Here is the conversation so far, most recent last. The project files are back the way they were at this point.)\n\n${recap.length > 12000 ? `…${recap.slice(-12000)}` : recap}`
-        : undefined;
+        : null;
       thread.sessionId = null;
       thread.context = undefined;
       thread.queued = [];
@@ -1278,14 +1310,14 @@ export function createEngine(
       if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");
       const item = db.items(thread.id).find((entry) => entry.id === params.itemId);
       if (item?.kind !== "result" || !item.snapshots) throw new Error("that turn has no snapshot");
-      return { text: await git.turnDiff(projectOf(thread.projectId).cwd, item.snapshots.before, item.snapshots.after, params.path) };
+      return { text: await git.turnDiff(where(thread, projectOf(thread.projectId)), item.snapshots.before, item.snapshots.after, params.path) };
     },
     "project.diff": async (params) => {
       if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");
       return { text: await git.diff(projectOf(params.projectId).cwd, params.path) };
     },
 
-    "thread.create"(params) {
+    async "thread.create"(params) {
       const project = projectOf(params.projectId);
       if (!agentList(settings).some((agent) => agent.id === params.provider)) throw new Error("unknown agent");
       const model = pickedModel(params.model);
@@ -1295,9 +1327,12 @@ export function createEngine(
       const now = Date.now();
       const thread: ThreadRow = {
         id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: prompt ? titleFrom(prompt) : attached[0]!.name.slice(0, 60),
-        state: "starting", archived: false, pinned: false, folders: [], sessionId: null, createdAt: now, updatedAt: now,
+        state: "starting", archived: false, pinned: false, folders: [], sessionId: null, worktree: null, carry: null, createdAt: now, updatedAt: now,
       };
+      // A separate copy is made before the thread exists, so a failure leaves nothing behind.
+      if (params.separate === true) thread.worktree = await createCopy(project.cwd, path.join(about.dataDir, "copies", thread.id), thread.id);
       db.insertThread(thread);
+      if (thread.worktree) db.saveThread(thread);
       threads.set(thread.id, thread);
       void run(thread, prompt, attached);
       db.clearSentDraft(project.id, "", params.text);
@@ -1361,6 +1396,7 @@ export function createEngine(
 
     "thread.remove"(params) {
       const thread = threadOf(params.threadId);
+      if (thread.worktree) void removeCopy(projectOf(thread.projectId).cwd, thread.worktree).catch(() => {});
       dropThread(thread);
       db.removeThread(thread.id);
       emit({ event: "gone", kind: "thread", id: thread.id });
@@ -1410,7 +1446,7 @@ export function createEngine(
           const session = await startSession({
             agentId: thread.provider,
             settings,
-            cwd: project.cwd,
+            cwd: where(thread, project),
             folders: thread.folders.filter((folder) => existsSync(folder)),
             resumeId: null,
             forkOf: thread.sessionId!,
@@ -1461,6 +1497,34 @@ ${question}`;
       return { ok: true as const };
     },
 
+    async "thread.copyChanges"(params) {
+      const thread = threadOf(params.threadId);
+      return thread.worktree ? copyChanges(thread.worktree) : [];
+    },
+    async "thread.copyDiff"(params) {
+      const thread = threadOf(params.threadId);
+      if (!thread.worktree) throw new Error("this thread has no separate copy");
+      return { text: await copyDiff(thread.worktree, text(params.path, "path", 1000)) };
+    },
+    async "thread.bringIn"(params) {
+      const thread = threadOf(params.threadId);
+      if (!thread.worktree) throw new Error("this thread has no separate copy");
+      if (busyState(thread)) throw new Error("wait for this thread to finish before bringing its changes in");
+      const project = projectOf(thread.projectId);
+      const result = await bringIn(project.cwd, thread.worktree);
+      await leaveCopy(thread, project, result.files.length
+        ? `Brought ${result.files.length === 1 ? "1 changed file" : `${result.files.length} changed files`} into the project folder as unsaved changes.${result.overlaps.length ? ` ${result.overlaps.join(", ")} also changed in the project folder meanwhile, so both versions are marked in ${result.overlaps.length === 1 ? "it" : "them"}.` : ""} This thread now works in the project folder.`
+        : "The separate copy had no changes to bring in. This thread now works in the project folder.", "brought into the project folder");
+      return result;
+    },
+    async "thread.discardCopy"(params) {
+      const thread = threadOf(params.threadId);
+      if (!thread.worktree) return { ok: true as const };
+      if (busyState(thread)) throw new Error("wait for this thread to finish first");
+      await leaveCopy(thread, projectOf(thread.projectId), "Discarded the separate copy and its changes. This thread now works in the project folder.", "discarded");
+      return { ok: true as const };
+    },
+
     "thread.asideStop"(params) {
       stopAside(String(params.asideId));
       return { ok: true as const };
@@ -1475,7 +1539,7 @@ ${question}`;
         const attached = files.resolve(params.attachments);
         const text = message(params.text, attached);
         const project = projectOf(thread.projectId);
-        const outcome = await session.steer([...files.blocks(text, attached, session.promptCapabilities), ...mentionLinks(project.cwd, text, session.promptCapabilities)]).catch(() => "later" as const);
+        const outcome = await session.steer([...files.blocks(text, attached, session.promptCapabilities), ...mentionLinks(where(thread, project), text, session.promptCapabilities)]).catch(() => "later" as const);
         if (outcome === "steered" && lives.get(thread.id)?.session === session) {
           // The reply so far ends here, so what the agent says next shows after the new message.
           endSay(thread);

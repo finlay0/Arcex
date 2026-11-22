@@ -783,3 +783,6 @@ body.resizing iframe { pointer-events: none; }
 .branchsum .stat { font: 12px var(--mono); }
 .vrow.branchrow { flex-wrap: wrap; height: auto; min-height: 32px; row-gap: 2px; padding: 4px 0; }
 .vrow.branchrow .trunc { flex: 1 1 160px; }
+/* The separate-copy switch and section. */
+.tools .icon.on { background: var(--active); color: var(--ink); }
+.copysec .changeacts { flex-wrap: wrap; align-items: center; }

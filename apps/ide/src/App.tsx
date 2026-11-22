@@ -160,6 +160,8 @@ export function App() {
   const [seed, setSeed] = useState("");
   // A second agent or model to send a new thread's first message to as well, side by side.
   const [compare, setCompare] = useState<Choice | null>(null);
+  // The next new thread works in a separate copy of the project.
+  const [separate, setSeparate] = useState(false);
   const [unassignedDraft, setUnassignedDraft] = useState("");
 
   const overlay = screen.kind === "settings" || screen.kind === "toolbox";
@@ -342,13 +344,14 @@ export function App() {
     }
     setProjectId(id);
   };
-  const startThread = async (text: string, attachments: string[] = [], also: Choice | null = null) => {
+  const startThread = async (text: string, attachments: string[] = [], also: Choice | null = null, copy = false) => {
     if (!project) throw new Error("Choose a project for this thread.");
-    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text, attachments });
+    const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text, attachments, ...(copy ? { separate: true } : {}) });
+    if (copy) setSeparate(false);
     if (also) {
       // The same message to a second agent or model, opened beside the first. Both work in the same project folder.
       setCompare(null);
-      const second = await call("thread.create", { projectId: project.id, provider: also.agentId, model: also.model, choices: also.choices ?? {}, text, attachments }).catch((error) => {
+      const second = await call("thread.create", { projectId: project.id, provider: also.agentId, model: also.model, choices: also.choices ?? {}, text, attachments, ...(copy ? { separate: true } : {}) }).catch((error) => {
         fail(error);
         return null;
       });
@@ -712,9 +715,11 @@ export function App() {
             newProject={() => setScreen({ kind: "new-project" })}
             manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
             actions={actions}
-            start={(text, attachments) => startThread(text, attachments, compare)}
+            start={(text, attachments) => startThread(text, attachments, compare, separate)}
             compare={compare}
             setCompare={setCompare}
+            separate={separate}
+            setSeparate={setSeparate}
             name={settings.name}
             drafts={store.drafts}
             unassignedDraft={unassignedDraft}

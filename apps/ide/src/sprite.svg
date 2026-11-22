@@ -33,6 +33,7 @@
   <symbol id="spark" viewBox="0 0 24 24"><path d="M11 4c.6 4 2 5.400 6 6-4 .6-5.400 2-6 6-.6-4-2-5.400-6-6 4-.6 5.400-2 6-6ZM18.500 15c.3 1.800.900 2.400 2.700 2.700-1.800.3-2.400.9-2.700 2.700-.3-1.800-.9-2.400-2.700-2.700 1.800-.3 2.400-.9 2.700-2.700Z"/></symbol>
   <symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
   <symbol id="chat" viewBox="0 0 24 24"><path d="M5 5.500h14a1.500 1.500 0 0 1 1.500 1.500v9a1.500 1.500 0 0 1-1.500 1.500h-7L8 21v-3.500H5A1.500 1.500 0 0 1 3.500 16V7A1.500 1.500 0 0 1 5 5.500Z"/></symbol>
+  <symbol id="branch" viewBox="0 0 24 24"><circle cx="6" cy="5.500" r="2"/><circle cx="6" cy="18.500" r="2"/><circle cx="18" cy="5.500" r="2"/><path d="M6 7.500v9M18 7.500v1a4 4 0 0 1-4 4h-4a4 4 0 0 0-4 4"/></symbol>
   <symbol id="layers" viewBox="0 0 24 24"><path d="m12 3.500 8.500 4.500L12 12.500 3.500 8ZM3.500 12l8.500 4.500 8.500-4.500M3.500 16l8.500 4.500 8.500-4.500"/></symbol>
   <symbol id="mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
   <symbol id="send" viewBox="0 0 24 24"><path d="M5 4.500 20 12 5 19.500 7.500 12Z"/></symbol>
