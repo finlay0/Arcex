@@ -6,7 +6,7 @@ import { Icon, Menu, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, 
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
-import { Conversation, NewProject, OPEN_PREVIEW, Panel, type PanelTab } from "./views.tsx";
+import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
 type Screen =
@@ -538,7 +538,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>

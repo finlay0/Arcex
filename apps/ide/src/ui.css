@@ -611,3 +611,5 @@ button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(-
 .btn.ghost.more { width: auto; height: 30px; padding: 0 10px; font-size: 13px; color: var(--ink-2); background: none; }
 .btn.ghost.more:hover { background: var(--hover); color: var(--ink); }
 .phero > .menuwrap, .fvtop > .menuwrap { display: inline-flex; margin: 0; }
+.changeacts { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 8px; }
+.changeacts > .btn { height: 30px; font-size: 13px; margin: 0; }

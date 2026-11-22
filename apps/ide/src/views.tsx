@@ -908,6 +908,8 @@ export function Panel(props: {
   tab: PanelTab;
   setTab(tab: PanelTab): void;
   open(thread: Thread): void;
+  /** Starts a thread that reviews the project's unsaved changes. */
+  review(): void;
   fail(error: unknown): void;
   close(): void;
 }) {
@@ -990,7 +992,7 @@ export function Panel(props: {
             <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
           <Files project={project} refresh={settled} view={setViewing} />
-          <Changes project={project} refresh={settled} fail={fail} />
+          <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
             <section className="sec">
@@ -1420,7 +1422,15 @@ function TurnChanges({ thread, item, last, preview, fail }: { thread: Thread; it
   );
 }
 
-function Changes({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
+/** What a review thread asks for. The agent only reads; findings come back as a list the user can act on. */
+export const REVIEW_PROMPT = [
+  "Review the unsaved changes in this project: everything that differs from the last commit, including new files Git doesn't track yet.",
+  "List what's wrong, most serious first. For each finding give the file and line, what goes wrong and when, and how to fix it.",
+  "Cover bugs, security problems, broken behaviour and anything likely to confuse a user. Skip style nitpicks.",
+  "Don't change any files. If nothing is wrong, say so in one line.",
+].join(" ");
+
+function Changes({ project, refresh, fail, review }: { project: Project; refresh: string; fail(error: unknown): void; review(): void }) {
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -1458,7 +1468,12 @@ function Changes({ project, refresh, fail }: { project: Project; refresh: string
         <b>Unsaved changes</b>
         {changes && changes.length > 0 && <span className="stat">+{added} <i>−{removed}</i></span>}
       </header>
-      {changes && changes.length > 0 && <SaveVersion projectId={project.id} message={`Save ${plural(changes.length, "changed file")}`} fail={fail} className="btn savever" />}
+      {changes && changes.length > 0 && (
+        <div className="changeacts">
+          <SaveVersion projectId={project.id} message={`Save ${plural(changes.length, "changed file")}`} fail={fail} className="btn savever" />
+          <button className="btn" title="Start a thread where the agent checks these changes for problems, without changing anything" onClick={review}>Review changes</button>
+        </div>
+      )}
       {problem ? <p className="muted">{problem} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
         : !changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">No changes since the last saved version.</p> : (
         <div className="files">

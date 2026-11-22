@@ -130,7 +130,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
 | G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | done | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. Each file in a multi-file turn has its own Undo, and undone changes have Redo (whole turn or one file); redo also checks for later changes. Verified November 21: redo of two turns, then undo of one file out of two |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | done | "Open in" on the side panel's project card and in the file viewer lists the editors found on this computer (VS Code, Cursor, Windsurf, Zed, from PATH or their usual install folders) plus File Explorer or Finder. Done by the engine (`editors.ts`): launchers start detached, paths stay inside the project, and paths with characters cmd.exe would read are refused. Verified November 22: the menu lists Cursor and File Explorer. Not pressed in testing, since it opens a window on Finlay's PC |
-| G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | open | |
+| G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | partial | "Review changes" beside "Save a version" in the side panel starts a thread with the picked agent that reviews every unsaved change (including new untracked files), lists findings most serious first with file, line, when it goes wrong and the fix, and changes nothing. Verified November 22 with Claude Haiku: found the off-by-one in a test file. Still missing: reviewing a branch against main, and findings as clickable cards |
 | G8 | Start from a pull request | Open a thread on a PR, with its description and diff as context (T3 `PullRequestThreadDialog`) | P2 | open | Hidden by default |
 
 ### Panes and layout
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · G7 "Review changes" starts a review thread for the unsaved changes.
 - 2026-11-22 · G6 open the project or a file in an editor or File Explorer.
 - 2026-11-21 · M4 sign-in status and the agent's own sign-in buttons for every agent; M2 OpenCode verified end to end; agents with no full-access mode run in their first unrestricted mode.
 - 2026-11-21 · M3 agent directory from the ACP registry: add any maker's agent in one click; GitHub Copilot verified end to end with full access.
