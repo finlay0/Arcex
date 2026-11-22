@@ -148,7 +148,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| S1 | Thread status in sidebar | Spinner while working, dot when unread, needs-you badge | P0 | partial | Loader in recent activity. Unread dots are missing |
+| S1 | Thread status in sidebar | Spinner while working, dot when unread, needs-you badge | P0 | done | Working, needs-you and failed dots in the sidebar. A thread that moves on while you're in another one turns bold with a white dot until you open it (last-seen times kept per thread on this computer). Verified November 21 |
 | S2 | Rename, pin, archive and delete threads | Context menu and inline rename | P1 | partial | Archive and remove exist. Check rename and pin |
 | S3 | Search threads | Search titles and transcripts | P1 | partial | Titles only |
 | S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | partial | Exists. Audit says failures can read "Finished" |
@@ -211,6 +211,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · G5 undo one file, and redo.
 - 2026-11-21 · C5 Claude thinking summaries; K7 last pick remembered for new threads.
 - 2026-11-21 · C4 the agent's own questions as a card (options, number keys, own answer, skip); the main column no longer grows past the window.
+- 2026-11-21 · S1 unread dots.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -231,7 +232,7 @@ Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
-3. S1 unread dots; C14 wrap-up box.
+3. C14 wrap-up box with G3 "Save a version".
 4. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
 5. Then the P1 items: C10 conversation rewind, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 

@@ -97,6 +97,8 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .dot.needs { background: var(--warn); }
 .dot.failed { background: var(--stop); }
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.dot.unread { background: var(--ink); }
+.trunc.unread { color: var(--ink); font-weight: 600; }
 @keyframes breathe { 50% { opacity: .25; transform: scale(.7); } }
 .none { padding: 6px 12px 8px 41px; color: var(--ink-3); font-size: 14px; }
 .none.flat { padding-left: 12px; }

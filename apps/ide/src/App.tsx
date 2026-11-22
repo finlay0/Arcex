@@ -180,6 +180,32 @@ export function App() {
   const live = useMemo(() => store.threads.filter((t) => !t.archived), [store.threads]);
   const thread = screen.kind === "thread" ? live.find((t) => t.id === screen.threadId) ?? null : null;
   const project = store.projects.find((p) => p.id === (thread?.projectId ?? projectId)) ?? null;
+  // When each thread was last looked at. A thread that moved on since, while the user was elsewhere, shows a dot.
+  const [seen, setSeen] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(remembered("arcex:seen") ?? "null") ?? {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    // The first time, everything already there counts as read.
+    if (remembered("arcex:seen") === null && store.threads.length) {
+      setSeen(Object.fromEntries(store.threads.map((t) => [t.id, t.updatedAt])));
+    }
+  }, [store.threads.length > 0]);
+  useEffect(() => {
+    if (thread && (seen[thread.id] ?? 0) < thread.updatedAt) setSeen((current) => ({ ...current, [thread.id]: thread.updatedAt }));
+  }, [thread?.id, thread?.updatedAt]);
+  useEffect(() => {
+    try {
+      const known = new Set(store.threads.map((t) => t.id));
+      if (store.threads.length) localStorage.setItem("arcex:seen", JSON.stringify(Object.fromEntries(Object.entries(seen).filter(([id]) => known.has(id)))));
+    } catch {
+      // Not saved; dots may come back after a restart.
+    }
+  }, [seen]);
+  const unread = (t: Thread) => t.id !== thread?.id && !busy(t) && t.state !== "needs_you" && t.updatedAt > (seen[t.id] ?? Infinity);
   const threads = useMemo(() => live.filter((t) => t.projectId === project?.id), [live, project?.id]);
   const view: Screen = store.projects.length === 0 && screen.kind === "thread" ? { kind: "new-project" } : screen;
   const panelOpen = panel ?? settings?.showDetails ?? true;
@@ -398,7 +424,7 @@ export function App() {
                 )}
                 {open &&
                   mine.map((t) => {
-                    const dot = dotClass(t);
+                    const dot = dotClass(t) ?? (unread(t) ? "dot unread" : null);
                     if (renaming === t.id) {
                       return (
                         <input
@@ -425,8 +451,8 @@ export function App() {
                       <div key={t.id} className="row thread" aria-current={t.id === thread?.id}>
                         <button className="thread-select" aria-current={t.id === thread?.id} title={stateLabel(t) || t.title} onClick={() => openThread(t)}>
                           <Icon name="chat" />
-                          <span className="trunc">{t.title}</span>
-                          {dot ? <span className={dot} aria-label={stateLabel(t)} role="img" /> : <span className="when">{ago(t.updatedAt)}</span>}
+                          <span className={dot === "dot unread" ? "trunc unread" : "trunc"}>{t.title}</span>
+                          {dot ? <span className={dot} aria-label={stateLabel(t) || "New activity"} role="img" /> : <span className="when">{ago(t.updatedAt)}</span>}
                         </button>
                         <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
                       </div>
