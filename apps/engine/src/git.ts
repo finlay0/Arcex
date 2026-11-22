@@ -90,6 +90,37 @@ export async function diff(cwd: string, file: string): Promise<string> {
   }
 }
 
+/**
+ * Files the current branch changed since it grew from `base`, counted from where the two split, so work that landed on
+ * the base since doesn't show. Saved versions only; unsaved changes have their own list. `base` must be a checked name.
+ */
+export async function branchChanges(cwd: string, base: string): Promise<Change[]> {
+  const range = `refs/heads/${base}...HEAD`;
+  const names = await git(cwd, ["diff", "--name-status", "-z", "--no-renames", "--relative", range, "--", "."]);
+  const stats = await git(cwd, ["diff", "--numstat", "-z", "--no-renames", "--relative", range, "--", "."]);
+  const counts = new Map<string, [number, number]>();
+  for (const line of stats.split("\0")) {
+    const match = /^([^\t]+)\t([^\t]+)\t([\s\S]+)$/.exec(line);
+    if (match) counts.set(match[3]!, [Number(match[1]) || 0, Number(match[2]) || 0]);
+  }
+  const parts = names.split("\0");
+  const result: Change[] = [];
+  for (let at = 0; at + 1 < parts.length && result.length < 500; at += 2) {
+    const code = parts[at]!;
+    const file = parts[at + 1]!;
+    if (!code || !file) continue;
+    const [added, removed] = counts.get(file) ?? [0, 0];
+    result.push({ path: file, status: code.startsWith("A") ? "added" : code.startsWith("D") ? "removed" : "changed", added, removed });
+  }
+  return result;
+}
+
+/** One file's diff across the branch. The path must be one `branchChanges` reported. */
+export async function branchDiff(cwd: string, base: string, file: string): Promise<string> {
+  if (!(await branchChanges(cwd, base)).some((change) => change.path === file)) throw new Error("that file has no changes on this branch");
+  return (await git(cwd, ["diff", "--no-renames", "--relative", `refs/heads/${base}...HEAD`, "--", file])).slice(0, MAX_DIFF);
+}
+
 const SNAPSHOT_LIMIT = 50 * 1024 * 1024;
 const TREE = /^[0-9a-f]{40,64}$/;
 

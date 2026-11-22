@@ -355,6 +355,9 @@ export type Requests = {
   "project.readFile": { params: { projectId: string; path: string }; result: { path: string; size: number; text?: string; binary?: boolean; tooLarge?: boolean } };
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
+  /** Files the current branch changed since it grew from its base, and one file's diff across the branch. */
+  "project.branchChanges": { params: { projectId: string }; result: Change[] };
+  "project.branchDiff": { params: { projectId: string; path: string }; result: { text: string } };
   /** Saves everything in the project folder as a version (a Git commit, kept out of sight). */
   "project.saveVersion": { params: { projectId: string; message: string }; result: { id: string } };
   /** Saved versions, newest first. */

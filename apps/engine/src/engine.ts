@@ -1174,6 +1174,17 @@ export function createEngine(
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
+    async "project.branchChanges"(params) {
+      const { cwd } = projectOf(params.projectId);
+      const { base } = await branchInfo(cwd);
+      return base ? git.branchChanges(cwd, base) : [];
+    },
+    async "project.branchDiff"(params) {
+      const { cwd } = projectOf(params.projectId);
+      const { base } = await branchInfo(cwd);
+      if (!base) throw new Error("this branch has nothing to compare with");
+      return { text: await git.branchDiff(cwd, base, text(params.path, "path", 1000)) };
+    },
     async "project.saveVersion"(params) {
       const project = projectOf(params.projectId);
       // A turn still writing could leave half its work in the version.

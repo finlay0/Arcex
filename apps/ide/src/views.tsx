@@ -1981,6 +1981,7 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
       .catch(() => { if (current) setBranch(null); });
     return () => { current = false; };
   }, [project.id, refresh]);
+  const [showBranch, setShowBranch] = useState(false);
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -2029,11 +2030,13 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
           <span className="trunc" title={`On ${branch.branch}, ${plural(branch.ahead, "saved version")} beyond ${branch.base}`}>
             On <span className="mono">{branch.branch}</span> · {plural(branch.ahead, "saved version")} beyond {branch.base}
           </span>
+          <button className="link" aria-expanded={showBranch} onClick={() => setShowBranch(!showBranch)}>{showBranch ? "Hide changes" : "Show changes"}</button>
           <button className="link" title={`Start a thread where the agent checks everything on ${branch.branch} since ${branch.base}, without changing anything`} onClick={() => review(branchReviewPrompt(branch.branch!, branch.base!))}>
             Review branch
           </button>
         </div>
       )}
+      {showBranch && branch?.base && <BranchChanges project={project} base={branch.base} refresh={refresh} />}
       {problem ? <p className="muted">{problem} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
         : !changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">No changes since the last saved version.</p> : (
         <div className="files">
@@ -2050,6 +2053,52 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
         </div>
       )}
     </section>
+  );
+}
+
+/** Everything the branch changed since it grew from its base, file by file, each opening to its diff. */
+function BranchChanges({ project, base, refresh }: { project: Project; base: string; refresh: string }) {
+  const [changes, setChanges] = useState<Change[] | null>(null);
+  const [problem, setProblem] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const [diff, setDiff] = useState<{ text: string; error?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setProblem(false);
+    call("project.branchChanges", { projectId: project.id })
+      .then((result) => { if (current) setChanges(result); })
+      .catch(() => { if (current) setProblem(true); });
+    return () => { current = false; };
+  }, [project.id, base, refresh, attempt]);
+  useEffect(() => {
+    setDiff(null);
+    if (!open) return;
+    let current = true;
+    call("project.branchDiff", { projectId: project.id, path: open })
+      .then((result) => { if (current) setDiff(result); })
+      .catch(() => { if (current) setDiff({ text: "Couldn't load this diff.", error: true }); });
+    return () => { current = false; };
+  }, [project.id, open, refresh, attempt]);
+  if (problem) return <p className="muted">{"Couldn't read the branch's changes."} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>;
+  if (!changes) return <p className="muted">Looking…</p>;
+  if (!changes.length) return <p className="muted">No file differs from {base}.</p>;
+  const added = changes.reduce((sum, change) => sum + change.added, 0);
+  const removed = changes.reduce((sum, change) => sum + change.removed, 0);
+  return (
+    <div className="files branchfiles" aria-label={`Changes since ${base}`}>
+      <p className="branchsum">Since {base}: {plural(changes.length, "file")} <span className="stat">+{added} <i>−{removed}</i></span></p>
+      {changes.map((change) => (
+        <div key={change.path}>
+          <button className="file" aria-expanded={open === change.path} title={change.path} onClick={() => setOpen(open === change.path ? null : change.path)}>
+            <Icon name="file" />
+            <span className="trunc">{change.path.split("/").pop()}</span>
+            <ChangeStat change={change} />
+          </button>
+          {open === change.path && <DiffLines diff={diff} path={change.path} retry={() => setAttempt(attempt + 1)} />}
+        </div>
+      ))}
+    </div>
   );
 }
 

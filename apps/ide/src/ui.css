@@ -777,3 +777,9 @@ body.resizing iframe { pointer-events: none; }
 .tasktext .trunc { color: var(--ink); }
 .tasktext .when { color: var(--ink-4); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .taskrow .link { font-size: 13px; }
+/* The whole branch's changes, under the branch row. */
+.branchfiles { padding-left: 10px; border-left: 1px solid var(--line-2); margin: 2px 0 6px; }
+.branchsum { margin: 0 0 4px; color: var(--ink-3); font-size: 13px; }
+.branchsum .stat { font: 12px var(--mono); }
+.vrow.branchrow { flex-wrap: wrap; height: auto; min-height: 32px; row-gap: 2px; padding: 4px 0; }
+.vrow.branchrow .trunc { flex: 1 1 160px; }
