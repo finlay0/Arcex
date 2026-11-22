@@ -163,6 +163,8 @@ export type ProviderStatus = {
   signInCommand: string;
   /** Sign-ins the agent can start itself, such as "Log in with Google". Arcex starts them; the agent keeps what it gets. */
   signInMethods?: { id: string; name: string }[];
+  /** For agents that reach many model makers (OpenCode): the command that connects another maker's account. */
+  providersCommand?: string;
 };
 
 export type About = { version: string; dataDir: string; projectsDir: string };
@@ -185,6 +187,8 @@ export type Requests = {
   "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] } };
   /** Starts the agent's own sign-in (it may open the browser) and waits for it to finish, up to five minutes. */
   "agents.signIn": { params: { agentId: string; methodId: string }; result: { ok: true } };
+  /** Opens a terminal window running a built-in agent's own sign-in, or its "connect a provider" command. */
+  "agents.openTerminal": { params: { agentId: string; purpose: "signIn" | "providers" }; result: { ok: true } };
   /** The ACP registry of agents, read at most daily. Icons are served at `/agent-icons/<id>.svg`. */
   "agents.directory": { params: { refresh?: boolean }; result: DirectoryAgent[] };
   /** Adds an agent from the directory, downloading it first when it ships as a program. */

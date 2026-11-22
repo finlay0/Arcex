@@ -359,7 +359,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .srow > div:first-child { min-width: 0; }
 .srow b { font-weight: 500; }
 .srow p { color: var(--ink-3); font-size: 14px; overflow-wrap: anywhere; }
-.control { display: flex; align-items: center; gap: 8px; flex: none; max-width: 60%; }
+.control { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; flex: none; max-width: 60%; }
 .who { display: flex; align-items: center; gap: 16px; padding: 18px; }
 .who b { font-size: 18px; font-weight: 600; }
 .who p { color: var(--ink-3); font-size: 14px; }

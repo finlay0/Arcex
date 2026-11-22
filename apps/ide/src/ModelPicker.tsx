@@ -8,6 +8,9 @@ export type Choice = { agentId: string; model: { value: string; name: string } |
 // Model lists are read from each agent once and shared by every picker.
 const cache = new Map<string, { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] }>();
 
+/** Forget an agent's models, so the picker asks it again (after a new account is connected). */
+export const forgetModels = (agentId: string) => cache.delete(agentId);
+
 /** Hides an agent's own "default" entry, since the picker already offers the agent's default at the top. */
 const real = (options: ModelOption[]) => options.filter((option) => option.value !== "default");
 

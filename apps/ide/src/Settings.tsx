@@ -3,6 +3,7 @@ import type { About, Agent, DirectoryAgent, Project, ProviderStatus, Settings as
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
 import { call } from "./store.ts";
 import { Account } from "./Account.tsx";
+import { forgetModels } from "./ModelPicker.tsx";
 
 export type Section = "profile" | "general" | "appearance" | "agents" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
@@ -344,6 +345,8 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [refreshed, setRefreshed] = useState<{ agentId: string; count: number } | null>(null);
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
   const check = () => {
@@ -425,7 +428,10 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
               </Row>
             )}
             {state && agent.builtin && state.installed && state.signedIn === false && state.signInCommand && (
-              <Row title={(state.signInMethods?.length ?? 0) > 0 ? "Or sign in from a terminal" : "Sign in"} hint="Run this in a terminal, finish in your browser, then check again.">
+              <Row title={(state.signInMethods?.length ?? 0) > 0 ? "Or sign in from a terminal" : "Sign in"} hint="Arcex opens a terminal with the sign-in ready. Finish there or in your browser, then check again.">
+                <button className="btn" onClick={() => void call("agents.openTerminal", { agentId: agent.id, purpose: "signIn" }).catch(fail)}>
+                  Open a terminal
+                </button>
                 <button
                   className="btn mono"
                   onClick={() => {
@@ -433,6 +439,30 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
                   }}
                 >
                   {copied === agent.id ? "Copied" : state.signInCommand}
+                </button>
+              </Row>
+            )}
+            {state && state.installed && state.providersCommand && (
+              <Row
+                title="Other model makers"
+                hint={`Use Anthropic, OpenAI, Google, xAI and more through ${agent.name} with your own account. ${agent.name} keeps the sign-in.`}
+              >
+                <button className="btn" onClick={() => void call("agents.openTerminal", { agentId: agent.id, purpose: "providers" }).catch(fail)}>
+                  Connect a provider
+                </button>
+                <button
+                  className="btn"
+                  disabled={refreshing === agent.id}
+                  onClick={() => {
+                    setRefreshing(agent.id);
+                    forgetModels(agent.id);
+                    call("agents.models", { agentId: agent.id, refresh: true })
+                      .then((models) => setRefreshed({ agentId: agent.id, count: models.options.filter((option) => option.value !== "default").length }))
+                      .catch(fail)
+                      .finally(() => setRefreshing(null));
+                  }}
+                >
+                  {refreshing === agent.id ? "Asking…" : refreshed?.agentId === agent.id ? `${plural(refreshed.count, "model")} ready` : "Refresh models"}
                 </button>
               </Row>
             )}

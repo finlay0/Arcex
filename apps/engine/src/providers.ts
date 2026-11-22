@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import type { ProviderStatus, Settings } from "@arcex/contracts";
 import { BUILTIN, agentList } from "./agents.ts";
 
@@ -56,7 +56,23 @@ export async function providerStatus(settings: Settings, probe?: Probe): Promise
         signInMethods: asked?.methods ?? [],
         version: version.output.match(/\d+\.\d+\.\d+/)?.[0] ?? null,
         signInCommand,
+        ...(BUILTIN[agent.id]?.providers ? { providersCommand: BUILTIN[agent.id]!.providers } : {}),
       };
     }),
   );
+}
+
+/**
+ * Opens a terminal window running one of Arcex's own fixed sign-in commands, for sign-ins that only work in a terminal
+ * (OpenCode's provider picker, Claude's and Codex's logins). The user finishes there; the maker's tool keeps the result.
+ */
+export function openTerminal(command: string): void {
+  if (!/^[\w .-]{1,80}$/.test(command)) throw new Error("that sign-in command can't be opened");
+  if (process.platform === "win32") {
+    spawn("cmd.exe", ["/d", "/c", `start "Arcex sign-in" cmd.exe /k ${command}`], { detached: true, stdio: "ignore", windowsVerbatimArguments: true }).unref();
+  } else if (process.platform === "darwin") {
+    spawn("osascript", ["-e", `tell application "Terminal" to do script "${command}"`, "-e", 'tell application "Terminal" to activate'], { detached: true, stdio: "ignore" }).unref();
+  } else {
+    spawn("x-terminal-emulator", ["-e", command], { detached: true, stdio: "ignore" }).unref();
+  }
 }

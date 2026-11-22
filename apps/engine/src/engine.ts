@@ -12,7 +12,7 @@ import type { About, AskOption, Attachment, EventMessage, Item, Method, Project,
 import { BUILTIN, SignInNeeded, agentList, listModels, signIn, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
-import { providerStatus } from "./providers.ts";
+import { openTerminal, providerStatus } from "./providers.ts";
 import { TOOLBOX } from "./toolbox.ts";
 import { createAccountClient } from "./account.ts";
 
@@ -683,6 +683,17 @@ export function createEngine(
       const methodId = text(params.methodId, "sign-in", 80);
       if (!agentList(settings).some((agent) => agent.id === agentId)) throw new Error("unknown agent");
       await signIn(agentId, settings, about.dataDir, methodId);
+      modelCache.delete(agentId);
+      return { ok: true };
+    },
+    "agents.openTerminal"(params) {
+      const agentId = text(params.agentId, "agent", 80);
+      const builtin = BUILTIN[agentId];
+      // Only Arcex's own fixed commands for built-in agents, never text from the request.
+      const command = params.purpose === "providers" ? builtin?.providers : params.purpose === "signIn" ? builtin?.signIn : undefined;
+      if (!command) throw new Error("that agent has no sign-in to open");
+      openTerminal(command);
+      // New accounts bring new models, so ask the agent again next time.
       modelCache.delete(agentId);
       return { ok: true };
     },

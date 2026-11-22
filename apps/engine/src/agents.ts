@@ -17,10 +17,10 @@ const PLAN_NOTE =
  * Agents Arcex knows how to start. Every one speaks the Agent Client Protocol and runs as its maker's own tool,
  * signed in by the user. `adapter` agents ship with Arcex; `command` agents must be installed on the computer.
  */
-export const BUILTIN: Record<string, { name: string; adapter?: { pkg: string; bin: string }; command?: string; signIn: string }> = {
+export const BUILTIN: Record<string, { name: string; adapter?: { pkg: string; bin: string }; command?: string; signIn: string; providers?: string }> = {
   claude: { name: "Claude", adapter: { pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp" }, signIn: "claude auth login" },
   codex: { name: "Codex", adapter: { pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp" }, signIn: "codex login" },
-  opencode: { name: "OpenCode", command: "opencode acp", signIn: "opencode auth login" },
+  opencode: { name: "OpenCode", command: "opencode acp", signIn: "opencode auth login", providers: "opencode auth login" },
   gemini: { name: "Gemini", command: "gemini --experimental-acp", signIn: "gemini" },
 };
 
