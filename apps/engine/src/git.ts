@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { copyFileSync, existsSync } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import path from "node:path";
 import type { Change } from "@arcex/contracts";
@@ -86,4 +87,71 @@ export async function diff(cwd: string, file: string): Promise<string> {
   } finally {
     await handle.close();
   }
+}
+
+const SNAPSHOT_LIMIT = 50 * 1024 * 1024;
+const TREE = /^[0-9a-f]{40,64}$/;
+
+function gitWith(cwd: string, args: string[], env: Record<string, string>): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile("git", ["--literal-pathspecs", ...args], { cwd, env: { ...process.env, ...env }, maxBuffer: 8_000_000, windowsHide: true, timeout: 30_000 }, (error, stdout, stderr) =>
+      error ? reject(new Error(stderr.trim().slice(0, 250) || "Git couldn't take a snapshot.")) : resolve(stdout),
+    );
+  });
+}
+
+/**
+ * A snapshot of the project folder as a Git tree, so a turn's changes can be shown on their own. It uses a separate
+ * index file kept by Arcex, so the user's staging area, branch and history are untouched. Null when the folder isn't
+ * a Git repository or holds more new, untracked data than is sensible to copy into Git's object store.
+ */
+export async function snapshot(cwd: string, indexFile: string): Promise<string | null> {
+  try {
+    const gitDir = (await git(cwd, ["rev-parse", "--absolute-git-dir"])).trim();
+    const untracked = (await git(cwd, ["ls-files", "--others", "--exclude-standard", "-z", "--", "."])).split("\0").filter(Boolean);
+    let size = 0;
+    for (const file of untracked.slice(0, 5000)) {
+      size += (await lstat(path.join(cwd, file)).catch(() => null))?.size ?? 0;
+      if (size > SNAPSHOT_LIMIT) return null;
+    }
+    if (untracked.length > 5000) return null;
+    // Start from the user's index the first time, so tracked files needn't all be read again.
+    if (!existsSync(indexFile) && existsSync(path.join(gitDir, "index"))) copyFileSync(path.join(gitDir, "index"), indexFile);
+    const env = { GIT_INDEX_FILE: indexFile };
+    await gitWith(cwd, ["add", "-A", "--", "."], env);
+    const tree = (await gitWith(cwd, ["write-tree"], env)).trim();
+    return TREE.test(tree) ? tree : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Files that differ between two snapshots, relative to the project folder. */
+export async function turnChanges(cwd: string, before: string, after: string): Promise<Change[]> {
+  if (!TREE.test(before) || !TREE.test(after)) throw new Error("invalid snapshot");
+  if (before === after) return [];
+  const [names, stats] = await Promise.all([
+    git(cwd, ["diff", "--name-status", "-z", "--no-renames", "--relative", before, after, "--", "."]),
+    git(cwd, ["diff", "--numstat", "-z", "--no-renames", "--relative", before, after, "--", "."]),
+  ]);
+  const counts = new Map<string, [number, number]>();
+  for (const line of stats.split("\0")) {
+    const match = /^([^\t]+)\t([^\t]+)\t([\s\S]+)$/.exec(line);
+    if (match) counts.set(match[3]!, [Number(match[1]) || 0, Number(match[2]) || 0]);
+  }
+  const parts = names.split("\0");
+  const result: Change[] = [];
+  for (let index = 0; index + 1 < parts.length; index += 2) {
+    const code = parts[index]!;
+    const file = parts[index + 1]!;
+    const [added, removed] = counts.get(file) ?? [0, 0];
+    result.push({ path: file, status: code === "A" ? "added" : code === "D" ? "removed" : "changed", added, removed });
+  }
+  return result.slice(0, 500);
+}
+
+/** One file's diff between two snapshots. The file must be one `turnChanges` reports. */
+export async function turnDiff(cwd: string, before: string, after: string, file: string): Promise<string> {
+  if (!(await turnChanges(cwd, before, after)).some((change) => change.path === file)) throw new Error("that file didn't change in this turn");
+  return (await git(cwd, ["diff", "--no-renames", "--relative", before, after, "--", file])).slice(0, MAX_DIFF);
 }

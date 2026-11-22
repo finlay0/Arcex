@@ -91,7 +91,14 @@ export type Item =
   /** Something to know about the turn that isn't a failure, such as an image the model couldn't see. */
   | { id: string; kind: "note"; text: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
-  | { id: string; kind: "result"; files: string[] }
+  | {
+      id: string;
+      kind: "result";
+      files: string[];
+      /** What this turn changed, from snapshots of the folder taken before and after it. Absent for Git-less folders. */
+      changes?: Change[];
+      snapshots?: { before: string; after: string };
+    }
   /** Closes every turn: how it ended and how long it took. */
   | { id: string; kind: "end"; outcome: "done" | "stopped" | "failed" | "interrupted"; seconds: number };
 
@@ -207,6 +214,8 @@ export type Requests = {
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
+  /** One file's diff within one turn, from that turn's result. */
+  "thread.turnDiff": { params: { threadId: string; itemId: string; path: string }; result: { text: string } };
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */

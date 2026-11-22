@@ -4,7 +4,7 @@ import { createAttachments } from "./attachments.ts";
 import { mentionLinks, searchFiles } from "./mentions.ts";
 import { createDirectory } from "./directory.ts";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
@@ -201,6 +201,9 @@ export function createEngine(
   const changingModels = new Set<string>();
   /** Model lists, read once per agent while the engine runs. */
   const modelCache = new Map<string, Models>();
+  // Arcex's own Git index per thread, for snapshots of the project before and after each turn.
+  const snapshotsDir = path.join(about.dataDir, "snapshots");
+  mkdirSync(snapshotsDir, { recursive: true });
   const nameOf = (agentId: string) => agentList(settings).find((agent) => agent.id === agentId)?.name ?? "The agent";
   const pickedModel = (value: unknown): Thread["model"] => {
     if (value === null || value === undefined) return null;
@@ -500,7 +503,10 @@ export function createEngine(
     setState(thread, live.session ? "working" : "starting");
     put(thread, attached.length ? { id: randomUUID(), kind: "user", text: prompt, attachments: attached } : { id: randomUUID(), kind: "user", text: prompt });
     let outcome: ThreadState = "idle";
+    const snapshotFile = path.join(snapshotsDir, `${thread.id}.index`);
+    let before: string | null = null;
     try {
+      before = await git.snapshot(project.cwd, snapshotFile);
       const session = await ensureSession(thread, project, live, turn.signal);
       if (thread.model && thread.model.value !== session.models?.current) {
         try {
@@ -556,8 +562,15 @@ export function createEngine(
       if (step.item.status === "running") put(thread, { ...step.item, status: "interrupted" });
       if (["edit", "delete", "move"].includes(step.kind) && step.item.status === "done") step.item.files.filter(insideProject).forEach((file) => changed.add(file));
     }
-    if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     live.steps.clear();
+    // The snapshots show everything the turn changed, including what its commands did. Without Git, list the edits
+    // the agent reported.
+    const after = before ? await git.snapshot(project.cwd, snapshotFile) : null;
+    if (!threads.has(thread.id)) return;
+    const turnChanges = before && after ? await git.turnChanges(project.cwd, before, after).catch(() => null) : null;
+    if (turnChanges && before && after) {
+      if (turnChanges.length) put(thread, { id: randomUUID(), kind: "result", files: turnChanges.map((change) => change.path), changes: turnChanges, snapshots: { before, after } });
+    } else if (changed.size) put(thread, { id: randomUUID(), kind: "result", files: [...changed] });
     const ended = (live.turnFailure ?? outcome) as ThreadState;
     const endings: Partial<Record<ThreadState, "stopped" | "failed" | "interrupted">> = { stopped: "stopped", failed: "failed", interrupted: "interrupted" };
     put(thread, { id: randomUUID(), kind: "end", seconds: Math.round((Date.now() - started) / 1000), outcome: endings[ended] ?? "done" });
@@ -583,6 +596,7 @@ export function createEngine(
       closeSession(live);
       lives.delete(thread.id);
     }
+    rmSync(path.join(snapshotsDir, `${thread.id}.index`), { force: true });
     threads.delete(thread.id);
   }
 
@@ -776,6 +790,13 @@ export function createEngine(
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
+    async "thread.turnDiff"(params) {
+      const thread = threadOf(params.threadId);
+      if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");
+      const item = db.items(thread.id).find((entry) => entry.id === params.itemId);
+      if (item?.kind !== "result" || !item.snapshots) throw new Error("that turn has no snapshot");
+      return { text: await git.turnDiff(projectOf(thread.projectId).cwd, item.snapshots.before, item.snapshots.after, params.path) };
+    },
     "project.diff": async (params) => {
       if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");
       return { text: await git.diff(projectOf(params.projectId).cwd, params.path) };

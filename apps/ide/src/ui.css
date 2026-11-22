@@ -195,6 +195,12 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 14px 0 10px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 500; font-size: 14px; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
 .outcome span { color: var(--ink-2); font-weight: 400; }
+.turnchanges { display: grid; gap: 6px; align-self: stretch; }
+.turnchanges > .outcome { justify-self: start; cursor: pointer; }
+.turnchanges > .outcome .stat { font-size: 12.5px; }
+.turnchanges > .outcome .i.chev { color: var(--ink-3); width: 13px; height: 13px; transition: transform .12s; }
+.turnchanges > .outcome[aria-expanded="true"] .i.chev { transform: rotate(90deg); }
+.turnchanges > .files { margin: 0; border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
 .loader { flex: none; width: 14px; height: 14px; color: var(--ink); overflow: visible; --beat: 1.6s; }
 .loader g { transform-origin: 50px 50px; animation: turn 3.2s cubic-bezier(.55, .15, .45, .85) infinite; }
 .loader path { fill: currentColor; stroke: currentColor; stroke-width: 2.5; stroke-linejoin: round; opacity: .28; animation: blade var(--beat) ease-in-out infinite; animation-delay: calc(var(--i) * var(--beat) / 4 - var(--beat)); }

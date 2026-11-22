@@ -292,6 +292,7 @@ function TurnView({ thread, turn, live, actions, edit }: { thread: Thread; turn:
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
+        if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} />;
         return (
           <p key={block.id} className="outcome">
             <Icon name="check" /> Changed {plural(block.files.length, "file")} <span>{block.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
@@ -901,6 +902,75 @@ function diffRows(text: string): DiffRow[] {
   return rows;
 }
 
+/** A diff as numbered rows, or why there's nothing to show. */
+function DiffLines({ diff, retry }: { diff: { text: string; error?: boolean } | null; retry(): void }) {
+  const rows = diff && !diff.error ? diffRows(diff.text) : [];
+  return (
+    <div className="diff">
+      {diff === null ? <div className="l ctx">Loading…</div> : diff.error ? <p className="muted">{diff.text} <button className="link" onClick={retry}>Retry</button></p>
+        : rows.length === 0 ? <div className="l ctx">No text diff available.</div> : rows.map((row, index) =>
+        row.kind === "gap" ? <div key={index} className="l gap" aria-label="Unchanged lines skipped">⋯</div> : (
+          <div key={index} className={`l ${row.kind}`}>
+            <span className="ln" aria-hidden>{row.kind === "add" ? "" : row.old}</span>
+            <span className="ln" aria-hidden>{row.kind === "del" ? "" : row.new}</span>
+            <span className="lt">{row.text || " "}</span>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function ChangeStat({ change }: { change: Change }) {
+  return (
+    <span className="stat">
+      {change.status === "added" ? <>{change.added > 0 && `+${change.added} `}new</> : change.status === "removed" ? <>removed {change.removed > 0 && <i>−{change.removed}</i>}</> : <>+{change.added} <i>−{change.removed}</i></>}
+    </span>
+  );
+}
+
+/** What one turn changed, from snapshots taken before and after it. Opens to each file's diff for that turn alone. */
+function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { kind: "result" }> }) {
+  const changes = item.changes ?? [];
+  const [open, setOpen] = useState(false);
+  const [file, setFile] = useState<string | null>(null);
+  const [diff, setDiff] = useState<{ text: string; error?: boolean } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    setDiff(null);
+    if (!file) return;
+    let current = true;
+    call("thread.turnDiff", { threadId: thread.id, itemId: item.id, path: file })
+      .then((result) => { if (current) setDiff(result); })
+      .catch(() => { if (current) setDiff({ text: "Couldn't load this diff.", error: true }); });
+    return () => { current = false; };
+  }, [thread.id, item.id, file, attempt]);
+  const added = changes.reduce((sum, change) => sum + change.added, 0);
+  const removed = changes.reduce((sum, change) => sum + change.removed, 0);
+  return (
+    <div className="turnchanges">
+      <button className="outcome" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="check" /> Changed {plural(changes.length, "file")}
+        <span className="stat">+{added} <i>−{removed}</i></span>
+        <Icon name="chev" />
+      </button>
+      {open && (
+        <div className="files">
+          {changes.map((change) => (
+            <div key={change.path}>
+              <button className="file" aria-expanded={file === change.path} title={change.path} onClick={() => setFile(file === change.path ? null : change.path)}>
+                <Icon name="file" />
+                <span className="trunc">{change.path}</span>
+                <ChangeStat change={change} />
+              </button>
+              {file === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Changes({ project, refresh }: { project: Project; refresh: string }) {
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -933,7 +1003,6 @@ function Changes({ project, refresh }: { project: Project; refresh: string }) {
 
   const added = changes?.reduce((sum, change) => sum + change.added, 0) ?? 0;
   const removed = changes?.reduce((sum, change) => sum + change.removed, 0) ?? 0;
-  const rows = diff && !diff.error ? diffRows(diff.text) : [];
   return (
     <section className="sec">
       <header>
@@ -948,21 +1017,9 @@ function Changes({ project, refresh }: { project: Project; refresh: string }) {
               <button className="file" aria-expanded={open === change.path} title={change.path} onClick={() => setOpen(open === change.path ? null : change.path)}>
                 <Icon name="file" />
                 <span className="trunc">{change.path.split("/").pop()}</span>
-                <span className="stat">{change.status === "added" ? <>{change.added > 0 && `+${change.added} `}new</> : change.status === "removed" ? <>removed {change.removed > 0 && <i>−{change.removed}</i>}</> : <>+{change.added} <i>−{change.removed}</i></>}</span>
+                <ChangeStat change={change} />
               </button>
-              {open === change.path && (
-                <div className="diff">
-                  {diff === null ? <div className="l ctx">Loading…</div> : diff.error ? <p className="muted">{diff.text} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
-                    : rows.length === 0 ? <div className="l ctx">No text diff available.</div> : rows.map((row, index) =>
-                    row.kind === "gap" ? <div key={index} className="l gap" aria-label="Unchanged lines skipped">⋯</div> : (
-                      <div key={index} className={`l ${row.kind}`}>
-                        <span className="ln" aria-hidden>{row.kind === "add" ? "" : row.old}</span>
-                        <span className="ln" aria-hidden>{row.kind === "del" ? "" : row.new}</span>
-                        <span className="lt">{row.text || " "}</span>
-                      </div>
-                    ))}
-                </div>
-              )}
+              {open === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
             </div>
           ))}
         </div>
