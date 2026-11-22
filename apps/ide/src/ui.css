@@ -807,3 +807,10 @@ body.resizing iframe { pointer-events: none; }
 .ctest.good { color: var(--ok); }
 .ctest.bad { color: var(--stop); }
 textarea.textfield.cpairs { height: auto; min-height: 64px; padding: 8px 12px; resize: vertical; font: 12px/18px var(--mono); }
+/* The agent's wrap-up under a turn. */
+.wrapup { display: grid; gap: 8px; justify-items: start; }
+.wraprecap { margin: 0; color: var(--ink-2); font-size: 14px; }
+.nextsteps { display: flex; flex-wrap: wrap; gap: 6px; }
+.nextstep { border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--ink-2); background: var(--raised); text-align: left; }
+.nextstep:hover { color: var(--ink); background: var(--hover); }
+.wrapby { color: var(--ink-4); font-size: 12px; cursor: help; }

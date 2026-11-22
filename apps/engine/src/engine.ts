@@ -380,7 +380,7 @@ export function createEngine(
       at: Date.now(),
     };
   };
-  const publicThread = ({ sessionId: _sessionId, worktree, ...thread }: ThreadRow): Thread => ({
+  const publicThread = ({ sessionId: _sessionId, worktree, carry: _carry, named: _named, ...thread }: ThreadRow): Thread => ({
     ...thread,
     copy: worktree ? { path: worktree.path } : null,
     steering: lives.get(thread.id)?.session?.steering === true,
@@ -855,12 +855,98 @@ export function createEngine(
     setState(thread, ended);
     tellParent(thread, ended);
     if (thread.provider === "codex") refreshCodexLimit();
+    if (ended === "idle" && !thread.queued.length) void wrapTurn(thread, project);
     // The next waiting message goes out only after a clean finish. After a stop or a failure the user decides.
     if (ended === "idle" && thread.queued.length && threads.has(thread.id)) {
       const [next, ...rest] = thread.queued;
       thread.queued = rest;
       db.saveThread(thread);
       void run(thread, next!.text, next!.attachments);
+    }
+  }
+
+  /**
+   * Asks the thread's agent something in a fork of its session, so the thread itself is untouched. The fork is read only:
+   * plan mode where the agent has one, every permission refused. Resolves with the reply's text.
+   */
+  async function askFork(thread: ThreadRow, project: Project, prompt: string, stop: AbortController, onText?: (text: string) => void, onSession?: (session: AgentSession) => void): Promise<string> {
+    let answer = "";
+    const session = await startSession({
+      agentId: thread.provider,
+      settings,
+      cwd: where(thread, project),
+      folders: thread.folders.filter((folder) => existsSync(folder)),
+      resumeId: null,
+      forkOf: thread.sessionId!,
+      signal: stop.signal,
+      mcpServers: [],
+      onUpdate: (update) => {
+        if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text" || answer.length > 40_000) return;
+        answer += update.content.text;
+        onText?.(answer);
+      },
+      onPermission: async (request) => {
+        const reject = request.options.find((option) => option.kind === "reject_once") ?? request.options.find((option) => option.kind.startsWith("reject"));
+        return reject ? { outcome: { outcome: "selected", optionId: reject.optionId } } : { outcome: { outcome: "cancelled" } };
+      },
+      onElicitation: async () => ({ action: "cancel" }),
+      onExit: () => {},
+    });
+    onSession?.(session);
+    try {
+      if (stop.signal.aborted) throw stop.signal.reason;
+      const mode = session.choices.find((choice) => choice.category === "mode");
+      const plan = mode?.values.find((value) => /plan|read/i.test(value.value) || /plan|read/i.test(value.name));
+      if (mode && plan && mode.current !== plan.value) await session.setChoice(mode.id, plan.value).catch(() => {});
+      if (thread.model && session.models && thread.model.value !== session.models.current) await session.setModel(thread.model.value).catch(() => {});
+      await session.prompt([{ type: "text", text: prompt }]);
+      return answer;
+    } finally {
+      session.close();
+    }
+  }
+
+  // After-turn wrap-ups being written, by thread, and agents found not to support them (no session forks).
+  const wrapping = new Map<string, AbortController>();
+  const noWrap = new Set<string>();
+  /**
+   * The agent writes a recap of the turn and up to three messages the user might send next, and early on a title for
+   * the thread. Finlay chose (November 22) to have the thread's own agent do this on the user's plan, shown in the
+   * thread as written by the agent, with a switch in Settings › General.
+   */
+  async function wrapTurn(thread: ThreadRow, project: Project) {
+    if (!settings.wrapUp || !thread.sessionId || noWrap.has(thread.provider) || wrapping.has(thread.id)) return;
+    const history = db.items(thread.id);
+    const turns = history.filter((entry) => entry.kind === "user").length;
+    // A recap helps after work (tools, file changes), not under a short answer.
+    const lastAsk = history.map((entry) => entry.kind).lastIndexOf("user");
+    const worked = history.slice(lastAsk + 1).some((entry) => entry.kind === "step" || entry.kind === "result");
+    const naming = !thread.named && !thread.parentId && [1, 3, 8].includes(turns);
+    const stop = new AbortController();
+    wrapping.set(thread.id, stop);
+    const timer = setTimeout(() => stop.abort(new Error("took too long")), 90_000);
+    try {
+      const reply = await askFork(thread, project, `(Note from Arcex, not from the user: the turn is over. Write a short wrap-up that Arcex shows under it. Don't use any tools. Reply with only this JSON:
+{${worked ? `"recap": "one or two plain sentences: what is now true, and anything left undone or unchecked, for someone who wasn't watching", ` : ""}"next": ["up to three short messages the user might send next, in their own voice, each under 12 words; none if nothing obvious"]${naming ? `, "title": "a 2 to 6 word title for this whole conversation"` : ""}})`, stop);
+      const json = /\{[\s\S]*\}/.exec(reply)?.[0];
+      if (!json) return;
+      const parsed = JSON.parse(json) as { recap?: unknown; next?: unknown; title?: unknown };
+      // The user moved on (sent another message) while this was written: it no longer belongs at the end.
+      if (!threads.has(thread.id) || busyState(thread) || db.items(thread.id).filter((entry) => entry.kind === "user").length !== turns) return;
+      const recap = worked && typeof parsed.recap === "string" ? parsed.recap.trim().slice(0, 600) : "";
+      const next = Array.isArray(parsed.next) ? parsed.next.filter((entry): entry is string => typeof entry === "string" && !!entry.trim()).map((entry) => entry.trim().slice(0, 140)).slice(0, 3) : [];
+      if (recap || next.length) put(thread, { id: randomUUID(), kind: "wrap", recap, next, by: nameOf(thread.provider) });
+      const title = typeof parsed.title === "string" ? parsed.title.replace(/^["'\s]+|["'.\s]+$/g, "").slice(0, 80) : "";
+      if (naming && title && !thread.named) {
+        thread.title = title;
+        db.saveThread(thread);
+        emit({ event: "thread", thread: publicThread(thread) });
+      }
+    } catch (error) {
+      if (/can't answer side questions/.test(String(error))) noWrap.add(thread.provider);
+    } finally {
+      clearTimeout(timer);
+      wrapping.delete(thread.id);
     }
   }
 
@@ -899,6 +985,7 @@ export function createEngine(
   /** Stops a thread's agent and forgets it in memory. The caller removes it from the database. */
   function dropThread(thread: ThreadRow) {
     for (const [id, aside] of asides) if (aside.threadId === thread.id) stopAside(id);
+    wrapping.get(thread.id)?.abort();
     const live = lives.get(thread.id);
     if (live) {
       clearTimeout(live.stopTimer);
@@ -938,6 +1025,7 @@ export function createEngine(
       if (params.terminal !== undefined) next.terminal = params.terminal === true;
       if (params.notify !== undefined) next.notify = params.notify === true;
       if (params.research !== undefined) next.research = params.research === true;
+      if (params.wrapUp !== undefined) next.wrapUp = params.wrapUp === true;
       settings = next;
       db.saveSettings(settings);
       emit({ event: "settings", settings, agents: agentList(settings) });
@@ -1462,7 +1550,10 @@ export function createEngine(
         const modeId = session?.choices.find((entry) => entry.category === "mode")?.id;
         thread.choices = { ...thread.choices, ...wanted, ...(modeId && thread.choices[modeId] ? { [modeId]: thread.choices[modeId]! } : {}) };
       }
-      if (params.title !== undefined) thread.title = title;
+      if (params.title !== undefined) {
+        thread.title = title;
+        thread.named = true;
+      }
       if (params.archived !== undefined) thread.archived = params.archived === true;
       if (params.pinned !== undefined) thread.pinned = params.pinned === true;
       if (params.folders !== undefined) {
@@ -1530,44 +1621,17 @@ export function createEngine(
       send("working");
       void (async () => {
         try {
-          const session = await startSession({
-            agentId: thread.provider,
-            settings,
-            cwd: where(thread, project),
-            folders: thread.folders.filter((folder) => existsSync(folder)),
-            resumeId: null,
-            forkOf: thread.sessionId!,
-            signal: stop.signal,
-            mcpServers: [],
-            onUpdate: (update) => {
-              if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text" || answer.length > 40_000) return;
-              answer += update.content.text;
-              send("working");
-            },
-            // A side question only reads. Anything the agent asks to change is refused, and questions are skipped.
-            onPermission: async (request) => {
-              const reject = request.options.find((option) => option.kind === "reject_once") ?? request.options.find((option) => option.kind.startsWith("reject"));
-              return reject ? { outcome: { outcome: "selected", optionId: reject.optionId } } : { outcome: { outcome: "cancelled" } };
-            },
-            onElicitation: async () => ({ action: "cancel" }),
-            onExit: () => {},
-          });
-          entry.session = session;
-          if (stop.signal.aborted) throw stop.signal.reason;
-          // Plan mode where the agent has one, so it can't change files even if it tries.
-          const mode = session.choices.find((choice) => choice.category === "mode");
-          const plan = mode?.values.find((value) => /plan|read/i.test(value.value) || /plan|read/i.test(value.name));
-          if (mode && plan && mode.current !== plan.value) await session.setChoice(mode.id, plan.value).catch(() => {});
-          if (thread.model && session.models && thread.model.value !== session.models.current) await session.setModel(thread.model.value).catch(() => {});
           const prompt = `(A side question from the user. Answer it briefly from what you already know about this conversation and project. Don't change any files or start new work; this answer won't be part of the main thread.)
 
 ${question}`;
-          await session.prompt([{ type: "text", text: prompt }]);
+          await askFork(thread, project, prompt, stop, (text) => {
+            answer = text;
+            send("working");
+          }, (session) => (entry.session = session));
           if (!stop.signal.aborted) send("done");
         } catch (error) {
           if (!stop.signal.aborted) send("failed", error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300));
         } finally {
-          entry.session?.close();
           asides.delete(asideId);
         }
       })();

@@ -170,6 +170,8 @@ export type Item =
   | { id: string; kind: "note"; text: string }
   /** Separate work the agent suggests as a side thread. Nothing starts until the user does; `started` is that thread. */
   | { id: string; kind: "suggest"; title: string; prompt: string; started: string | null; dismissed?: boolean }
+  /** The agent's wrap-up of a turn, written after it in a follow-up call: a recap and messages the user might send next. */
+  | { id: string; kind: "wrap"; recap: string; next: string[]; by: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | {
       id: string;
@@ -234,6 +236,8 @@ export type Settings = {
   terminal: boolean;
   /** MCP servers the user added, handed to every agent session where they apply. */
   connectors: Connector[];
+  /** After a turn, the thread's agent writes a recap, next steps and (early on) the title, in a small follow-up call. */
+  wrapUp: boolean;
 };
 
 /**

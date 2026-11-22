@@ -237,6 +237,9 @@ export function SettingsView(props: {
                 <Row title="Terminal" hint="Adds a Terminal tab to the side panel with a shell in the project folder. Agents don't need it; it's there if you want to type commands yourself.">
                   <Switch on={settings.terminal} onChange={(terminal) => set({ terminal })} label="Terminal" />
                 </Row>
+                <Row title="Wrap-ups after each turn" hint="The thread's agent writes a short recap, next steps you can pick, and the thread's title, in a small follow-up after each turn. It uses a little of your plan.">
+                  <Switch on={settings.wrapUp !== false} onChange={(wrapUp) => set({ wrapUp })} label="Wrap-ups after each turn" />
+                </Row>
                 <Row title="Research library" hint="New agent sessions can search the library at arcex.dev when you ask. Already running sessions keep their current access.">
                   <Switch on={settings.research} onChange={(research) => set({ research })} label="Research library" />
                 </Row>

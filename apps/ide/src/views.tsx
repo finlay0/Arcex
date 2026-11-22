@@ -336,6 +336,7 @@ function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread
         if (block.kind === "question") return live && thread.state === "needs_you" && !block.answer ? null : <p key={block.id} className="answered">{block.title} · {block.answer ?? "Request closed"}</p>;
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "suggest") return <SuggestCard key={block.id} thread={thread} item={block} fail={actions.fail} />;
+        if (block.kind === "wrap") return <WrapUp key={block.id} thread={thread} item={block} last={last} />;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
         if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} last={last} preview={preview} fail={actions.fail} />;
@@ -1564,6 +1565,28 @@ function AgentTasks({ threads, open, fail }: { threads: Thread[]; open(thread: T
       ))}
       {entries.length > 5 && <button className="link" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${entries.length}`}</button>}
     </section>
+  );
+}
+
+/** The agent's wrap-up of a turn: a recap, and on the last turn, messages to pick for the message box. */
+function WrapUp({ thread, item, last }: { thread: Thread; item: Extract<Item, { kind: "wrap" }>; last: boolean }) {
+  const pick = last && thread.state === "idle" && item.next.length > 0;
+  return (
+    <div className="wrapup">
+      {item.recap && <p className="wraprecap">{item.recap}</p>}
+      {pick && (
+        <div className="nextsteps" role="group" aria-label="Suggested next messages">
+          {item.next.map((next) => (
+            <button key={next} className="nextstep" title="Put this in the message box" onClick={() => window.dispatchEvent(new CustomEvent(ADD_TO_DRAFT, { detail: { text: next, threadId: thread.id } }))}>
+              {next}
+            </button>
+          ))}
+        </div>
+      )}
+      <span className="wrapby" title="Written by the thread's agent in a short follow-up after the turn, which uses a little of your plan. Turn wrap-ups off in Settings › General.">
+        Wrap-up by {item.by}
+      </span>
+    </div>
   );
 }
 
