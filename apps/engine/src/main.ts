@@ -95,7 +95,8 @@ const engine = createEngine(openDb(dataDir), about, connector, (message) => {
   ],
 });
 
-function agentBrowser(request: IncomingMessage, response: import("node:http").ServerResponse) {
+/** A connector call: the Browser tab, or a suggested side thread. */
+function agentRoute(request: IncomingMessage, response: import("node:http").ServerResponse, act: (body: Record<string, unknown>) => Promise<unknown>) {
   const reply = (status: number, body: unknown) => {
     response.writeHead(status, { "content-type": "application/json" });
     response.end(JSON.stringify(body));
@@ -110,13 +111,14 @@ function agentBrowser(request: IncomingMessage, response: import("node:http").Se
     else chunks.push(chunk);
   });
   request.on("end", () => {
-    let body: { projectId?: unknown; action?: unknown; args?: unknown };
+    let body: Record<string, unknown>;
     try {
       body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (!body || typeof body !== "object") throw new Error();
     } catch {
       return reply(400, { error: "invalid request" });
     }
-    engine.browse(body.projectId, body.action, body.args).then(
+    Promise.resolve().then(() => act(body)).then(
       (result) => reply(200, { result }),
       (error: unknown) => reply(400, { error: error instanceof Error ? error.message : String(error) }),
     );
@@ -135,7 +137,8 @@ const server = createServer((request, response) => {
     return;
   }
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
-  if (pathname === "/agent/browser" && request.method === "POST") return agentBrowser(request, response);
+  if (pathname === "/agent/browser" && request.method === "POST") return agentRoute(request, response, (body) => engine.browse(body.projectId, body.action, body.args));
+  if (pathname === "/agent/side" && request.method === "POST") return agentRoute(request, response, async (body) => engine.suggest(body.threadId, body.title, body.prompt));
   const agentIcon = /^\/agent-icons\/([\w.-]{1,80})\.svg$/.exec(pathname);
   if (agentIcon && request.method === "GET") {
     // Directory icons are one-colour SVGs, used as masks. Served with a policy that blocks anything active in them.

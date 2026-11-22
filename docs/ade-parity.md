@@ -156,7 +156,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | done | `Palette.tsx`: Needs you, Actions (new thread or project, review changes, sidebar, details, browser, toolbox, theme), Threads, Projects (new thread there), Settings sections, then matches in messages. Ranked by start, word start, substring, then letters in order. Arrows, Enter, Esc. Replaces the sidebar's title filter. Verified November 22 |
 | S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
 | S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | done | Projects have a menu (Pin to top / Unpin, New thread, Project settings); pinned projects lead the list with a pin mark. Threads can snooze for an hour or until 9 AM tomorrow: they leave the sidebar behind a "N snoozed threads" line (which shows them, marked snoozed) and come back when the time is up or the thread needs you; "Wake now" ends it early. Both are kept on this computer. Verified November 22 |
-| S9 | Parallel sessions with linked status | Start a side session for separate work and see its state from the parent (Claude side sessions) | P2 | open | G4 is done, so a side thread can run in its own copy |
+| S9 | Parallel sessions with linked status | Start a side session for separate work and see its state from the parent (Claude side sessions) | P2 | done | Agents get a `suggest_side_thread` tool on the Arcex connector: it puts a card in the conversation (title, prompt, Start side thread, Dismiss; at most three waiting). Nothing runs until the user starts it, which opens the side thread beside the parent, in its own copy of the project (in the project folder when there is no saved version yet). The side panel's Side threads section lists each one with its live state and has Start one for the user's own side work; a side thread links back to its parent. Side threads sit indented under their parent in the sidebar. When one finishes, the parent shows a note and its agent hears the last reply with the user's next message there, so no usage is spent unseen. Verified November 22 with Haiku: suggested, started, wrote hello.txt in its copy only, parent showed Finished and answered from the report. The user-started path shares the same code and was not run separately |
 | S10 | Follow from another device | Watch and answer a thread from a phone (Claude Remote Control, T3 device pairing) | P2 | decide | Large. Ask Finlay |
 
 ### Agent harness and instructions
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · S9 side threads: agent-suggested or user-started, nested under the parent with live state.
 - 2026-11-22 · G4 separate copies per thread (worktrees), brought back as unsaved changes.
 - 2026-11-22 · G1 whole-branch changes view.
 - 2026-11-22 · P5 background work agents start, with timers and Stop.
@@ -276,9 +277,8 @@ Newest first. One line per shipped change, with its commit.
 Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
-2. S9 side threads with linked status, now that G4 gives each its own copy.
-3. Run a Codex `$` skill end to end.
-4. Remaining partial rows: H6 per-hook switches, X5 limits for agents other than Claude, C14 recap (a written recap would need a model call, so it waits on Finlay like K12).
+2. Run a Codex `$` skill end to end.
+3. Remaining partial rows: H6 per-hook switches, X5 limits for agents other than Claude, C14 recap (a written recap would need a model call, so it waits on Finlay like K12).
 
 K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

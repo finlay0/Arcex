@@ -786,3 +786,16 @@ body.resizing iframe { pointer-events: none; }
 /* The separate-copy switch and section. */
 .tools .icon.on { background: var(--active); color: var(--ink); }
 .copysec .changeacts { flex-wrap: wrap; align-items: center; }
+/* Side threads: the agent's suggestion card, the panel list, and the sidebar indent. */
+.suggest { border: 1px solid var(--line-2); border-radius: 12px; background: var(--raised); padding: 12px 14px; display: grid; gap: 6px; }
+.suggesthead { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ink); }
+.suggesthead .icon, .suggesthead svg { flex: none; width: 16px; height: 16px; color: var(--ink-3); }
+.suggesthead b { flex: 1; min-width: 0; font-weight: 600; }
+.sidestate { flex: none; color: var(--ink-3); font-size: 12px; }
+.suggestprompt { margin: 0; color: var(--ink-2); font-size: 13px; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.suggestprompt.open { display: block; }
+.suggest .link { justify-self: start; }
+.act.sidethread .when { margin-left: auto; flex: none; color: var(--ink-4); font-size: 12px; }
+.sidebox { display: grid; gap: 8px; }
+.sidebox textarea { width: 100%; resize: vertical; min-height: 64px; background: var(--page); color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; }
+.row.thread.side { padding-left: 30px; }

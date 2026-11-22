@@ -8,7 +8,7 @@ import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { OPEN_FILE } from "./md.tsx";
-import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, addThreadFolder, type PanelTab } from "./views.tsx";
+import { Conversation, NewProject, OPEN_BESIDE, OPEN_PREVIEW, Panel, REVIEW_PROMPT, addThreadFolder, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
 type Screen =
@@ -212,6 +212,15 @@ export function App() {
   useEffect(() => {
     if (split && store.status === "ready") void loadItems(split).catch(() => {});
   }, [split, store.status]);
+  // Side threads open beside the thread on screen.
+  useEffect(() => {
+    const beside = (event: Event) => {
+      const id = (event as CustomEvent<string>).detail;
+      if (id && id !== thread?.id) setSplit(id);
+    };
+    window.addEventListener(OPEN_BESIDE, beside);
+    return () => window.removeEventListener(OPEN_BESIDE, beside);
+  }, [thread?.id]);
   const view: Screen = store.projects.length === 0 && screen.kind === "thread" ? { kind: "new-project" } : screen;
   const panelOpen = panel ?? settings?.showDetails ?? true;
   const preferred = status?.find((agent) => agent.id === settings?.defaultProvider);
@@ -478,7 +487,8 @@ export function App() {
             const all = live.filter((t) => t.projectId === p.id).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
             const sleeping = all.filter((t) => isSnoozed(t) && t.id !== thread?.id);
             const awake = showSnoozed.has(p.id) ? all : all.filter((t) => !sleeping.includes(t));
-            const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : awake;
+            const mine = nestSide(needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : awake);
+            const shownIds = new Set(mine.map((t) => t.id));
             if (needle && mine.length === 0) return null;
             const open = Boolean(needle) || expanded.has(p.id);
             const attention = all.some((t) => t.state === "needs_you") ? "dot needs" : all.some(busy) ? "dot working" : null;
@@ -547,7 +557,7 @@ export function App() {
                       );
                     }
                     return (
-                      <div key={t.id} className="row thread" aria-current={t.id === thread?.id}>
+                      <div key={t.id} className={t.parentId && shownIds.has(t.parentId) ? "row thread side" : "row thread"} aria-current={t.id === thread?.id}>
                         <button className="thread-select" aria-current={t.id === thread?.id} title={stateLabel(t) || t.title} onClick={() => openThread(t)}>
                           <Icon name="chat" />
                           <span className={dot === "dot unread" ? "trunc unread" : "trunc"}>{t.title}</span>
@@ -785,4 +795,18 @@ export function App() {
       {toast && <div className="toast" role="alert">{toast}</div>}
     </div>
   );
+}
+
+/** Puts each side thread right under the thread it was started from, keeping the list's order otherwise. */
+function nestSide(list: Thread[]): Thread[] {
+  const ids = new Set(list.map((t) => t.id));
+  const under = new Map<string, Thread[]>();
+  for (const t of list) if (t.parentId && ids.has(t.parentId)) under.set(t.parentId, [...(under.get(t.parentId) ?? []), t]);
+  const out: Thread[] = [];
+  const add = (t: Thread) => {
+    out.push(t);
+    for (const child of under.get(t.id) ?? []) add(child);
+  };
+  for (const t of list) if (!(t.parentId && ids.has(t.parentId))) add(t);
+  return out;
 }

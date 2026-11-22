@@ -112,6 +112,8 @@ export type Thread = {
   folders: string[];
   /** The thread works in a separate copy of the project (a Git worktree) instead of the project folder. */
   copy?: { path: string } | null;
+  /** The thread this one was started beside, as a side thread. Its state shows there. */
+  parentId?: string | null;
   /** False once the thread's agent has said it can't use extra folders. */
   foldersSupported?: boolean;
   /** The thread's running agent takes messages into a turn that is under way. */
@@ -162,6 +164,8 @@ export type Item =
   | { id: string; kind: "error"; text: string }
   /** Something to know about the turn that isn't a failure, such as an image the model couldn't see. */
   | { id: string; kind: "note"; text: string }
+  /** Separate work the agent suggests as a side thread. Nothing starts until the user does; `started` is that thread. */
+  | { id: string; kind: "suggest"; title: string; prompt: string; started: string | null; dismissed?: boolean }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | {
       id: string;
@@ -390,7 +394,10 @@ export type Requests = {
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
-  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[]; /** Work in a separate copy of the project. */ separate?: boolean }; result: Thread };
+  "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[]; /** Work in a separate copy of the project. */ separate?: boolean; /** Start as a side thread of this thread. */ parentId?: string }; result: Thread };
+  /** Starts a side thread: from the agent's suggestion card (`itemId`), or from the user's own words (`text`). */
+  "thread.side": { params: { threadId: string; itemId?: string; text?: string }; result: Thread };
+  "thread.dismissSuggestion": { params: { threadId: string; itemId: string }; result: { ok: true } };
   /** What a thread changed in its separate copy, and one file's diff there. */
   "thread.copyChanges": { params: { threadId: string }; result: Change[] };
   "thread.copyDiff": { params: { threadId: string; path: string }; result: { text: string } };

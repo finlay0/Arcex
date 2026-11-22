@@ -159,6 +159,7 @@ const BROWSER_STEPS: Record<string, string> = {
 
 function describe(kind: string, title: string, files: string[]): string {
   // Tools reached through a connector arrive with machine names such as mcp__arcex__search_toolbox.
+  if (/suggest_side_thread/.test(title)) return "Suggested a side thread";
   const browserStep = /browser_[a-z]+/.exec(title)?.[0];
   if (browserStep && BROWSER_STEPS[browserStep]) return BROWSER_STEPS[browserStep];
   const connector = /^mcp__([^_]+(?:_[^_]+)*?)__(.+)$/.exec(title);
@@ -711,6 +712,7 @@ export function createEngine(
             { name: "ARCEX_PROJECT_NAME", value: project.name },
             { name: "ARCEX_PROJECT_GOAL", value: project.goal },
             { name: "ARCEX_PROJECT_ID", value: project.id },
+            { name: "ARCEX_THREAD_ID", value: thread.id },
             ...(extras.connectorEnv?.() ?? []),
           ],
         },
@@ -830,6 +832,7 @@ export function createEngine(
     const endings: Partial<Record<ThreadState, "stopped" | "failed" | "interrupted">> = { stopped: "stopped", failed: "failed", interrupted: "interrupted" };
     put(thread, { id: randomUUID(), kind: "end", seconds: Math.round((Date.now() - started) / 1000), outcome: endings[ended] ?? "done" });
     setState(thread, ended);
+    tellParent(thread, ended);
     // The next waiting message goes out only after a clean finish. After a stop or a failure the user decides.
     if (ended === "idle" && thread.queued.length && threads.has(thread.id)) {
       const [next, ...rest] = thread.queued;
@@ -837,6 +840,33 @@ export function createEngine(
       db.saveThread(thread);
       void run(thread, next!.text, next!.attachments);
     }
+  }
+
+  /**
+   * A side thread finished a turn: the parent shows a note, and its agent hears about it with the user's next message
+   * there. Nothing is sent to the parent's agent on its own, so no usage is spent unseen.
+   */
+  function tellParent(child: ThreadRow, ended: ThreadState) {
+    const parent = child.parentId ? threads.get(child.parentId) : undefined;
+    if (!parent || ended === "stopped") return;
+    const how = ended === "idle" ? "finished" : "stopped with a problem";
+    const said = [...db.items(child.id)].reverse().find((entry) => entry.kind === "say");
+    const reply = said?.kind === "say" ? said.text.trim() : "";
+    const line = `(Note from Arcex: your side thread "${child.title}" ${how}.${reply ? ` Its last reply: ${reply.length > 2000 ? `${reply.slice(0, 2000)}…` : reply}` : ""})`;
+    parent.carry = [parent.carry, line].filter(Boolean).join("\n\n").slice(-20000);
+    db.saveThread(parent);
+    put(parent, { id: randomUUID(), kind: "note", text: `Side thread “${child.title}” ${how}. Its agent's last reply goes along with your next message here.` });
+  }
+
+  /** The agent's suggestion of separate work, as a card in its thread. From the Arcex connector. */
+  function suggest(threadId: unknown, rawTitle: unknown, rawPrompt: unknown): string {
+    const thread = threadOf(threadId);
+    const title = text(rawTitle, "title", 80);
+    const prompt = text(rawPrompt, "prompt", 8000);
+    const open = db.items(thread.id).filter((entry) => entry.kind === "suggest" && !entry.started && !entry.dismissed).length;
+    if (open >= 3) throw new Error("three side threads are already waiting for the user. Don't suggest more until they start or dismiss one");
+    put(thread, { id: randomUUID(), kind: "suggest", title, prompt, started: null });
+    return "Suggested. The user can start it as a side thread from the card in this conversation, or dismiss it. Carry on with the current task.";
   }
 
   const INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"] as const;
@@ -1331,8 +1361,13 @@ export function createEngine(
       };
       // A separate copy is made before the thread exists, so a failure leaves nothing behind.
       if (params.separate === true) thread.worktree = await createCopy(project.cwd, path.join(about.dataDir, "copies", thread.id), thread.id);
+      if (typeof params.parentId === "string") {
+        const parent = threadOf(params.parentId);
+        if (parent.projectId !== project.id) throw new Error("a side thread must be in the same project");
+        thread.parentId = parent.id;
+      }
       db.insertThread(thread);
-      if (thread.worktree) db.saveThread(thread);
+      if (thread.worktree || thread.parentId) db.saveThread(thread);
       threads.set(thread.id, thread);
       void run(thread, prompt, attached);
       db.clearSentDraft(project.id, "", params.text);
@@ -1497,6 +1532,37 @@ ${question}`;
       return { ok: true as const };
     },
 
+    async "thread.side"(params) {
+      const parent = threadOf(params.threadId);
+      const card = typeof params.itemId === "string" ? db.items(parent.id).find((entry) => entry.id === params.itemId) : undefined;
+      if (params.itemId !== undefined && (card?.kind !== "suggest" || card.dismissed)) throw new Error("that suggestion is gone");
+      if (card?.kind === "suggest" && card.started) return publicThread(threadOf(card.started));
+      const words = card?.kind === "suggest" ? card.prompt : text(params.text, "message", 20000);
+      const start = { projectId: parent.projectId, provider: parent.provider, model: parent.model, choices: parent.choices, text: words, parentId: parent.id };
+      // Side work goes in its own copy so it can't collide with the parent. A project with no saved version yet can't
+      // have one, so then it shares the project folder.
+      let note = "";
+      const child = await Promise.resolve().then(() => handlers["thread.create"]({ ...start, separate: true })).catch(async (error: unknown) => {
+        if (!/save a version/.test(String(error))) throw error;
+        note = "This side thread works in the project folder, beside its parent, because the project has no saved version to copy yet.";
+        return handlers["thread.create"](start);
+      });
+      const row = threadOf(child.id);
+      if (card?.kind === "suggest") {
+        row.title = card.title;
+        db.saveThread(row);
+        put(parent, { ...card, started: row.id });
+      }
+      put(row, { id: randomUUID(), kind: "note", text: note || `A side thread of “${parent.title}”.` });
+      emit({ event: "thread", thread: publicThread(row) });
+      return publicThread(row);
+    },
+    "thread.dismissSuggestion"(params) {
+      const thread = threadOf(params.threadId);
+      const card = db.items(thread.id).find((entry) => entry.id === params.itemId);
+      if (card?.kind === "suggest" && !card.started) put(thread, { ...card, dismissed: true });
+      return { ok: true as const };
+    },
     async "thread.copyChanges"(params) {
       const thread = threadOf(params.threadId);
       return thread.worktree ? copyChanges(thread.worktree) : [];
@@ -1663,6 +1729,7 @@ ${question}`;
 
   return {
     browse,
+    suggest,
     /** An agent's icon from the directory, as SVG text, or null. */
     agentIcon: (id: string) => directory.icon(id),
     /** A stored image for a thumbnail, or null. */

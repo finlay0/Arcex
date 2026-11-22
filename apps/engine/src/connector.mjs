@@ -70,6 +70,39 @@ async function browse(action, args = {}) {
     return { content: [{ type: "text", text: "Couldn't reach Arcex. The app may have closed." }], isError: true };
   }
 }
+// ── Side threads. The agent suggests separate work; the user starts it with one click, or doesn't.
+const threadId = process.env.ARCEX_THREAD_ID;
+if (engineUrl && browserKey && threadId) {
+  server.registerTool(
+    "suggest_side_thread",
+    {
+      description:
+        "Suggests a separate piece of work as a side thread the user can start with one click. It runs beside this conversation " +
+        "in its own copy of the project, and you hear back when it finishes. Use it for work outside the current task that you " +
+        "noticed, such as a bug elsewhere or a follow-up worth doing, not for steps of the current task. Nothing starts until " +
+        "the user does, so carry on with your task. Write the prompt so it stands on its own: the side thread doesn't see this conversation.",
+      inputSchema: {
+        title: z.string().min(1).max(80).describe("A short name for the work, such as \"Fix the broken sign-up link\""),
+        prompt: z.string().min(1).max(8000).describe("Everything the side thread needs to do the work on its own: files, what's wrong, what done looks like"),
+      },
+    },
+    async ({ title, prompt }) => {
+      try {
+        const response = await fetch(`${engineUrl}/agent/side`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-arcex-key": browserKey },
+          body: JSON.stringify({ threadId, title, prompt }),
+        });
+        const body = await response.json();
+        if (!response.ok) return { content: [{ type: "text", text: body.error ?? "Arcex didn't respond." }], isError: true };
+        return text(body.result);
+      } catch {
+        return { content: [{ type: "text", text: "Couldn't reach Arcex. The app may have closed." }], isError: true };
+      }
+    },
+  );
+}
+
 const reply = (result, describe) => (result?.isError ? result : text(describe(result)));
 const where = (result) => `Now on ${result.url}${result.title ? ` (${result.title})` : ""}. Use browser_snapshot to read it.`;
 

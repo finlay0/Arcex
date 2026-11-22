@@ -13,7 +13,7 @@ import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { highlight, languageOf } from "./highlight.ts";
-import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, limitText, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, limitText, busy, dotClass, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft, useStore } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -335,6 +335,7 @@ function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread
         if (block.kind === "error") return <p key={block.id} className="oops">{block.text}</p>;
         if (block.kind === "question") return live && thread.state === "needs_you" && !block.answer ? null : <p key={block.id} className="answered">{block.title} · {block.answer ?? "Request closed"}</p>;
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
+        if (block.kind === "suggest") return <SuggestCard key={block.id} thread={thread} item={block} fail={actions.fail} />;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
         if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} last={last} preview={preview} fail={actions.fail} />;
@@ -1191,6 +1192,7 @@ export function Panel(props: {
           <Publish project={project} refresh={settled} fail={fail} startDraft={props.startDraft} />
           <AgentTasks threads={threads} open={props.open} fail={fail} />
           {props.thread?.copy && <CopySection thread={props.thread} refresh={settled} fail={fail} />}
+          {props.thread && <SideThreads thread={props.thread} threads={threads} fail={fail} />}
           {props.thread && <Folders thread={props.thread} fail={fail} />}
           {recent.length > 0 && (
             <section className="sec">
@@ -1561,6 +1563,108 @@ function AgentTasks({ threads, open, fail }: { threads: Thread[]; open(thread: T
         </div>
       ))}
       {entries.length > 5 && <button className="link" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${entries.length}`}</button>}
+    </section>
+  );
+}
+
+/** Opens a thread beside the one on screen. App.tsx listens. */
+export const OPEN_BESIDE = "arcex:open-beside";
+const openBeside = (id: string) => window.dispatchEvent(new CustomEvent(OPEN_BESIDE, { detail: id }));
+
+/** Separate work the agent suggested. Starting it opens a side thread; until then nothing runs. */
+function SuggestCard({ thread, item, fail }: { thread: Thread; item: Extract<Item, { kind: "suggest" }>; fail(error: unknown): void }) {
+  const started = useStore().threads.find((t) => t.id === item.started) ?? null;
+  const [busyNow, setBusy] = useState(false);
+  const [more, setMore] = useState(false);
+  if (item.dismissed) return <p className="note">Dismissed a suggested side thread: {item.title}</p>;
+  const start = () => {
+    setBusy(true);
+    call("thread.side", { threadId: thread.id, itemId: item.id })
+      .then((child) => openBeside(child.id))
+      .catch(fail)
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="suggest">
+      <div className="suggesthead">
+        <Icon name="branch" />
+        <b className="trunc">{item.title}</b>
+        {started && <span className="sidestate">{started.state === "idle" ? "Finished" : stateLabel(started) || "Working"}</span>}
+      </div>
+      <p className={more ? "suggestprompt open" : "suggestprompt"}>{item.prompt}</p>
+      {item.prompt.length > 180 && <button className="link" onClick={() => setMore(!more)}>{more ? "Show less" : "Show all"}</button>}
+      <div className="changeacts">
+        {item.started ? (
+          started ? <button className="btn" onClick={() => openBeside(started.id)}>Open side thread</button> : <span className="folderhint">The side thread was removed.</span>
+        ) : (
+          <>
+            <button className="btn savever" disabled={busyNow} title="Start this as a side thread beside this one, in its own copy of the project" onClick={start}>{busyNow ? "Starting…" : "Start side thread"}</button>
+            <button className="btn" disabled={busyNow} onClick={() => void call("thread.dismissSuggestion", { threadId: thread.id, itemId: item.id }).catch(fail)}>Dismiss</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Side threads started from this thread, with their live state, and a box to start one. On a side thread, its parent. */
+function SideThreads({ thread, threads, fail }: { thread: Thread; threads: Thread[]; fail(error: unknown): void }) {
+  const children = threads.filter((t) => t.parentId === thread.id && !t.archived).sort((a, b) => b.createdAt - a.createdAt);
+  const parent = thread.parentId ? threads.find((t) => t.id === thread.parentId) ?? null : null;
+  const [writing, setWriting] = useState(false);
+  const [words, setWords] = useState("");
+  const [starting, setStarting] = useState(false);
+  const start = () => {
+    if (!words.trim()) return;
+    setStarting(true);
+    call("thread.side", { threadId: thread.id, text: words.trim() })
+      .then((child) => { setWords(""); setWriting(false); openBeside(child.id); })
+      .catch(fail)
+      .finally(() => setStarting(false));
+  };
+  return (
+    <section className="sec">
+      <header>
+        <b>Side threads</b>
+        {!writing && <button className="link" onClick={() => setWriting(true)}>Start one</button>}
+      </header>
+      {parent && (
+        <button className="act" onClick={() => openBeside(parent.id)}>
+          <Icon name="chat" />
+          <span className="trunc">Side thread of {parent.title}</span>
+        </button>
+      )}
+      {!children.length && !writing && !parent && <p className="folderhint">Separate work can run beside this thread, in its own copy of the project. The agent may suggest some, or start one yourself.</p>}
+      {children.map((child) => {
+        const dot = dotClass(child);
+        return (
+          <button key={child.id} className="act sidethread" title={stateLabel(child) || child.title} onClick={() => openBeside(child.id)}>
+            {dot ? <span className={dot} /> : <Icon name={child.state === "idle" ? "circlecheck" : "x"} />}
+            <span className="trunc">{child.title}</span>
+            <span className="when">{child.state === "idle" ? "Finished" : stateLabel(child)}</span>
+          </button>
+        );
+      })}
+      {writing && (
+        <div className="sidebox">
+          <textarea
+            value={words}
+            autoFocus
+            rows={3}
+            placeholder="What should the side thread do?"
+            aria-label="What should the side thread do?"
+            onChange={(event) => setWords(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); start(); }
+              if (event.key === "Escape") setWriting(false);
+            }}
+          />
+          <div className="changeacts">
+            <button className="btn savever" disabled={starting || !words.trim()} onClick={start}>{starting ? "Starting…" : "Start"}</button>
+            <button className="btn" onClick={() => { setWriting(false); setWords(""); }}>Cancel</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
