@@ -124,7 +124,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| G1 | Diff pane | Changes +N −M per file, unified diff, per-turn and whole-branch views | P0 | partial | Changes list and diff exist (`project.diff`). Still missing: counts, per-turn scope and a better viewer |
+| G1 | Diff pane | Changes +N −M per file, unified diff, per-turn and whole-branch views | P0 | partial | Changes list with +N −M per file and in total, including line counts for new files Git doesn't track yet. The diff shows old and new line numbers and a ⋯ gap where unchanged lines are skipped. Verified November 21. Still missing: per-turn scope (needs a snapshot before each turn), whole-branch view, and opening a turn's changed files from the conversation |
 | G2 | Inline review comments | Comment on a diff line and send it to the agent | P1 | open | |
 | G3 | Commit, push and PR from the app | Buttons with a generated message, PR status and CI | P1 | open | Hidden by default for vibe coders. Show a "Save a version" button |
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
@@ -205,6 +205,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · M5 models grouped by maker; a note when an image goes to an agent that can't see images.
 - 2026-11-21 · M2 OpenCode provider connect and model refresh; M4 sign-ins open a terminal for the user.
 - 2026-11-21 · C9 copy, edit and resend, try again.
+- 2026-11-21 · G1 numbered diff viewer and line counts for new files.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -224,7 +225,7 @@ Newest first. One line per shipped change, with its commit.
 Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
-2. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
+2. G1 per-turn changes: snapshot before each turn, and open a turn's files from "Changed N files".
 3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
 5. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.

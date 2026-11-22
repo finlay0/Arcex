@@ -36,11 +36,32 @@ export async function changes(cwd: string): Promise<Change[]> {
     if (line.length < 4) continue;
     const code = line.slice(0, 2);
     const file = line.slice(3 + prefix.length);
-    const [added, removed] = counts.get(file) ?? [0, 0];
     const kind: Change["status"] = code.includes("?") || code.includes("A") ? "added" : code.includes("D") ? "removed" : "changed";
+    // Git doesn't count lines in files it isn't tracking yet, so count a new file's lines here.
+    const [added, removed] = counts.get(file) ?? (code === "??" && result.length < 200 ? [await lineCount(path.join(cwd, file)), 0] : [0, 0]);
     result.push({ path: file, status: kind, added, removed });
   }
   return result.slice(0, 500);
+}
+
+/** Lines in a new text file, reading at most the size a diff would show. Zero for folders, links and binary files. */
+async function lineCount(file: string): Promise<number> {
+  try {
+    if (!(await lstat(file)).isFile()) return 0;
+    const handle = await open(file, "r");
+    try {
+      const { buffer, bytesRead } = await handle.read({ buffer: Buffer.alloc(MAX_DIFF), length: MAX_DIFF });
+      const content = buffer.subarray(0, bytesRead);
+      if (!bytesRead || content.includes(0)) return 0;
+      let lines = 0;
+      for (const byte of content) if (byte === 10) lines += 1;
+      return content[bytesRead - 1] === 10 ? lines : lines + 1;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return 0;
+  }
 }
 
 // On a new repository, show staged changes against the empty tree.
@@ -61,7 +82,7 @@ export async function diff(cwd: string, file: string): Promise<string> {
     const { buffer, bytesRead } = await handle.read({ buffer: Buffer.alloc(MAX_DIFF), length: MAX_DIFF });
     const content = buffer.toString("utf8", 0, bytesRead);
     if (!content || content.includes("\0")) return "";
-    return content.split("\n").map((line) => `+${line}`).join("\n");
+    return content.replace(/\r?\n$/, "").split("\n").map((line) => `+${line}`).join("\n");
   } finally {
     await handle.close();
   }

@@ -875,6 +875,32 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
   );
 }
 
+type DiffRow = { kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
+
+/** A unified diff as numbered rows. Headers are dropped; a gap marks unchanged lines left out between sections. */
+function diffRows(text: string): DiffRow[] {
+  const rows: DiffRow[] = [];
+  const unified = text.startsWith("diff --git ") || text.startsWith("--- ");
+  let oldLine = 1;
+  let newLine = 1;
+  let inHunk = !unified;
+  for (const line of text.replace(/\n$/, "").split("\n")) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      if (rows.length || Number(hunk[2]) > 1) rows.push({ kind: "gap" });
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || line.startsWith("\\")) continue;
+    if (line.startsWith("+")) rows.push({ kind: "add", old: 0, new: newLine++, text: line.slice(1) });
+    else if (line.startsWith("-")) rows.push({ kind: "del", old: oldLine++, new: 0, text: line.slice(1) });
+    else rows.push({ kind: "ctx", old: oldLine++, new: newLine++, text: line.slice(1) });
+  }
+  return rows;
+}
+
 function Changes({ project, refresh }: { project: Project; refresh: string }) {
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -907,9 +933,7 @@ function Changes({ project, refresh }: { project: Project; refresh: string }) {
 
   const added = changes?.reduce((sum, change) => sum + change.added, 0) ?? 0;
   const removed = changes?.reduce((sum, change) => sum + change.removed, 0) ?? 0;
-  const lines = diff?.text.startsWith("diff --git ")
-    ? diff.text.slice(diff.text.indexOf("\n@@ ") < 0 ? diff.text.length : diff.text.indexOf("\n@@ ") + 1).split("\n").filter((line) => !line.startsWith("@@ "))
-    : diff?.text.split("\n") ?? [];
+  const rows = diff && !diff.error ? diffRows(diff.text) : [];
   return (
     <section className="sec">
       <header>
@@ -924,14 +948,19 @@ function Changes({ project, refresh }: { project: Project; refresh: string }) {
               <button className="file" aria-expanded={open === change.path} title={change.path} onClick={() => setOpen(open === change.path ? null : change.path)}>
                 <Icon name="file" />
                 <span className="trunc">{change.path.split("/").pop()}</span>
-                <span className="stat">{change.status === "added" ? "new" : change.status === "removed" ? "removed" : <>+{change.added} <i>−{change.removed}</i></>}</span>
+                <span className="stat">{change.status === "added" ? <>{change.added > 0 && `+${change.added} `}new</> : change.status === "removed" ? <>removed {change.removed > 0 && <i>−{change.removed}</i>}</> : <>+{change.added} <i>−{change.removed}</i></>}</span>
               </button>
               {open === change.path && (
                 <div className="diff">
                   {diff === null ? <div className="l ctx">Loading…</div> : diff.error ? <p className="muted">{diff.text} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
-                    : !lines.some(Boolean) ? <div className="l ctx">No text diff available.</div> : lines.map((line, index) => (
-                    <div key={index} className={`l ${line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : "ctx"}`}>{line || " "}</div>
-                  ))}
+                    : rows.length === 0 ? <div className="l ctx">No text diff available.</div> : rows.map((row, index) =>
+                    row.kind === "gap" ? <div key={index} className="l gap" aria-label="Unchanged lines skipped">⋯</div> : (
+                      <div key={index} className={`l ${row.kind}`}>
+                        <span className="ln" aria-hidden>{row.kind === "add" ? "" : row.old}</span>
+                        <span className="ln" aria-hidden>{row.kind === "del" ? "" : row.new}</span>
+                        <span className="lt">{row.text || " "}</span>
+                      </div>
+                    ))}
                 </div>
               )}
             </div>

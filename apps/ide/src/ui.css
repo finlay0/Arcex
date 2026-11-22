@@ -323,7 +323,11 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .file[aria-expanded="true"] > .i.chev { transform: rotate(90deg); }
 .nest { margin-left: 16px; padding-left: 8px; border-left: 1px solid var(--line); display: grid; gap: 1px; }
 .diff { margin: 4px 8px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--chrome); font: 12.500px/20px var(--mono); max-height: 340px; overflow: auto; padding: 6px 0; }
-.l { padding: 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.l { display: grid; grid-template-columns: 34px 34px minmax(0, 1fr); padding-right: 12px; }
+.l .ln { color: var(--ink-4); text-align: right; padding-right: 8px; user-select: none; font-variant-numeric: tabular-nums; }
+.l .lt { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 4px; }
+.l.gap { display: block; text-align: center; color: var(--ink-4); padding: 0; }
+.diff > .l:not(:has(.lt)):not(.gap) { display: block; padding: 0 12px; }
 .l.add { background: var(--ok-bg); } .l.del { background: var(--stop-bg); color: var(--ink-2); } .l.ctx { color: var(--ink-3); }
 .act { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; height: 38px; width: calc(100% + 16px); margin: 0 -8px; padding: 0 8px; border-radius: 9px; text-align: left; }
 .act:hover { background: var(--hover); }
