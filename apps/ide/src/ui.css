@@ -695,3 +695,11 @@ body.resizing iframe { pointer-events: none; }
 .skills .srow p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .publish .vrow .bad { color: var(--stop); }
 .publish .vrow .muted { color: var(--ink-3); }
+/* Review comments on diff lines. */
+.l.pick { cursor: pointer; }
+.l.pick:hover .ln, .l.pick:focus-visible .ln { color: var(--ink-2); }
+.l.pick:focus-visible { outline: 1px solid var(--ink-3); outline-offset: -1px; }
+.l.noted .ln:first-child { box-shadow: inset 2px 0 0 var(--ink-2); }
+.linecomment { margin: 4px 8px 8px; padding: 8px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--raised); font: 14px/20px "Geist", system-ui, sans-serif; display: grid; gap: 8px; }
+.linecomment textarea { width: 100%; resize: none; border: 0; outline: none; background: none; color: var(--ink); font: inherit; }
+.linecomment .btns { display: flex; gap: 6px; justify-content: flex-end; }

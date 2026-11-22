@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, PublishState, Requests, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
@@ -626,6 +626,19 @@ export function Conversation(props: {
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
   const addSpoken = (text: string) => setDraft(latestDraft.current.trim() ? `${latestDraft.current.trimEnd()} ${text}` : text);
+  // Review comments from a diff each go on their own line.
+  const addLine = useRef((_text: string) => {});
+  addLine.current = (text: string) => {
+    const next = latestDraft.current.trim() ? `${latestDraft.current.trimEnd()}\n${text}` : text;
+    if (next.length > 20_000) return actions.fail("That comment doesn't fit in the message. Send what's there first.");
+    setDraft(next);
+    latestDraft.current = next;
+  };
+  useEffect(() => {
+    const onAdd = (event: Event) => addLine.current(String((event as CustomEvent<string>).detail ?? ""));
+    window.addEventListener(ADD_TO_DRAFT, onAdd);
+    return () => window.removeEventListener(ADD_TO_DRAFT, onAdd);
+  }, []);
   useEffect(() => {
     if (target && props.seed) {
       const seeded = [draft, props.seed].filter(Boolean).join("\n\n");
@@ -1428,19 +1441,87 @@ function diffRows(text: string): DiffRow[] {
   return rows;
 }
 
-/** A diff as numbered rows, or why there's nothing to show. */
-function DiffLines({ diff, retry }: { diff: { text: string; error?: boolean } | null; retry(): void }) {
+/** Adds text to the open thread's message box, such as a review comment on a diff line. `detail` is the text. */
+export const ADD_TO_DRAFT = "arcex:add-to-draft";
+
+/**
+ * A diff as numbered rows, or why there's nothing to show. Clicking a line (or Enter on it) opens a comment box; the
+ * comment goes into the message box as "`file:line` comment", so several can go to the agent in one message.
+ */
+function DiffLines({ diff, retry, path }: { diff: { text: string; error?: boolean } | null; retry(): void; path: string }) {
   const rows = diff && !diff.error ? diffRows(diff.text) : [];
+  const [commenting, setCommenting] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+  const [added, setAdded] = useState<Set<number>>(new Set());
+  const box = useRef<HTMLDivElement>(null);
+  const lineOf = (row: Exclude<DiffRow, { kind: "gap" }>) => (row.kind === "del" ? `${path}:${row.old} (removed line)` : `${path}:${row.new}`);
+  const add = (index: number) => {
+    const row = rows[index];
+    if (!row || row.kind === "gap" || !note.trim()) return;
+    window.dispatchEvent(new CustomEvent(ADD_TO_DRAFT, { detail: `\`${lineOf(row)}\` ${note.trim()}` }));
+    setAdded((current) => new Set(current).add(index));
+    setCommenting(null);
+    setNote("");
+  };
+  // Up and Down move between lines, so the keyboard reaches any line without a tab stop on each.
+  const move = (event: ReactKeyboardEvent<HTMLDivElement>, index: number) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      setCommenting(index);
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const lines = [...(box.current?.querySelectorAll<HTMLElement>(".l.pick") ?? [])];
+      const at = lines.indexOf(event.currentTarget);
+      lines[at + (event.key === "ArrowDown" ? 1 : -1)]?.focus();
+    }
+  };
+  const firstLine = rows.findIndex((row) => row.kind !== "gap");
   return (
-    <div className="diff">
+    <div className="diff" ref={box}>
       {diff === null ? <div className="l ctx">Loading…</div> : diff.error ? <p className="muted">{diff.text} <button className="link" onClick={retry}>Retry</button></p>
         : rows.length === 0 ? <div className="l ctx">No text diff available.</div> : rows.map((row, index) =>
         row.kind === "gap" ? <div key={index} className="l gap" aria-label="Unchanged lines skipped">⋯</div> : (
-          <div key={index} className={`l ${row.kind}`}>
-            <span className="ln" aria-hidden>{row.kind === "add" ? "" : row.old}</span>
-            <span className="ln" aria-hidden>{row.kind === "del" ? "" : row.new}</span>
-            <span className="lt">{row.text || " "}</span>
-          </div>
+          <Fragment key={index}>
+            <div
+              className={`l pick ${row.kind}${added.has(index) ? " noted" : ""}`}
+              role="button"
+              tabIndex={index === firstLine ? 0 : -1}
+              aria-label={`Comment on ${lineOf(row)}`}
+              title="Comment on this line"
+              onClick={() => setCommenting(commenting === index ? null : index)}
+              onKeyDown={(event) => move(event, index)}
+            >
+              <span className="ln" aria-hidden>{row.kind === "add" ? "" : row.old}</span>
+              <span className="ln" aria-hidden>{row.kind === "del" ? "" : row.new}</span>
+              <span className="lt">{row.text || " "}</span>
+            </div>
+            {commenting === index && (
+              <div className="linecomment">
+                <AutoText
+                  autoFocus
+                  rows={2}
+                  value={note}
+                  maxLength={2000}
+                  aria-label={`Comment on ${lineOf(row)}`}
+                  placeholder="What should change here?"
+                  onChange={(event) => setNote(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      add(index);
+                    } else if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setCommenting(null);
+                    }
+                  }}
+                />
+                <div className="btns">
+                  <button className="btn small primary" disabled={!note.trim()} onClick={() => add(index)}>Add to message</button>
+                  <button className="btn small" onClick={() => setCommenting(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </Fragment>
         ))}
     </div>
   );
@@ -1544,7 +1625,7 @@ function TurnChanges({ thread, item, last, preview, fail }: { thread: Thread; it
                     </button>
                   )}
                 </div>
-                {file === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
+                {file === change.path && <DiffLines diff={diff} path={change.path} retry={() => setAttempt(attempt + 1)} />}
               </div>
             );
           })}
@@ -1616,7 +1697,7 @@ function Changes({ project, refresh, fail, review }: { project: Project; refresh
                 <span className="trunc">{change.path.split("/").pop()}</span>
                 <ChangeStat change={change} />
               </button>
-              {open === change.path && <DiffLines diff={diff} retry={() => setAttempt(attempt + 1)} />}
+              {open === change.path && <DiffLines diff={diff} path={change.path} retry={() => setAttempt(attempt + 1)} />}
             </div>
           ))}
         </div>
