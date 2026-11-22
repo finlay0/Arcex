@@ -36,7 +36,7 @@ html, body { height: 100%; margin: 0; }
 body { font: 15px/22px "Geist", system-ui, sans-serif; color: var(--ink); background: var(--chrome); -webkit-font-smoothing: antialiased; overflow: hidden; }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
 button:disabled { opacity: .4; cursor: default; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--ink-3); outline-offset: 1px; }
+button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible, select:focus-visible, [tabindex]:not([tabindex="-1"]):focus-visible { outline: 2px solid var(--ink-3); outline-offset: 1px; }
 textarea, input { font: inherit; color: inherit; background: none; border: 0; outline: 0; padding: 0; width: 100%; resize: none; }
 textarea::placeholder, input::placeholder { color: var(--ink-3); }
 p { margin: 0; }

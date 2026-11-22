@@ -531,6 +531,7 @@ function Reply({ text }: { text: string }) {
       <button
         className="icon copy"
         aria-label={copied ? "Copied" : "Copy reply"}
+        title="Copy reply"
         onClick={() => {
           void navigator.clipboard.writeText(text);
           setCopied(true);
@@ -1028,11 +1029,11 @@ export function Panel(props: {
         </div>
         <span className="fill" />
         {props.tab === "details" && !viewing && (
-          <button className="icon" aria-pressed={wide} aria-label={wide ? "Make panel narrower" : "Make panel wider"} onClick={() => setWide(!wide)}>
+          <button className="icon" aria-pressed={wide} aria-label={wide ? "Make panel narrower" : "Make panel wider"} title={wide ? "Narrower" : "Wider"} onClick={() => setWide(!wide)}>
             <Icon name="grow" />
           </button>
         )}
-        <button className="icon" aria-label="Hide panel" onClick={props.close}>
+        <button className="icon" aria-label="Hide panel" title="Hide panel (Ctrl J)" onClick={props.close}>
           <Icon name="x" />
         </button>
       </div>

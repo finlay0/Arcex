@@ -192,7 +192,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 | --- | --- | --- | --- | --- | --- |
 | X1 | Settings sections | General, Agents, Voice, Notifications, Shortcuts, Projects, Archived, About | P1 | done | Profile, General, Appearance, Agents, Voice (dictation status, Set up to fetch the model ahead of time), Notifications (with a line when the system blocks them), Projects, Archived threads, Shortcuts, About. Each is in the palette. Verified November 22 |
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
-| X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | open | See `ade-ux-audit-2026-11-17.md` |
+| X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | done | Rechecked November 22 against `ade-ux-audit-2026-11-17.md`: thread rows are real buttons beside a separate menu button; menus focus their first item, move with the arrow keys and close on Esc back to the button; panel tabs move with the arrow keys, Home and End; message boxes have names; placeholder and secondary text measure 5.4:1 or better; the animated composer outline is gone (steady ring) and reduced motion stops all animation. A page sweep finds no unnamed controls or fields; icon buttons all have hover labels; links, summaries and focusable custom controls now get the focus ring too. A 30-stop Tab walk shows a ring on every stop. Screen-reader and Windows-scaling checks on the packaged build stay with Finlay |
 | X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
 | X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | partial | A usage limit now ends the turn with one plain line, "Codex has reached its usage limit until 10:32 PM. Try again then, or switch…", instead of "Internal error" (verified with Codex). Still to do: limits shown before they are hit (with K9) |
 
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · X3 accessibility recheck: hover labels, focus ring on every focusable control.
 - 2026-11-22 · S5 thread switching, Ctrl L, Ctrl / cheat sheet; X1 Voice and Notifications sections.
 - 2026-11-22 · S2 pin threads; S4 failure notifications give the reason.
 - 2026-11-22 · P3 opt-in terminal tab in the side panel.
@@ -255,7 +256,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, X3 accessibility pass, G3 push and pull requests, then the partial rows (G7, P4, P5).
+4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, G3 push and pull requests, then the partial rows (G7, P4, P5).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
