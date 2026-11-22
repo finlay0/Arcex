@@ -4,6 +4,7 @@ import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./Mode
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
+import { RunOutput, Scripts } from "./Scripts.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
@@ -931,7 +932,12 @@ export function Panel(props: {
   const [wide, setWide] = useState(false);
   // A file opened from the Files list replaces the details until Back.
   const [viewing, setViewing] = useState<string | null>(null);
-  useEffect(() => setViewing(null), [project.id]);
+  // A script's output also replaces the details until Back.
+  const [watching, setWatching] = useState<string | null>(null);
+  useEffect(() => {
+    setViewing(null);
+    setWatching(null);
+  }, [project.id]);
   const tabsId = useId();
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
   const found = useMemo(() => {
@@ -946,7 +952,7 @@ export function Panel(props: {
   }, [threads, props.items]);
 
   return (
-    <aside className={wide || props.tab === "browser" || (viewing && props.tab === "details") ? "panel wide" : "panel"}>
+    <aside className={wide || props.tab === "browser" || ((viewing || watching) && props.tab === "details") ? "panel wide" : "panel"}>
       <div className="ptop">
         <div className="tabs" role="tablist" aria-label="Project panel" onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -977,7 +983,8 @@ export function Panel(props: {
       ) : (
         <>
         {viewing && <FileView project={project} path={viewing} refresh={settled} back={() => setViewing(null)} fail={fail} />}
-        <div className="pbody" hidden={!!viewing}>
+        {!viewing && watching && <RunOutput runId={watching} back={() => setWatching(null)} fail={fail} />}
+        <div className="pbody" hidden={!!viewing || !!watching}>
           <div className="phero" title={project.cwd}>
             <Icon name="folder" />
             <b className="trunc">{project.name}</b>
@@ -991,6 +998,7 @@ export function Panel(props: {
             <span className="label">Building</span>
             <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
+          <Scripts project={project} refresh={settled} fail={fail} show={setWatching} preview={() => props.setTab("browser")} />
           <Files project={project} refresh={settled} view={setViewing} />
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />

@@ -629,3 +629,17 @@ button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(-
 .pitem .phint { flex: 1 1 0; min-width: 0; color: var(--ink-4); font-size: 13px; }
 .pitem kbd { margin-left: auto; color: var(--ink-4); }
 .pnone { padding: 14px 10px; }
+
+/* Project scripts. */
+.scripts .script { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+.scripts .script > .icon { flex: none; width: 30px; height: 30px; border: 1px solid var(--line-2); border-radius: 9px; }
+.scripts .script > .icon .i { width: 13px; height: 13px; }
+.scripts .sname { flex: 1; min-width: 0; display: grid; line-height: 1.3; }
+.scripts .sname b { font-weight: 500; font-size: 14px; }
+.scripts .sname .muted { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scripts .sname .bad { color: var(--stop); }
+.scripts .script > .link { flex: none; font-size: 13px; }
+.scripts .script > .loader { flex: none; width: 16px; height: 16px; }
+.scripts .more { margin-top: 4px; font-size: 13px; }
+.runout { flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: auto; font: 12px/1.55 var(--mono, ui-monospace, monospace); color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+.btn.small { height: 28px; padding: 0 10px; font-size: 13px; margin-left: auto; }

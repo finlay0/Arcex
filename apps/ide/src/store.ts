@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, SlashCommand, SpeechState, Thread } from "@arcex/contracts";
+import type { ProcessInfo, About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, SlashCommand, SpeechState, Thread } from "@arcex/contracts";
 
 export type State = {
   /** "reconnecting" keeps the workspace on screen while the engine comes back; "lost" means it hasn't for a while. */
@@ -18,9 +18,11 @@ export type State = {
   speech: SpeechState | null;
   /** Slash commands an agent reported during a thread, newer than the list read when it was first asked. */
   commands: Record<string, SlashCommand[]>;
+  /** Runs of project scripts, by run id. */
+  processes: Record<string, ProcessInfo>;
 };
 
-let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null, speech: null, commands: {} };
+let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null, speech: null, commands: {}, processes: {} };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => {
   state = { ...state, ...next };
@@ -92,7 +94,8 @@ function connect() {
       for (const [key, draft] of unsavedDrafts) drafts[key] = draft.text;
       attempts = 0;
       droppedAt = 0;
-      set({ ...snapshot, status: "ready", drafts, items: {} });
+      const runs = await call("process.list", {}).catch(() => []);
+      set({ ...snapshot, status: "ready", drafts, items: {}, processes: Object.fromEntries(runs.map((run) => [run.id, run])) });
       for (const key of unsavedDrafts.keys()) void persistDraft(key);
     } catch {
       connection.close();
@@ -139,6 +142,7 @@ function receive({ data }: MessageEvent) {
     });
   }
   else if (message.event === "speech") set({ speech: message.speech });
+  else if (message.event === "process") set({ processes: { ...state.processes, [message.process.id]: message.process } });
   else if (message.event === "commands") set({ commands: { ...state.commands, [message.agentId]: message.commands } });
   else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });
   else if (message.event === "settings") set({ settings: message.settings, agents: message.agents });

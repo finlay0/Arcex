@@ -5,6 +5,7 @@ import { mentionLinks, searchFiles } from "./mentions.ts";
 import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
 import { listEditors, openIn } from "./editors.ts";
+import { createProcesses } from "./processes.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -205,6 +206,17 @@ export function createEngine(
 ) {
   let settings = db.settings();
   const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
+  const processes = createProcesses({
+    emit: (info) => emit({ event: "process", process: info }),
+    // The first address a script prints becomes the project's preview, unless the user already chose one.
+    onUrl(projectId, url) {
+      const project = projects.get(projectId);
+      if (!project || project.previewUrl) return;
+      project.previewUrl = url;
+      db.saveProject(project);
+      emit({ event: "project", project });
+    },
+  });
   const files = createAttachments(about.dataDir);
   const directory = createDirectory(about.dataDir);
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
@@ -817,6 +829,28 @@ export function createEngine(
       return project;
     },
 
+    "project.scripts"(params) {
+      return processes.scripts(projectOf(params.projectId).cwd);
+    },
+
+    "process.run"(params) {
+      const project = projectOf(params.projectId);
+      return processes.run(project.id, project.cwd, text(params.script, "script", 80));
+    },
+
+    "process.stop"(params) {
+      processes.stop(text(params.processId, "run", 80));
+      return { ok: true as const };
+    },
+
+    "process.list"() {
+      return processes.list();
+    },
+
+    "process.output"(params) {
+      return { text: processes.output(text(params.processId, "run", 80)) };
+    },
+
     "project.setPreview"(params) {
       const project = projectOf(params.projectId);
       let url: string | null = null;
@@ -843,6 +877,7 @@ export function createEngine(
     "project.remove"(params) {
       const project = projectOf(params.projectId);
       for (const thread of [...threads.values()].filter((t) => t.projectId === project.id)) dropThread(thread);
+      processes.stopProject(project.id);
       db.removeProject(project.id);
       projects.delete(project.id);
       emit({ event: "gone", kind: "project", id: project.id });
@@ -1258,6 +1293,7 @@ export function createEngine(
     },
     close() {
       speech.close();
+      processes.close();
       for (const live of lives.values()) {
         clearTimeout(live.stopTimer);
         live.turn?.abort();

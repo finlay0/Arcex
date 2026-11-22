@@ -137,12 +137,12 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| P1 | Browser / preview pane with agent control | Preview with dev server start and agent browsing tools | P0 | done | a885e7a. Still missing: start the dev server from project config |
+| P1 | Browser / preview pane with agent control | Preview with dev server start and agent browsing tools | P0 | done | a885e7a. The dev server starts from the project's own scripts (P6); the first local address it prints becomes the preview when none is set |
 | P2 | File viewer | Click a file in the tree to read it, with syntax highlighting | P1 | done | Click a file in the side panel's Files list to read it there: line numbers, grey syntax tones for common languages (own small highlighter, no blue), Copy, Back or Esc. Binary files and files over 1 MB say so. Reads stay inside the project folder, also through links. Verified November 21 |
 | P3 | Terminal pane (opt-in) | A real shell per project, hidden by default | P1 | open | node-pty or ConPTY in the engine. Opt-in only |
 | P4 | Resizable and expandable panels | Drag to resize, expand a pane, split view | P1 | open | Audit: widths compete at 1100 px |
-| P5 | Tasks / background processes pane | Running background commands with timers | P2 | open | |
-| P6 | Project scripts as buttons | Run dev, test or build with one click, from package.json or the user's own list (T3 `ProjectScriptsControl`) | P1 | open | Ties into P1 starting the dev server |
+| P5 | Tasks / background processes pane | Running background commands with timers | P2 | partial | Scripts the user runs (P6) show running time, Stop and their output. Still missing: background commands an agent starts itself, which ACP reports only as tool calls |
+| P6 | Project scripts as buttons | Run dev, test or build with one click, from package.json or the user's own list (T3 `ProjectScriptsControl`) | P1 | done | "Run" in the side panel lists package.json scripts (dev, start, preview, build, test and lint first; four, then Show all) with the lock file's package manager. The engine (`processes.ts`) runs one hidden with `BROWSER=none`, keeps 200 KB of output without colour codes, and Stop ends the whole process tree. A local address it prints shows as "Running at …" with Preview, and becomes the project's preview if none is set. Output opens in the panel and follows along. Runs stop when the engine closes or the project is removed. Verified November 22: dev server previewed, build finished, test failed with exit 1, Stop freed the port. Still missing: a user's own script list for projects without package.json |
 
 ### Sidebar and sessions
 
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · P6 run project scripts from the side panel; a dev server's address becomes the preview.
 - 2026-11-22 · S6 command palette, S3 search in messages, A4 "Needs you" first in it.
 - 2026-11-22 · G7 "Review changes" starts a review thread for the unsaved changes.
 - 2026-11-22 · G6 open the project or a file in an editor or File Explorer.

@@ -25,6 +25,22 @@ export type Attachment = { id: string; name: string; mime: string; size: number;
 /** A message waiting for the current turn to finish. */
 export type QueuedMessage = { text: string; attachments: Attachment[] };
 
+/** A script from the project's package.json, which Arcex can run on request. */
+export type ProjectScript = { name: string; command: string };
+
+/** One run of a project script. `url` is the local address it printed, such as a dev server's. */
+export type ProcessInfo = {
+  id: string;
+  projectId: string;
+  name: string;
+  command: string;
+  state: "running" | "exited" | "failed" | "stopped";
+  exitCode: number | null;
+  startedAt: number;
+  endedAt: number | null;
+  url: string | null;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -248,6 +264,14 @@ export type Requests = {
   "project.editors": { params: Record<string, never>; result: { id: string; name: string }[] };
   /** Opens the project, or one file in it, in an editor or the file manager. */
   "project.openIn": { params: { projectId: string; editor: string; path?: string }; result: { ok: true } };
+  /** The project's own scripts and the package manager that runs them. */
+  "project.scripts": { params: { projectId: string }; result: { runner: string; scripts: ProjectScript[] } };
+  /** Runs one script with no terminal window. Running it again while it runs returns the same run. */
+  "process.run": { params: { projectId: string; script: string }; result: ProcessInfo };
+  "process.stop": { params: { processId: string }; result: { ok: true } };
+  "process.list": { params: Record<string, never>; result: ProcessInfo[] };
+  /** The end of what the run printed, up to 200 KB. */
+  "process.output": { params: { processId: string }; result: { text: string } };
   "project.readFile": { params: { projectId: string; path: string }; result: { path: string; size: number; text?: string; binary?: boolean; tooLarge?: boolean } };
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
@@ -330,5 +354,6 @@ export type EventMessage =
   /** An agent is using the project's browser, so the client shows the Browser tab. */
   | { event: "browse"; projectId: string }
   | { event: "speech"; speech: SpeechState }
+  | { event: "process"; process: ProcessInfo }
   /** An agent's slash commands changed, for example when it found a project's own skills. */
   | { event: "commands"; agentId: string; commands: SlashCommand[] };
