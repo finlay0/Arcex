@@ -68,6 +68,8 @@ export type Thread = {
   state: ThreadState;
   /** Archived threads are hidden from the sidebar and the board but keep their history. */
   archived: boolean;
+  /** Pinned threads stay at the top of their project in the sidebar. */
+  pinned: boolean;
   /** How full the agent's context window is, as its last report gave it. Missing until the agent reports it. */
   context?: { used: number; size: number };
   createdAt: number;
@@ -315,7 +317,7 @@ export type Requests = {
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
   "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[] }; result: Thread };
-  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
+  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; pinned?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   /** Threads whose messages contain `query`, with a snippet around the first match. */
   "thread.search": { params: { query: string }; result: { threadId: string; snippet: string }[] };

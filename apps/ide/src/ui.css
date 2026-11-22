@@ -685,3 +685,5 @@ body.resizing iframe { pointer-events: none; }
 .termhost .xterm { height: 100%; }
 .termhost .xterm-viewport { background: transparent !important; }
 .termend { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }
+.pinmark { display: inline-flex; color: var(--ink-3); }
+.pinmark svg { width: 13px; height: 13px; }

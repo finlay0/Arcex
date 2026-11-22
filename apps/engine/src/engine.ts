@@ -1114,7 +1114,7 @@ export function createEngine(
       const now = Date.now();
       const thread: ThreadRow = {
         id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: prompt ? titleFrom(prompt) : attached[0]!.name.slice(0, 60),
-        state: "starting", archived: false, sessionId: null, createdAt: now, updatedAt: now,
+        state: "starting", archived: false, pinned: false, sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
       threads.set(thread.id, thread);
@@ -1161,6 +1161,7 @@ export function createEngine(
       }
       if (params.title !== undefined) thread.title = title;
       if (params.archived !== undefined) thread.archived = params.archived === true;
+      if (params.pinned !== undefined) thread.pinned = params.pinned === true;
       db.saveThread(thread);
       emit({ event: "thread", thread: publicThread(thread) });
       return publicThread(thread);

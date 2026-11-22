@@ -245,7 +245,10 @@ export function App() {
       lastStates.current.set(t.id, t.state);
       if (!before || before === t.state || !settings?.notify || document.hasFocus()) continue;
       const wasBusy = before === "working" || before === "starting" || before === "needs_you" || before === "stopping";
-      const body = t.state === "needs_you" ? "Needs your OK to continue" : t.state === "idle" && wasBusy ? "Finished" : t.state === "failed" || t.state === "interrupted" ? stateLabel(t) : null;
+      // A failure says why when the reason has arrived, so "Failed" never reads like "Finished".
+      const reason = [...(store.items[t.id] ?? [])].reverse().find((item) => item.kind === "error");
+      const failed = t.state === "failed" || t.state === "interrupted" ? `${stateLabel(t)}${reason?.kind === "error" ? `: ${reason.text.slice(0, 160)}` : ""}` : null;
+      const body = t.state === "needs_you" ? "Needs your OK to continue" : t.state === "idle" && wasBusy ? "Finished" : failed;
       if (body && "Notification" in window && Notification.permission === "granted") new Notification(t.title, { body });
     }
   }, [store.threads, settings?.notify]);
@@ -295,6 +298,7 @@ export function App() {
         setRenaming(t.id);
       },
     },
+    { label: t.pinned ? "Unpin" : "Pin to top", run: () => void call("thread.update", { threadId: t.id, pinned: !t.pinned }).catch(fail) },
     { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
   ];
@@ -386,7 +390,7 @@ export function App() {
           </div>
           {store.projects.length === 0 && <div className="none flat">Start your first project to see it here.</div>}
           {store.projects.map((p) => {
-            const all = live.filter((t) => t.projectId === p.id).sort((a, b) => b.updatedAt - a.updatedAt);
+            const all = live.filter((t) => t.projectId === p.id).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
             const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : all;
             if (needle && mine.length === 0) return null;
             const open = Boolean(needle) || expanded.has(p.id);
@@ -449,7 +453,7 @@ export function App() {
                         <button className="thread-select" aria-current={t.id === thread?.id} title={stateLabel(t) || t.title} onClick={() => openThread(t)}>
                           <Icon name="chat" />
                           <span className={dot === "dot unread" ? "trunc unread" : "trunc"}>{t.title}</span>
-                          {dot ? <span className={dot} aria-label={stateLabel(t) || "New activity"} role="img" /> : <span className="when">{ago(t.updatedAt)}</span>}
+                          {dot ? <span className={dot} aria-label={stateLabel(t) || "New activity"} role="img" /> : t.pinned ? <span className="pinmark" role="img" aria-label="Pinned"><Icon name="pin" /></span> : <span className="when">{ago(t.updatedAt)}</span>}
                         </button>
                         <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
                       </div>

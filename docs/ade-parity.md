@@ -149,9 +149,9 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | S1 | Thread status in sidebar | Spinner while working, dot when unread, needs-you badge | P0 | done | Working, needs-you and failed dots in the sidebar. A thread that moves on while you're in another one turns bold with a white dot until you open it (last-seen times kept per thread on this computer). Verified November 21 |
-| S2 | Rename, pin, archive and delete threads | Context menu and inline rename | P1 | partial | Archive and remove exist. Check rename and pin |
+| S2 | Rename, pin, archive and delete threads | Context menu and inline rename | P1 | done | The thread menu has Rename (inline), Pin to top / Unpin, Archive and Delete. Pinned threads sit at the top of their project with a pin mark. Verified November 22 |
 | S3 | Search threads | Search titles and transcripts | P1 | done | Ctrl+K (or Search in the sidebar) matches thread titles and, through the engine's `thread.search`, what was said in any thread (yours and the agent's messages), with a snippet around the match under "In messages". Verified November 22: "kelp" found a thread by its message and Enter opened it |
-| S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | partial | Exists. Audit says failures can read "Finished" |
+| S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | done | "Finished" only after a clean finish. A failed or interrupted turn has its own state and its notification reads "Failed: <reason>" from the turn's error line. Needs you reads "Needs your OK to continue" |
 | S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | partial | |
 | S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | done | `Palette.tsx`: Needs you, Actions (new thread or project, review changes, sidebar, details, browser, toolbox, theme), Threads, Projects (new thread there), Settings sections, then matches in messages. Ranked by start, word start, substring, then letters in order. Arrows, Enter, Esc. Replaces the sidebar's title filter. Verified November 22 |
 | S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · S2 pin threads; S4 failure notifications give the reason.
 - 2026-11-22 · P3 opt-in terminal tab in the side panel.
 - 2026-11-22 · C11 find in thread, K8 Up-arrow prompt history, K13 full-size images.
 - 2026-11-22 · H9 agent updates in Settings › Agents.
