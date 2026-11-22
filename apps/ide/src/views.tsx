@@ -647,6 +647,9 @@ export function Conversation(props: {
   manageAgents(): void;
   actions: Actions;
   start(text: string, attachments: string[]): Promise<void>;
+  /** A second agent or model a new thread's first message also goes to (main pane only). */
+  compare?: Choice | null;
+  setCompare?(choice: Choice | null): void;
   name: string;
   seed: string;
   consumeSeed(): void;
@@ -822,6 +825,27 @@ export function Conversation(props: {
             else props.setChoice(choice);
           }}
         />
+        {!thread && props.setCompare && (props.compare ? (
+          <span className="compare">
+            <span className="vs">and</span>
+            <ModelPicker
+              agents={props.agents}
+              nameOf={nameOf}
+              lockAgent={false}
+              disabled={sending || !props.connected}
+              manage={props.manageAgents}
+              value={props.compare}
+              onChange={(choice) => props.setCompare!(choice)}
+            />
+            <button className="icon" aria-label="Don't compare" title="Send to one model only" onClick={() => props.setCompare!(null)}>
+              <Icon name="x" />
+            </button>
+          </span>
+        ) : (
+          <button className="icon" aria-label="Compare with another model" title="Compare: send this to a second agent or model too, side by side" onClick={() => props.setCompare!({ agentId: props.choice.agentId, model: null })}>
+            <Icon name="layers" />
+          </button>
+        ))}
         <AgentChoices
           agentId={agentId}
           value={thread ? thread.choices ?? {} : props.choice.choices ?? {}}

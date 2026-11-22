@@ -108,7 +108,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | done | A box button in the message box puts the draft aside; "N aside" lists them (newest first, up to 20, kept on this computer, shared by every message box). Picking one puts it back and sets aside whatever was in the box; each can be deleted. Verified November 22 |
 | K12 | Suggested next prompts | One-click follow-ups after a turn (T3 `usePromptSuggestion`, Claude next-step buttons) | P1 | decide | Generating them spends usage. Ask Finlay (background intelligence rule) |
 | K13 | Expand an attached image | Click a thumbnail to see it full size (T3 `ExpandedImageDialog`) | P2 | done | Clicking a sent image opens it full size over the app; a click or Esc closes it. Verified November 22 with a pasted image (Claude Haiku answered "Orange") |
-| K14 | Send to several models | Run one prompt on two agents or models side by side (T3 `useMultipleModelSend`) | P2 | open | |
+| K14 | Send to several models | Run one prompt on two agents or models side by side (T3 `useMultipleModelSend`) | P2 | done | On a new thread, the Compare button (layers icon) adds "and <agent · model>" to the message box. Sending starts two threads with the same message and attachments, the first on screen and the second beside it in split view. Both work in the same project folder. Compare switches off after sending. Verified November 22: "Reply with only your model name" to Haiku 5.5 and Sonnet 5.5 answered side by side. Two models only, for now |
 
 ### Approvals and safety
 
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · K14 compare: one message to two models, side by side.
 - 2026-11-22 · C13 subagent rows with their steps folded under them.
 - 2026-11-22 · C15 ask aside: side questions on a forked copy of the thread.
 - 2026-11-22 · C17 diagrams, math and HTML previews in replies.

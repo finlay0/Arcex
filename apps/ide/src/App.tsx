@@ -158,6 +158,8 @@ export function App() {
   };
   // Text placed in the new-thread box by another screen, such as the toolbox.
   const [seed, setSeed] = useState("");
+  // A second agent or model to send a new thread's first message to as well, side by side.
+  const [compare, setCompare] = useState<Choice | null>(null);
   const [unassignedDraft, setUnassignedDraft] = useState("");
 
   const overlay = screen.kind === "settings" || screen.kind === "toolbox";
@@ -340,9 +342,18 @@ export function App() {
     }
     setProjectId(id);
   };
-  const startThread = async (text: string, attachments: string[] = []) => {
+  const startThread = async (text: string, attachments: string[] = [], also: Choice | null = null) => {
     if (!project) throw new Error("Choose a project for this thread.");
     const created = await call("thread.create", { projectId: project.id, provider: picked.agentId, model: picked.model, choices: picked.choices ?? {}, text, attachments });
+    if (also) {
+      // The same message to a second agent or model, opened beside the first. Both work in the same project folder.
+      setCompare(null);
+      const second = await call("thread.create", { projectId: project.id, provider: also.agentId, model: also.model, choices: also.choices ?? {}, text, attachments }).catch((error) => {
+        fail(error);
+        return null;
+      });
+      if (second) setSplit(second.id);
+    }
     void call("settings.set", { defaultProvider: picked.agentId, defaultModel: picked.model }).catch(() => {});
     setSeed("");
     setExpanded((open) => new Set(open).add(project.id));
@@ -701,7 +712,9 @@ export function App() {
             newProject={() => setScreen({ kind: "new-project" })}
             manageAgents={() => setScreen({ kind: "settings", section: "agents" })}
             actions={actions}
-            start={startThread}
+            start={(text, attachments) => startThread(text, attachments, compare)}
+            compare={compare}
+            setCompare={setCompare}
             name={settings.name}
             drafts={store.drafts}
             unassignedDraft={unassignedDraft}
