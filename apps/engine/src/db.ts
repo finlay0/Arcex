@@ -7,7 +7,7 @@ import type { Item, Project, QueuedMessage, Settings, Thread } from "@arcex/cont
 /** `carry`: a recap for the agent's next fresh session (after a rewind or leaving a separate copy), kept until sent. */
 export type ThreadRow = Thread & { sessionId: string | null; worktree: Copy | null; carry: string | null };
 
-export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false, terminal: false };
+export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false, terminal: false, connectors: [] };
 
 export function openDb(dataDir: string) {
   mkdirSync(dataDir, { recursive: true });

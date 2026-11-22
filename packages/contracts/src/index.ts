@@ -228,6 +228,24 @@ export type Settings = {
   research: boolean;
   /** Show a terminal tab in the side panel. Off by default: most people never need one. */
   terminal: boolean;
+  /** MCP servers the user added, handed to every agent session where they apply. */
+  connectors: Connector[];
+};
+
+/**
+ * An MCP server the user added: a command Arcex's agents start, or a web address they reach. `scope` is "all" or one
+ * project's id. Environment values and headers may hold the server's own keys; they stay on this computer.
+ */
+export type Connector = {
+  id: string;
+  name: string;
+  scope: "all" | string;
+  on: boolean;
+  kind: "command" | "web";
+  command?: string;
+  env?: { name: string; value: string }[];
+  url?: string;
+  headers?: { name: string; value: string }[];
 };
 
 /** An agent the user added: by hand with its command, or from the agent directory. */
@@ -287,6 +305,10 @@ export type Requests = {
   "state.get": { params: Record<string, never>; result: { agents: Agent[]; projects: Project[]; threads: Thread[]; settings: Settings; about: About; drafts: Record<string, string> } };
   "draft.set": { params: DraftTarget & { text: string }; result: { ok: true } };
   "settings.set": { params: Partial<Settings>; result: Settings };
+  /** Adds or changes a connector (matched by id), removes one, or starts one to list its tools. */
+  "connectors.save": { params: { connector: Partial<Connector> }; result: Settings };
+  "connectors.remove": { params: { id: string }; result: Settings };
+  "connectors.test": { params: { connector: Partial<Connector> }; result: { tools: string[] } };
   "providers.status": { params: Record<string, never>; result: ProviderStatus[] };
   /** The models an agent offers. Reading them starts the agent briefly but sends no message. */
   "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] } };

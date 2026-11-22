@@ -1,16 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, AgentMemory, DirectoryAgent, HookEntry, MemoryNote, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
+import type { About, Agent, AgentMemory, Connector, DirectoryAgent, HookEntry, MemoryNote, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
 import { Icon, ago, limitText, nameOf, plural } from "./shared.tsx";
 import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
 
-export type Section = "profile" | "general" | "appearance" | "agents" | "skills" | "memory" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
+export type Section = "profile" | "general" | "appearance" | "agents" | "connectors" | "skills" | "memory" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
   ["profile", "Profile"],
   ["general", "General"],
   ["appearance", "Appearance"],
   ["agents", "Agents"],
+  ["connectors", "Connectors"],
   ["skills", "Skills and hooks"],
   ["memory", "Memory"],
   ["voice", "Voice"],
@@ -282,6 +283,8 @@ export function SettingsView(props: {
           )}
 
           {props.section === "agents" && <Agents agents={props.agents} recheck={props.recheck} fail={fail} />}
+
+          {props.section === "connectors" && <Connectors connectors={settings.connectors ?? []} projects={props.projects} start={props.projectId} fail={fail} />}
 
           {props.section === "projects" && (
             <>
@@ -871,6 +874,157 @@ function Memory(props: { projects: Project[]; start: string | null; fail(error: 
           </details>
         ))}
       </div>
+    </>
+  );
+}
+
+type ConnectorDraft = { id?: string; name: string; scope: string; kind: "command" | "web"; command: string; url: string; pairs: string; on: boolean };
+const EMPTY_CONNECTOR: ConnectorDraft = { name: "", scope: "all", kind: "command", command: "", url: "", pairs: "", on: true };
+
+/** "NAME=value" lines for variables, "Name: value" lines for headers. */
+function readPairs(text: string, kind: "command" | "web"): { name: string; value: string }[] {
+  return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
+    const at = kind === "web" ? line.indexOf(":") : line.indexOf("=");
+    if (at < 1) throw new Error(kind === "web" ? `Write each header as Name: value ("${line.slice(0, 30)}")` : `Write each variable as NAME=value ("${line.slice(0, 30)}")`);
+    return { name: line.slice(0, at).trim(), value: line.slice(at + 1).trim() };
+  });
+}
+const writePairs = (list: { name: string; value: string }[] | undefined, kind: "command" | "web") =>
+  (list ?? []).map((pair) => (kind === "web" ? `${pair.name}: ${pair.value}` : `${pair.name}=${pair.value}`)).join("\n");
+
+/** MCP servers the user added. Agents get them when a session starts, in every project or in one. */
+function Connectors(props: { connectors: Connector[]; projects: Project[]; start: string | null; fail(error: unknown): void }) {
+  const [draft, setDraft] = useState<ConnectorDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [tests, setTests] = useState<Record<string, { busy?: boolean; tools?: string[]; error?: string }>>({});
+  const where = (scope: string) => (scope === "all" ? "Every project" : (props.projects.find((p) => p.id === scope)?.name ?? "A removed project"));
+  const toConnector = (d: ConnectorDraft): Partial<Connector> => ({
+    ...(d.id ? { id: d.id } : {}),
+    name: d.name.trim(),
+    scope: d.scope,
+    on: d.on,
+    kind: d.kind,
+    ...(d.kind === "web" ? { url: d.url.trim(), headers: readPairs(d.pairs, "web") } : { command: d.command.trim(), env: readPairs(d.pairs, "command") }),
+  });
+  const test = (key: string, connector: Partial<Connector>) => {
+    setTests((current) => ({ ...current, [key]: { busy: true } }));
+    call("connectors.test", { connector })
+      .then((result) => setTests((current) => ({ ...current, [key]: { tools: result.tools } })))
+      .catch((error: unknown) => setTests((current) => ({ ...current, [key]: { error: error instanceof Error ? error.message : String(error) } })));
+  };
+  const save = () => {
+    if (!draft) return;
+    let connector: Partial<Connector>;
+    try {
+      connector = toConnector(draft);
+    } catch (error) {
+      props.fail(error);
+      return;
+    }
+    setSaving(true);
+    call("connectors.save", { connector })
+      .then(() => setDraft(null))
+      .catch(props.fail)
+      .finally(() => setSaving(false));
+  };
+  const result = (key: string) => {
+    const state = tests[key];
+    if (!state) return null;
+    if (state.busy) return <p className="ctest">Starting it…</p>;
+    if (state.error) return <p className="ctest bad">{state.error}</p>;
+    return <p className="ctest good">Works. {state.tools!.length ? `${plural(state.tools!.length, "tool")}: ${state.tools!.slice(0, 12).join(", ")}${state.tools!.length > 12 ? "…" : ""}` : "It offers no tools."}</p>;
+  };
+  return (
+    <>
+      <h2>Connectors</h2>
+      <p className="sdesc">
+        Connectors give agents more tools, such as a database, a design file or an issue tracker, through MCP servers. Each agent starts or reaches them
+        itself when a thread begins, so new threads pick up changes. Keys you enter stay on this computer.
+      </p>
+      {(props.connectors.length > 0 || !draft) && <div className="card">
+        {props.connectors.length === 0 && !draft && (
+          <Row title="No connectors yet" hint="Add one with the command its instructions give, or its web address.">
+            <span />
+          </Row>
+        )}
+        {props.connectors.map((connector) => (
+          <div key={connector.id} className="srow cconn">
+            <div>
+              <b>{connector.name}</b>
+              <p>
+                {where(connector.scope)}
+                {(connector.kind === "web" ? connector.headers : connector.env)?.length ? ` · ${plural((connector.kind === "web" ? connector.headers : connector.env)!.length, connector.kind === "web" ? "header" : "variable")}` : ""}
+                <span className="mono" title={connector.kind === "web" ? connector.url : connector.command}>{connector.kind === "web" ? connector.url : connector.command}</span>
+              </p>
+              {result(connector.id)}
+            </div>
+            <div className="control">
+              <button className="link" disabled={tests[connector.id]?.busy} onClick={() => test(connector.id, connector)}>Test</button>
+              <button className="link" onClick={() => setDraft({ id: connector.id, name: connector.name, scope: connector.scope, kind: connector.kind, command: connector.command ?? "", url: connector.url ?? "", pairs: writePairs(connector.kind === "web" ? connector.headers : connector.env, connector.kind), on: connector.on })}>Edit</button>
+              <button className="link" onClick={() => void call("connectors.remove", { id: connector.id }).catch(props.fail)}>Remove</button>
+              <Switch on={connector.on} onChange={(on) => void call("connectors.save", { connector: { ...connector, on } }).catch(props.fail)} label={`${connector.name} connector`} />
+            </div>
+          </div>
+        ))}
+        {!draft && (
+          <Row title="">
+            <button className="btn primary" onClick={() => setDraft({ ...EMPTY_CONNECTOR, scope: "all" })}>Add a connector</button>
+          </Row>
+        )}
+      </div>}
+      {draft && (
+        <>
+          <h2 className="sub2">{draft.id ? `Change ${draft.name || "connector"}` : "Add a connector"}</h2>
+          <div className="card">
+            <Row title="Name" hint="A short name agents see, such as github or figma.">
+              <input className="textfield" value={draft.name} maxLength={40} placeholder="github" onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+            </Row>
+            <Row title="How it runs">
+              <Choice value={draft.kind} options={[["command", "A command"], ["web", "A web address"]]} onChange={(kind) => setDraft({ ...draft, kind })} />
+            </Row>
+            {draft.kind === "command" ? (
+              <Row title="Command" hint="The command from the server's instructions.">
+                <input className="textfield mono" value={draft.command} maxLength={2000} placeholder="npx -y @example/mcp-server" onChange={(event) => setDraft({ ...draft, command: event.target.value })} />
+              </Row>
+            ) : (
+              <Row title="Address" hint="The server's MCP address. Some agents can only use connectors that run as a command.">
+                <input className="textfield mono" value={draft.url} maxLength={2000} placeholder="https://example.com/mcp" onChange={(event) => setDraft({ ...draft, url: event.target.value })} />
+              </Row>
+            )}
+            <Row title={draft.kind === "web" ? "Headers" : "Environment variables"} hint={draft.kind === "web" ? "Optional. One per line, as Name: value, such as Authorization: Bearer your-key." : "Optional. One per line, as NAME=value, such as API_KEY=your-key."}>
+              <textarea className="textfield mono cpairs" value={draft.pairs} rows={3} spellCheck={false} onChange={(event) => setDraft({ ...draft, pairs: event.target.value })} />
+            </Row>
+            <Row title="Use in">
+              <select className="textfield" value={draft.scope} onChange={(event) => setDraft({ ...draft, scope: event.target.value })}>
+                <option value="all">Every project</option>
+                {props.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Row>
+            <div className="srow">
+              <div>{result("draft")}</div>
+              <div className="control">
+                <button
+                  className="btn"
+                  disabled={tests.draft?.busy || !draft.name.trim() || !(draft.kind === "web" ? draft.url.trim() : draft.command.trim())}
+                  onClick={() => {
+                    try {
+                      test("draft", toConnector(draft));
+                    } catch (error) {
+                      props.fail(error);
+                    }
+                  }}
+                >
+                  Test
+                </button>
+                <button className="btn" onClick={() => { setDraft(null); setTests((current) => ({ ...current, draft: undefined! })); }}>Cancel</button>
+                <button className="btn primary" disabled={saving || !draft.name.trim() || !(draft.kind === "web" ? draft.url.trim() : draft.command.trim())} onClick={save}>
+                  {saving ? "Saving…" : draft.id ? "Save" : "Add connector"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </>
   );
 }

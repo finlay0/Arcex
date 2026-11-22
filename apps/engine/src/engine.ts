@@ -10,6 +10,7 @@ import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
+import { cleanConnector, connectorServers, MAX_CONNECTORS, testConnector } from "./connectors.ts";
 import { bringIn, copyChanges, copyDiff, createCopy, removeCopy } from "./worktrees.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -717,6 +718,7 @@ export function createEngine(
           ],
         },
         ...(settings.research ? [{ type: "http" as const, name: "arcex-research", url: RESEARCH_MCP, headers: [] }] : []),
+        ...connectorServers(settings.connectors, project.id),
       ],
       onUpdate: (update) => onUpdate(thread, project, update),
       onPermission: (request) => onPermission(thread, project, request),
@@ -921,6 +923,24 @@ export function createEngine(
       emit({ event: "settings", settings, agents: agentList(settings) });
       return settings;
     },
+
+    "connectors.save"(params) {
+      const others = settings.connectors;
+      const connector = cleanConnector(params.connector, others, new Set(projects.keys()));
+      const exists = others.some((other) => other.id === connector.id);
+      if (!exists && others.length >= MAX_CONNECTORS) throw new Error(`that is the most connectors Arcex keeps (${MAX_CONNECTORS})`);
+      settings = { ...settings, connectors: exists ? others.map((other) => (other.id === connector.id ? connector : other)) : [...others, connector] };
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+    "connectors.remove"(params) {
+      settings = { ...settings, connectors: settings.connectors.filter((connector) => connector.id !== params.id) };
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+    "connectors.test": (params) => testConnector(cleanConnector(params.connector, [], new Set(projects.keys()))),
 
     async "agents.models"(params) {
       const agentId = text(params.agentId, "agent", 80);
@@ -1144,6 +1164,11 @@ export function createEngine(
       terminals.closeProject(project.id);
       db.removeProject(project.id);
       projects.delete(project.id);
+      if (settings.connectors.some((connector) => connector.scope === project.id)) {
+        settings = { ...settings, connectors: settings.connectors.filter((connector) => connector.scope !== project.id) };
+        db.saveSettings(settings);
+        emit({ event: "settings", settings, agents: agentList(settings) });
+      }
       emit({ event: "gone", kind: "project", id: project.id });
       return { ok: true };
     },
