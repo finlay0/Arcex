@@ -205,6 +205,12 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .undoask { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; max-width: 560px; }
 .undoask .btns { display: flex; gap: 8px; }
 .savever { justify-self: start; margin: -4px 0 8px; height: 30px; font-size: 13px; }
+.versions { display: grid; gap: 2px; }
+.version { display: grid; gap: 6px; }
+.vrow { display: flex; align-items: center; gap: 8px; height: 32px; font-size: 14px; color: var(--ink-2); }
+.vrow .trunc { flex: 1; }
+.vrow .when { color: var(--ink-4); font-size: 12px; }
+.vrow .link { font-size: 13px; }
 .tcfile { display: flex; align-items: center; gap: 6px; }
 .tcfile > .file { flex: 1; min-width: 0; }
 .tcfile > .link { padding: 0 8px; font-size: 13px; }
@@ -346,6 +352,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .sec > header b { font-weight: 500; }
 .stat { font: 12.500px var(--mono); color: var(--ok); white-space: nowrap; }
 .stat i { color: var(--stop); font-style: normal; }
+.stat .rm { color: var(--ink-3); }
 .files { display: grid; gap: 1px; margin: 0 -8px; }
 .file { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 9px; width: 100%; color: var(--ink); }
 .file:hover { background: var(--hover); }

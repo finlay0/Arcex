@@ -914,6 +914,7 @@ export function Panel(props: {
           </div>
           <Files project={project} refresh={settled} />
           <Changes project={project} refresh={settled} fail={fail} />
+          <Versions project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
             <section className="sec">
               <header><b>Recent activity</b></header>
@@ -1035,6 +1036,58 @@ function SaveVersion({ projectId, message, fail, className = "btn" }: { projectI
   );
 }
 
+/** Saved versions, newest first, each with "Go back" after a confirm. Hidden until there is one. */
+function Versions({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
+  const [list, setList] = useState<{ id: string; message: string; time: number }[]>([]);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    let current = true;
+    call("project.versions", { projectId: project.id })
+      .then((result) => { if (current) setList(result); })
+      .catch(() => { if (current) setList([]); });
+    return () => { current = false; };
+  }, [project.id, refresh]);
+  if (!list.length) return null;
+  const shown = all ? list : list.slice(0, 5);
+  return (
+    <section className="sec">
+      <header><b>Saved versions</b></header>
+      <div className="versions">
+        {shown.map((version, index) => (
+          <div key={version.id} className="version">
+            <div className="vrow">
+              <span className="trunc" title={version.message}>{version.message}</span>
+              <span className="when">{index === 0 ? "latest" : ago(version.time)}</span>
+              {index > 0 && confirm !== version.id && <button className="link" onClick={() => setConfirm(version.id)}>Go back</button>}
+            </div>
+            {confirm === version.id && (
+              <div className="undoask">
+                <p>Put the project back the way it was in this version? Anything not saved as a version is replaced. Your saved versions stay.</p>
+                <div className="btns">
+                  <button className="btn primary" disabled={busyId !== null} onClick={() => {
+                    setBusyId(version.id);
+                    call("project.restoreVersion", { projectId: project.id, id: version.id })
+                      .then(() => {
+                        setConfirm(null);
+                        window.dispatchEvent(new Event(FILES_CHANGED));
+                      })
+                      .catch(fail)
+                      .finally(() => setBusyId(null));
+                  }}>{busyId === version.id ? "Going back…" : "Go back"}</button>
+                  <button className="btn" onClick={() => setConfirm(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {list.length > 5 && !all && <button className="link" onClick={() => setAll(true)}>Show all {list.length}</button>}
+      </div>
+    </section>
+  );
+}
+
 type DiffRow = { kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
 
 /** A unified diff as numbered rows. Headers are dropped; a gap marks unchanged lines left out between sections. */
@@ -1082,7 +1135,7 @@ function DiffLines({ diff, retry }: { diff: { text: string; error?: boolean } | 
 function ChangeStat({ change }: { change: Change }) {
   return (
     <span className="stat">
-      {change.status === "added" ? <>{change.added > 0 && `+${change.added} `}new</> : change.status === "removed" ? <>removed {change.removed > 0 && <i>−{change.removed}</i>}</> : <>+{change.added} <i>−{change.removed}</i></>}
+      {change.status === "added" ? <>{change.added > 0 && `+${change.added} `}new</> : change.status === "removed" ? <><span className="rm">removed</span> {change.removed > 0 && <i>−{change.removed}</i>}</> : <>+{change.added} <i>−{change.removed}</i></>}
     </span>
   );
 }

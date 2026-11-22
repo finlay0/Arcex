@@ -228,3 +228,41 @@ export async function saveVersion(cwd: string, message: string): Promise<{ id: s
   await git(cwd, [...identity, "commit", "-q", "-m", message.slice(0, 500)]);
   return { id: (await git(cwd, ["rev-parse", "--short", "HEAD"])).trim() };
 }
+
+export type Version = { id: string; message: string; time: number };
+
+/** The project's saved versions, newest first. Empty for a folder with none yet. */
+export async function versions(cwd: string): Promise<Version[]> {
+  const head = (await git(cwd, ["rev-parse", "--verify", "--quiet", "HEAD"], true)).trim();
+  if (!head) return [];
+  const log = await git(cwd, ["log", "-n", "30", "--format=%H%x1f%s%x1f%ct%x1e", "--", "."]);
+  return log.split("\x1e").map((entry) => entry.trim()).filter(Boolean).map((entry) => {
+    const [id = "", message = "", time = "0"] = entry.split("\x1f");
+    return { id, message: message.slice(0, 200), time: Number(time) * 1000 };
+  }).filter((version) => TREE.test(version.id));
+}
+
+/**
+ * Puts the project folder back the way it was in a saved version. History is kept: the difference shows as unsaved
+ * changes, which the user can save as a new version. Files added since that version are removed; files Git has never
+ * tracked are left alone. Uses a scratch index, so staging is untouched.
+ */
+export async function restoreVersion(cwd: string, id: string, scratchIndex: string): Promise<{ files: number }> {
+  if (!TREE.test(id) || (await git(cwd, ["cat-file", "-t", id])).trim() !== "commit") throw new Error("that version doesn't exist");
+  const added = (await git(cwd, ["diff", "--name-only", "-z", "--no-renames", "--relative", "--diff-filter=A", id, "HEAD", "--", "."])).split("\0").filter(Boolean);
+  const env = { GIT_INDEX_FILE: scratchIndex };
+  try {
+    await gitWith(cwd, ["read-tree", id], env);
+    const files = (await git(cwd, ["ls-tree", "-r", "-z", "--name-only", id, "--", "."])).split("\0").filter(Boolean);
+    for (let index = 0; index < files.length; index += 200) {
+      await gitWith(cwd, ["checkout-index", "-f", "--", ...files.slice(index, index + 200)], env);
+    }
+    for (const file of added) {
+      const absolute = path.join(cwd, file);
+      if ((await lstat(absolute).catch(() => null))?.isFile()) await rm(absolute);
+    }
+    return { files: files.length };
+  } finally {
+    await rm(scratchIndex, { force: true });
+  }
+}

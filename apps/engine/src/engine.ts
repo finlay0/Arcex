@@ -834,6 +834,12 @@ export function createEngine(
       const message = typeof params.message === "string" && params.message.trim() ? params.message.trim().replace(/\s+/g, " ") : "Save a version";
       return git.saveVersion(project.cwd, message);
     },
+    "project.versions": (params) => git.versions(projectOf(params.projectId).cwd),
+    async "project.restoreVersion"(params) {
+      const project = projectOf(params.projectId);
+      if ([...threads.values()].some((thread) => thread.projectId === project.id && busyState(thread))) throw new Error("wait for the agents in this project to finish first");
+      return git.restoreVersion(project.cwd, text(params.id, "version", 80), path.join(snapshotsDir, `${project.id}.restore.index`));
+    },
     async "thread.undoTurn"(params) {
       const thread = threadOf(params.threadId);
       if (busyState(thread)) throw new Error("wait for this thread to finish before undoing a turn");

@@ -232,6 +232,10 @@ export type Requests = {
   "project.changes": { params: { projectId: string }; result: Change[] };
   /** Saves everything in the project folder as a version (a Git commit, kept out of sight). */
   "project.saveVersion": { params: { projectId: string; message: string }; result: { id: string } };
+  /** Saved versions, newest first. */
+  "project.versions": { params: { projectId: string }; result: { id: string; message: string; time: number }[] };
+  /** Puts the folder back the way it was in a saved version. The difference shows as unsaved changes. */
+  "project.restoreVersion": { params: { projectId: string; id: string }; result: { files: number } };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
   /** One file's diff within one turn, from that turn's result. */
   "thread.turnDiff": { params: { threadId: string; itemId: string; path: string }; result: { text: string } };
