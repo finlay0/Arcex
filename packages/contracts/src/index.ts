@@ -385,6 +385,9 @@ export type Requests = {
   /** Threads whose messages contain `query`, with a snippet around the first match. */
   "thread.search": { params: { query: string }; result: { threadId: string; snippet: string }[] };
   "thread.items": { params: { threadId: string }; result: Item[] };
+  /** Asks a throwaway copy of the thread's conversation a question, without touching the thread or its running turn. */
+  "thread.aside": { params: { threadId: string; text: string }; result: { asideId: string } };
+  "thread.asideStop": { params: { asideId: string }; result: { ok: true } };
   "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean; /** While the agent works, add it to the running turn when the agent can take it, else queue it. */ steer?: boolean }; result: { ok: true; queued?: boolean; steered?: boolean } };
   /** Takes a message out of the queue, returning it so the client can put it back in the message box. */
   "thread.unqueue": { params: { threadId: string; index: number }; result: QueuedMessage };
@@ -433,4 +436,6 @@ export type EventMessage =
   | { event: "terminalExit"; id: string; code: number }
   /** An agent's slash commands changed, for example when it found a project's own skills. */
   | { event: "commands"; agentId: string; commands: SlashCommand[] }
-  | { event: "limit"; agentId: string; limit: UsageLimit };
+  | { event: "limit"; agentId: string; limit: UsageLimit }
+  /** A side question's answer so far. */
+  | { event: "aside"; threadId: string; asideId: string; text: string; state: "working" | "done" | "failed" | "stopped"; error?: string };

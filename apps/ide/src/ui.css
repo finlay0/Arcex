@@ -751,3 +751,16 @@ body.resizing iframe { pointer-events: none; }
 .htmlpreview iframe { display: block; width: 100%; height: 360px; border: 0; background: #fff; resize: vertical; }
 .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
 .md .katex { font-size: 1.08em; }
+/* Ask aside: a side question in a box above the message box. */
+.aside { position: relative; display: inline-flex; }
+.asidepop { position: absolute; left: 0; bottom: 38px; z-index: 40; width: 440px; max-width: 80vw; padding: 8px; background: var(--raised); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: var(--shadow), 0 30px 70px -20px rgba(0, 0, 0, .7); display: grid; gap: 8px; animation: arrive .14s ease-out; }
+.asidepop .label { padding: 2px 6px 0; font-size: 12px; color: var(--ink-3); }
+.asideanswer { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; padding: 4px 6px; font-size: 14px; }
+.asideq { margin: 0; color: var(--ink-3); font-size: 13px; }
+.asidewait { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.asideerr { margin: 0; color: var(--stop); font-size: 13px; }
+.asideanswer .link { justify-self: start; font-size: 13px; }
+.asideask { display: flex; align-items: flex-end; gap: 8px; }
+.asideask textarea { flex: 1; min-width: 0; resize: none; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--page); color: var(--ink); font: inherit; font-size: 14px; }
+.asideask textarea:focus { outline: none; border-color: var(--ink-4); }
+.asideask .btn.small { margin-left: 0; }

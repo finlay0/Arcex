@@ -155,6 +155,8 @@ function receive({ data }: MessageEvent) {
   else if (message.event === "terminal") for (const listener of terminalListeners) listener({ id: message.id, data: message.data });
   else if (message.event === "terminalExit") for (const listener of terminalListeners) listener({ id: message.id, exit: message.code });
   else if (message.event === "process") set({ processes: { ...state.processes, [message.process.id]: message.process } });
+  // Side questions live in their own box, not the store. Aside.tsx listens for this.
+  else if (message.event === "aside") window.dispatchEvent(new CustomEvent("arcex:aside", { detail: message }));
   else if (message.event === "limit") set({ limits: { ...state.limits, [message.agentId]: message.limit } });
   else if (message.event === "commands") set({ commands: { ...state.commands, [message.agentId]: message.commands } });
   else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });

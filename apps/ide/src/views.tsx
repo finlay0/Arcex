@@ -8,6 +8,7 @@ import { RunOutput, Scripts } from "./Scripts.tsx";
 import { FindBar } from "./Find.tsx";
 import { TerminalTab } from "./TerminalTab.tsx";
 import { Stash } from "./Stash.tsx";
+import { Aside } from "./Aside.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
@@ -770,6 +771,7 @@ export function Conversation(props: {
       <div className="tools">
         {files.button(!props.connected)}
         <Stash draft={draft} setDraft={setDraft} />
+        {thread && <Aside thread={thread} fail={actions.fail} />}
         {!thread && <ProjectPicker projects={props.projects} project={project} pick={props.pickProject} create={props.newProject} />}
         <ModelPicker
           agents={props.agents}

@@ -168,6 +168,8 @@ export async function startSession(options: {
   /** More folders the agent may work in, passed when the agent supports them. */
   folders?: string[];
   resumeId: string | null;
+  /** Opens a copy of this saved conversation instead (ACP `session/fork`), leaving the original untouched. */
+  forkOf?: string;
   signal?: AbortSignal;
   /** MCP servers the agent may use in this session. Web-based ones are dropped if the agent cannot reach them. */
   mcpServers: acp.McpServer[];
@@ -263,7 +265,14 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     let sessionId: string | null = null;
     let models: ReturnType<typeof modelsOf> = null;
     let choices: AgentChoice[] = [];
-    if (options.resumeId && init.agentCapabilities?.loadSession) {
+    if (options.forkOf) {
+      const canFork = !!(init.agentCapabilities as { sessionCapabilities?: { fork?: unknown } } | undefined)?.sessionCapabilities?.fork;
+      if (!canFork) throw new Error("this agent can't answer side questions yet");
+      const forked = await wait((agent.request as (method: string, params: unknown) => Promise<acp.NewSessionResponse>)("session/fork", { sessionId: options.forkOf, cwd: options.cwd, mcpServers, ...extra }));
+      sessionId = forked.sessionId;
+      models = modelsOf(forked);
+      choices = choicesOf(forked);
+    } else if (options.resumeId && init.agentCapabilities?.loadSession) {
       try {
         const loaded = await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers, ...extra } as acp.LoadSessionRequest));
         models = modelsOf(loaded);
@@ -273,7 +282,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         sessionId = null;
       }
     }
-    const resumed = sessionId !== null;
+    const resumed = sessionId !== null && !options.forkOf;
     if (!sessionId) {
       signal.throwIfAborted();
       // Claude keeps its task tools behind ToolSearch, so smaller models rarely find them. Arcex shows the task list

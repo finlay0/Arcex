@@ -250,6 +250,8 @@ export function createEngine(
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
+  /** Side questions being answered, by id: a throwaway copy of a thread's conversation. */
+  const asides = new Map<string, { threadId: string; session: AgentSession | null; stop: AbortController }>();
   const changingModels = new Set<string>();
   /** Model lists, read once per agent while the engine runs. */
   const modelCache = new Map<string, Models>();
@@ -567,6 +569,15 @@ export function createEngine(
     });
   }
 
+  function stopAside(id: string) {
+    const aside = asides.get(id);
+    if (!aside) return;
+    asides.delete(id);
+    aside.stop.abort(new Error("stopped"));
+    aside.session?.close();
+    emit({ event: "aside", threadId: aside.threadId, asideId: id, text: "", state: "stopped" });
+  }
+
   function closeSession(live: Live) {
     const session = live.session;
     live.session = null;
@@ -739,6 +750,7 @@ export function createEngine(
 
   /** Stops a thread's agent and forgets it in memory. The caller removes it from the database. */
   function dropThread(thread: ThreadRow) {
+    for (const [id, aside] of asides) if (aside.threadId === thread.id) stopAside(id);
     const live = lives.get(thread.id);
     if (live) {
       clearTimeout(live.stopTimer);
@@ -1298,6 +1310,72 @@ export function createEngine(
       const items = db.items(thread.id);
       const reply = lives.get(thread.id)?.say;
       return reply ? [...items, reply] : items;
+    },
+
+    async "thread.aside"(params) {
+      const thread = threadOf(params.threadId);
+      const question = text(params.text, "question", 4_000).trim();
+      if (!question) throw new Error("write a question first");
+      if (!thread.sessionId) throw new Error("send the thread's first message before asking aside");
+      for (const [id, aside] of asides) if (aside.threadId === thread.id) stopAside(id);
+      const project = projectOf(thread.projectId);
+      const asideId = randomUUID();
+      const stop = new AbortController();
+      const entry: { threadId: string; session: AgentSession | null; stop: AbortController } = { threadId: thread.id, session: null, stop };
+      asides.set(asideId, entry);
+      let answer = "";
+      const send = (state: "working" | "done" | "failed", error?: string) =>
+        emit({ event: "aside", threadId: thread.id, asideId, text: answer, state, ...(error ? { error } : {}) });
+      send("working");
+      void (async () => {
+        try {
+          const session = await startSession({
+            agentId: thread.provider,
+            settings,
+            cwd: project.cwd,
+            folders: thread.folders.filter((folder) => existsSync(folder)),
+            resumeId: null,
+            forkOf: thread.sessionId!,
+            signal: stop.signal,
+            mcpServers: [],
+            onUpdate: (update) => {
+              if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text" || answer.length > 40_000) return;
+              answer += update.content.text;
+              send("working");
+            },
+            // A side question only reads. Anything the agent asks to change is refused, and questions are skipped.
+            onPermission: async (request) => {
+              const reject = request.options.find((option) => option.kind === "reject_once") ?? request.options.find((option) => option.kind.startsWith("reject"));
+              return reject ? { outcome: { outcome: "selected", optionId: reject.optionId } } : { outcome: { outcome: "cancelled" } };
+            },
+            onElicitation: async () => ({ action: "cancel" }),
+            onExit: () => {},
+          });
+          entry.session = session;
+          if (stop.signal.aborted) throw stop.signal.reason;
+          // Plan mode where the agent has one, so it can't change files even if it tries.
+          const mode = session.choices.find((choice) => choice.category === "mode");
+          const plan = mode?.values.find((value) => /plan|read/i.test(value.value) || /plan|read/i.test(value.name));
+          if (mode && plan && mode.current !== plan.value) await session.setChoice(mode.id, plan.value).catch(() => {});
+          if (thread.model && session.models && thread.model.value !== session.models.current) await session.setModel(thread.model.value).catch(() => {});
+          const prompt = `(A side question from the user. Answer it briefly from what you already know about this conversation and project. Don't change any files or start new work; this answer won't be part of the main thread.)
+
+${question}`;
+          await session.prompt([{ type: "text", text: prompt }]);
+          if (!stop.signal.aborted) send("done");
+        } catch (error) {
+          if (!stop.signal.aborted) send("failed", error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300));
+        } finally {
+          entry.session?.close();
+          asides.delete(asideId);
+        }
+      })();
+      return { asideId };
+    },
+
+    "thread.asideStop"(params) {
+      stopAside(String(params.asideId));
+      return { ok: true as const };
     },
 
     async "thread.prompt"(params) {
