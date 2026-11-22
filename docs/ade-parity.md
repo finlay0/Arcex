@@ -155,7 +155,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | done | Ctrl N new thread, Alt ↑/↓ previous or next thread (sidebar order), Ctrl K palette, Ctrl F find, Ctrl L message box, Ctrl B sidebar, Ctrl J panel, Ctrl ` terminal (when on), Ctrl , Settings, Ctrl / the cheat sheet (Settings › Shortcuts, with a message-box list: Enter, /, @, ↑). Verified November 22 |
 | S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | done | `Palette.tsx`: Needs you, Actions (new thread or project, review changes, sidebar, details, browser, toolbox, theme), Threads, Projects (new thread there), Settings sections, then matches in messages. Ranked by start, word start, substring, then letters in order. Arrows, Enter, Esc. Replaces the sidebar's title filter. Verified November 22 |
 | S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
-| S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | open | |
+| S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | done | Projects have a menu (Pin to top / Unpin, New thread, Project settings); pinned projects lead the list with a pin mark. Threads can snooze for an hour or until 9 AM tomorrow: they leave the sidebar behind a "N snoozed threads" line (which shows them, marked snoozed) and come back when the time is up or the thread needs you; "Wake now" ends it early. Both are kept on this computer. Verified November 22 |
 | S9 | Parallel sessions with linked status | Start a side session for separate work and see its state from the parent (Claude side sessions) | P2 | open | Depends on G4 |
 | S10 | Follow from another device | Watch and answer a thread from a phone (Claude Remote Control, T3 device pairing) | P2 | decide | Large. Ask Finlay |
 
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · S8 pin projects, snooze threads.
 - 2026-11-22 · C19 timeline strip beside long threads.
 - 2026-11-22 · K11 put drafts aside.
 - 2026-11-22 · C16 quote selected reply text.

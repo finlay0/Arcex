@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderStatus, Thread } from "@arcex/contracts";
 import type { Choice } from "./ModelPicker.tsx";
 import { SettingsView, initials, type Section } from "./Settings.tsx";
-import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
+import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, plural, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
@@ -99,6 +99,43 @@ export function App() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
+  // Pinned projects and snoozed threads are how this computer shows the sidebar, so they live here, not in the engine.
+  const [pinnedProjects, setPinnedProjects] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("arcex:pinned-projects") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+  const [snoozed, setSnoozed] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("arcex:snoozed") ?? "{}") as Record<string, number>;
+    } catch {
+      return {};
+    }
+  });
+  const [showSnoozed, setShowSnoozed] = useState<Set<string>>(new Set());
+  const [, setMinute] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setMinute((value) => value + 1), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => localStorage.setItem("arcex:pinned-projects", JSON.stringify(pinnedProjects)), [pinnedProjects]);
+  useEffect(() => localStorage.setItem("arcex:snoozed", JSON.stringify(snoozed)), [snoozed]);
+  // A snoozed thread that needs you, or whose time is up, is back.
+  const isSnoozed = (t: Thread) => (snoozed[t.id] ?? 0) > Date.now() && t.state !== "needs_you";
+  const snooze = (id: string, until: number | null) =>
+    setSnoozed((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([key, time]) => key !== id && time > Date.now()));
+      if (until) next[id] = until;
+      return next;
+    });
+  const tomorrowMorning = () => {
+    const when = new Date();
+    when.setDate(when.getDate() + 1);
+    when.setHours(9, 0, 0, 0);
+    return when.getTime();
+  };
   // Split view: a second thread beside the open one.
   const [split, setSplit] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
@@ -321,6 +358,12 @@ export function App() {
       },
     },
     ...(t.id !== thread?.id && screen.kind === "thread" ? [{ label: "Open beside", run: () => setSplit(t.id) }] : []),
+    ...(isSnoozed(t)
+      ? [{ label: "Wake now", run: () => snooze(t.id, null) }]
+      : [
+          { label: "Snooze for an hour", run: () => snooze(t.id, Date.now() + 3_600_000) },
+          { label: "Snooze until tomorrow", run: () => snooze(t.id, tomorrowMorning()) },
+        ]),
     { label: t.pinned ? "Unpin" : "Pin to top", run: () => void call("thread.update", { threadId: t.id, pinned: !t.pinned }).catch(fail) },
     { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
@@ -415,9 +458,11 @@ export function App() {
             </button>
           </div>
           {store.projects.length === 0 && <div className="none flat">Start your first project to see it here.</div>}
-          {store.projects.map((p) => {
+          {[...store.projects].sort((a, b) => Number(pinnedProjects.includes(b.id)) - Number(pinnedProjects.includes(a.id))).map((p) => {
             const all = live.filter((t) => t.projectId === p.id).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
-            const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : all;
+            const sleeping = all.filter((t) => isSnoozed(t) && t.id !== thread?.id);
+            const awake = showSnoozed.has(p.id) ? all : all.filter((t) => !sleeping.includes(t));
+            const mine = needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : awake;
             if (needle && mine.length === 0) return null;
             const open = Boolean(needle) || expanded.has(p.id);
             const attention = all.some((t) => t.state === "needs_you") ? "dot needs" : all.some(busy) ? "dot working" : null;
@@ -437,14 +482,25 @@ export function App() {
                     }
                   >
                     <Icon name="chev" /> <Icon name="folder" /> <span className="trunc">{p.name}</span>
+                    {pinnedProjects.includes(p.id) && <span className="pinmark" role="img" aria-label="Pinned"><Icon name="pin" /></span>}
                     {!open && attention && <span className={attention} />}
                     {!open && !attention && all.length > 0 && <span className="when">{all.length}</span>}
                   </button>
                   <button className="icon padd" aria-label={`New thread in ${p.name}`} title={`New thread in ${p.name}`} onClick={() => newThreadIn(p.id)}>
                     <Icon name="plus" />
                   </button>
+                  <Menu
+                    label={`Options for ${p.name}`}
+                    items={[
+                      pinnedProjects.includes(p.id)
+                        ? { label: "Unpin", run: () => setPinnedProjects((current) => current.filter((id) => id !== p.id)) }
+                        : { label: "Pin to top", run: () => setPinnedProjects((current) => [...current.filter((id) => id !== p.id), p.id]) },
+                      { label: "New thread", run: () => newThreadIn(p.id) },
+                      { label: "Project settings", run: () => { pickProject(p.id); setScreen({ kind: "settings", section: "projects" }); } },
+                    ]}
+                  />
                 </div>
-                {open && mine.length === 0 && (
+                {open && all.length === 0 && (
                   <button className="none link" onClick={() => newThreadIn(p.id)}>
                     Start the first thread
                   </button>
@@ -479,12 +535,27 @@ export function App() {
                         <button className="thread-select" aria-current={t.id === thread?.id} title={stateLabel(t) || t.title} onClick={() => openThread(t)}>
                           <Icon name="chat" />
                           <span className={dot === "dot unread" ? "trunc unread" : "trunc"}>{t.title}</span>
-                          {dot ? <span className={dot} aria-label={stateLabel(t) || "New activity"} role="img" /> : t.pinned ? <span className="pinmark" role="img" aria-label="Pinned"><Icon name="pin" /></span> : <span className="when">{ago(t.updatedAt)}</span>}
+                          {dot ? <span className={dot} aria-label={stateLabel(t) || "New activity"} role="img" /> : isSnoozed(t) ? <span className="when" title={`Snoozed until ${new Date(snoozed[t.id]!).toLocaleString()}`}>snoozed</span> : t.pinned ? <span className="pinmark" role="img" aria-label="Pinned"><Icon name="pin" /></span> : <span className="when">{ago(t.updatedAt)}</span>}
                         </button>
                         <Menu label={`Options for ${t.title}`} items={threadMenu(t)} />
                       </div>
                     );
                   })}
+                {open && !needle && sleeping.length > 0 && (
+                  <button
+                    className="none link"
+                    onClick={() =>
+                      setShowSnoozed((current) => {
+                        const next = new Set(current);
+                        if (next.has(p.id)) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      })
+                    }
+                  >
+                    {showSnoozed.has(p.id) ? "Hide snoozed" : `${plural(sleeping.length, "snoozed thread")}`}
+                  </button>
+                )}
               </div>
             );
           })}
