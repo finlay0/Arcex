@@ -7,6 +7,7 @@ import { createDirectory } from "./directory.ts";
 import { listEditors, openIn } from "./editors.ts";
 import { createProcesses } from "./processes.ts";
 import { createTerminals } from "./terminals.ts";
+import { listHooks, listSkills, toggleSkill } from "./skills.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -862,6 +863,17 @@ export function createEngine(
 
     "project.scripts"(params) {
       return processes.scripts(projectOf(params.projectId).cwd);
+    },
+
+    async "project.skills"(params) {
+      const { cwd } = projectOf(params.projectId);
+      const [skills, hooks] = await Promise.all([listSkills(cwd), listHooks(cwd)]);
+      return { skills, hooks };
+    },
+
+    async "project.toggleSkill"(params) {
+      const { cwd } = projectOf(params.projectId);
+      return { skills: await toggleSkill(cwd, text(params.path, "skill", 1000), params.enabled === true) };
     },
 
     "process.run"(params) {

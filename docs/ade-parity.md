@@ -168,7 +168,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | H3 | MCP connectors | Add MCP servers per project or globally | P1 | partial | Toolbox plus the Arcex connector |
 | H4 | Model list per agent | Live models from each agent | P0 | done | `agents.models` |
 | H5 | Session resume across restarts | Reopen a thread and continue the same agent session | P0 | done | `session/load` |
-| H6 | Skills and hooks manager | See, turn on or off and add skills and hooks per project (Codex `skills_toggle_view`, `hooks_browser`) | P1 | open | |
+| H6 | Skills and hooks manager | See, turn on or off and add skills and hooks per project (Codex `skills_toggle_view`, `hooks_browser`) | P1 | partial | Settings › Skills and hooks (and the palette): per project, the skills each agent loads from the project (`.claude/skills`, `.agents/skills`, `.gemini/skills`, `.opencode/skill(s)`) and from the home folder, with name, description and a switch. Off renames SKILL.md to SKILL.md.off, so every agent skips it and on restores it. Project skills open in the file viewer. "Write a skill" starts a thread asking the agent to write one with you. Claude Code hooks from the project and user settings files are listed read only (event, matcher, command, file). Verified November 22 with a test skill and hook. Still missing: per-hook on/off and other agents' hooks |
 | H7 | Agent memory | View and edit what the agent remembers across sessions (Codex `memories_settings_view`, Claude memory) | P2 | open | |
 | H8 | Extra folders | Let a thread read and write a second folder (Codex `additional_dirs`, Claude added directories) | P2 | open | |
 | H9 | Agent CLI updates | Notice when Claude or Codex has an update and offer it (T3 `ProviderUpdatesAction`) | P1 | done | Settings › Agents compares each built-in agent's installed version with the maker's latest npm release (public registry, cached six hours, nothing about the user sent) and shows "Update to x.y.z" with "Update <agent>" (opens a terminal running the maker's own command: `claude update`, `opencode upgrade`, or npm for Codex and Gemini) and the command to copy. Verified November 22: all four showed updates. Not pressed in testing (opens a window). Note: Claude and Codex threads run through adapters bundled with Arcex, so their CLI updates matter mostly for sign-in; Arcex's own dependency updates move the bundled versions |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · H6 Settings › Skills and hooks: list, switch, open and write skills; list hooks.
 - 2026-11-22 · X3 accessibility recheck: hover labels, focus ring on every focusable control.
 - 2026-11-22 · S5 thread switching, Ctrl L, Ctrl / cheat sheet; X1 Voice and Notifications sections.
 - 2026-11-22 · S2 pin threads; S4 failure notifications give the reason.
@@ -256,7 +257,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, G3 push and pull requests, then the partial rows (G7, P4, P5).
+4. Remaining P1 rows: X5 usage limits, G3 push and pull requests, then the partial rows (G7, P4, P5).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

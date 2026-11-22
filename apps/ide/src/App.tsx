@@ -353,6 +353,7 @@ export function App() {
       ...store.projects.map((p) => ({ id: `project:${p.id}`, group: "Projects", label: p.name, hint: "New thread here", icon: "folder", run: () => newThreadIn(p.id) })),
       settingsAt("general", "General settings", "gear"),
       settingsAt("agents", "Agents and sign-in", "layers"),
+      settingsAt("skills", "Skills and hooks", "spark"),
       settingsAt("appearance", "Appearance", "sun"),
       settingsAt("voice", "Voice dictation", "mic"),
       settingsAt("notifications", "Notifications", "bell"),
@@ -553,6 +554,19 @@ export function App() {
 
         {view.kind === "settings" ? (
           <SettingsView
+            projectId={project?.id ?? null}
+            draft={(id, text) => {
+              pickProject(id);
+              setSeed(text);
+              setScreen({ kind: "thread", threadId: null });
+            }}
+            openFile={(id, path) => {
+              pickProject(id);
+              setScreen({ kind: "thread", threadId: null });
+              setPanel(true);
+              setTab("details");
+              setOpenFile({ path, line: null, nonce: Date.now() });
+            }}
             section={view.section}
             go={(section) => setScreenRaw({ kind: "settings", section })}
             settings={settings}

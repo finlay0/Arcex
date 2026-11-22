@@ -1,16 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, DirectoryAgent, InstructionFile, Project, ProviderStatus, Settings as Prefs, SpeechState, Thread } from "@arcex/contracts";
+import type { About, Agent, DirectoryAgent, HookEntry, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
 import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
 
-export type Section = "profile" | "general" | "appearance" | "agents" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
+export type Section = "profile" | "general" | "appearance" | "agents" | "skills" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
   ["profile", "Profile"],
   ["general", "General"],
   ["appearance", "Appearance"],
   ["agents", "Agents"],
+  ["skills", "Skills and hooks"],
   ["voice", "Voice"],
   ["notifications", "Notifications"],
   ["projects", "Projects"],
@@ -175,6 +176,12 @@ export function SettingsView(props: {
   threads: Thread[];
   /** Asks the app to re-check which agents are ready, after something here may have changed it. */
   recheck(): void;
+  /** The project the user was last in, so project lists start there. */
+  projectId: string | null;
+  /** Starts a new thread in a project with this message ready to send. */
+  draft(projectId: string, text: string): void;
+  /** Shows a file of a project in the side panel. */
+  openFile(projectId: string, path: string): void;
   fail(error: unknown): void;
 }) {
   const { settings, fail } = props;
@@ -259,6 +266,7 @@ export function SettingsView(props: {
           )}
 
           {props.section === "voice" && <Voice fail={fail} />}
+          {props.section === "skills" && <Skills projects={props.projects} start={props.projectId} draft={props.draft} openFile={props.openFile} fail={fail} />}
 
           {props.section === "appearance" && (
             <>
@@ -666,6 +674,88 @@ function Voice({ fail }: { fail(error: unknown): void }) {
           <span className="mono">Parakeet 110M</span>
         </Row>
       </div>
+    </>
+  );
+}
+
+const SKILL_PROMPT =
+  "Write a skill for this project, the kind your agent loads when it's relevant. Ask me what it should do first, then put it where you load project skills from, with a short name and a description that says when to use it.";
+
+/** The skills and hooks the project's agents load, with a switch per skill. */
+function Skills(props: { projects: Project[]; start: string | null; draft(projectId: string, text: string): void; openFile(projectId: string, path: string): void; fail(error: unknown): void }) {
+  const [projectId, setProjectId] = useState(props.start && props.projects.some((p) => p.id === props.start) ? props.start : (props.projects[0]?.id ?? null));
+  const [found, setFound] = useState<{ skills: SkillEntry[]; hooks: HookEntry[] } | null>(null);
+  const [busyPath, setBusyPath] = useState<string | null>(null);
+  useEffect(() => {
+    setFound(null);
+    if (projectId) call("project.skills", { projectId }).then(setFound).catch(props.fail);
+  }, [projectId]);
+  if (!projectId) return (<><h2>Skills and hooks</h2><p className="muted">Add a project first.</p></>);
+  const toggle = (skill: SkillEntry, enabled: boolean) => {
+    setBusyPath(skill.path);
+    call("project.toggleSkill", { projectId, path: skill.path, enabled })
+      .then(({ skills }) => setFound((current) => (current ? { ...current, skills } : current)))
+      .catch(props.fail)
+      .finally(() => setBusyPath(null));
+  };
+  const group = (scope: "project" | "personal") => found?.skills.filter((skill) => skill.scope === scope) ?? [];
+  const list = (skills: SkillEntry[]) =>
+    skills.map((skill) => (
+      <Row key={skill.path} title={skill.name} hint={`${skill.agent}${skill.description ? ` · ${skill.description}` : ""}`}>
+        {skill.relative && (
+          <button className="link" onClick={() => props.openFile(projectId, skill.relative!)}>
+            Open
+          </button>
+        )}
+        <Switch on={skill.enabled} onChange={(on) => busyPath !== skill.path && toggle(skill, on)} label={`${skill.name} skill`} />
+      </Row>
+    ));
+  return (
+    <>
+      <h2>Skills and hooks</h2>
+      <p className="sdesc">
+        Skills are instructions an agent loads when they fit the task. Turning one off keeps it on disk; agents skip it until you turn it back on. New
+        threads pick up changes.
+      </p>
+      {props.projects.length > 1 && (
+        <label className="field skproj">
+          <span>Project</span>
+          <select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            {props.projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {!found && <p className="muted">Looking…</p>}
+      {found && (
+        <>
+          <h3>In this project</h3>
+          <div className="card skills">
+            {list(group("project"))}
+            <Row title={group("project").length ? "Add another" : "No skills yet"} hint="An agent writes it with you and saves it where it loads skills from.">
+              <button className="btn" onClick={() => props.draft(projectId, SKILL_PROMPT)}>Write a skill</button>
+            </Row>
+          </div>
+          {group("personal").length > 0 && (
+            <>
+              <h3>Yours, in every project</h3>
+              <div className="card skills">{list(group("personal"))}</div>
+            </>
+          )}
+          <h3>Hooks</h3>
+          <div className="card">
+            {found.hooks.length === 0 && (
+              <Row title="No hooks" hint="Hooks run a command when something happens in a session, such as after each file edit. Claude Code reads them from .claude/settings.json."><span /></Row>
+            )}
+            {found.hooks.map((hook, index) => (
+              <Row key={index} title={`${hook.event}${hook.matcher ? ` · ${hook.matcher}` : ""}`} hint={`${hook.agent} · ${hook.scope === "project" ? "this project" : "every project"} · ${hook.file}${hook.off ? " · turned off in that file" : ""}`}>
+                <span className="mono hookrun" title={hook.run}>{hook.run}</span>
+              </Row>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }

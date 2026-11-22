@@ -28,6 +28,12 @@ export type QueuedMessage = { text: string; attachments: Attachment[] };
 /** A script from the project's package.json, which Arcex can run on request. */
 export type ProjectScript = { name: string; command: string };
 
+/** A skill an agent can load: a folder with a SKILL.md. `relative` is set for skills inside the project. */
+export type SkillEntry = { path: string; relative: string | null; name: string; description: string; agent: string; scope: "project" | "personal"; enabled: boolean };
+
+/** One hook from an agent's settings file. `off` means that file turns all its hooks off. */
+export type HookEntry = { event: string; matcher: string; run: string; agent: string; scope: "project" | "personal"; file: string; off: boolean };
+
 /** One run of a project script. `url` is the local address it printed, such as a dev server's. */
 export type ProcessInfo = {
   id: string;
@@ -272,6 +278,10 @@ export type Requests = {
   "project.openIn": { params: { projectId: string; editor: string; path?: string }; result: { ok: true } };
   /** The project's own scripts and the package manager that runs them. */
   "project.scripts": { params: { projectId: string }; result: { runner: string; scripts: ProjectScript[] } };
+  /** Skills and hooks the project's agents will load, from the project and the user's home folder. */
+  "project.skills": { params: { projectId: string }; result: { skills: SkillEntry[]; hooks: HookEntry[] } };
+  /** Turns a listed skill on or off by renaming its SKILL.md. */
+  "project.toggleSkill": { params: { projectId: string; path: string; enabled: boolean }; result: { skills: SkillEntry[] } };
   /** Runs one script with no terminal window. Running it again while it runs returns the same run. */
   "process.run": { params: { projectId: string; script: string }; result: ProcessInfo };
   "process.stop": { params: { processId: string }; result: { ok: true } };
