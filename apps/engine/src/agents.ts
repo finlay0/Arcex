@@ -11,7 +11,9 @@ const engineRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..")
 const PLAN_NOTE =
   "You are working inside Arcex, where the user sees your task list as a checklist while you work. " +
   "When a request needs three or more distinct steps, make a task list first with your task or todo tool " +
-  "and keep each task's status current as you go. Skip the list for quick questions and one-step changes.";
+  "and keep each task's status current as you go. Skip the list for quick questions and one-step changes. " +
+  "The user doesn't see a terminal or your commands by default, so describe what you ran and found in plain words. " +
+  "Arcex shows the files you change and lets the user undo them, so you don't need to paste whole files back.";
 
 /**
  * Agents Arcex knows how to start. Every one speaks the Agent Client Protocol and runs as its maker's own tool,
@@ -264,10 +266,15 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     if (!sessionId) {
       signal.throwIfAborted();
       // Claude keeps its task tools behind ToolSearch, so smaller models rarely find them. Arcex shows the task list
-      // as the plan above the message box, so it asks for one. Other agents ignore this field.
+      // as the plan above the message box, so it asks for one. Agents that take ACP's system prompt (Claude, Codex)
+      // get the note that way; older Claude adapters read it from _meta, and other agents ignore that field.
+      const standard = !!(init.agentCapabilities as { sessionCapabilities?: { systemPrompt?: unknown } } | undefined)?.sessionCapabilities?.systemPrompt;
+      const note = standard
+        ? { systemPrompt: { mode: "append", content: [{ type: "text", text: PLAN_NOTE }] } }
+        : { _meta: { systemPrompt: { append: PLAN_NOTE } } };
       let created: acp.NewSessionResponse;
       try {
-        created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, _meta: { systemPrompt: { append: PLAN_NOTE } } }));
+        created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, ...note } as acp.NewSessionRequest));
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : null;
         const message = error instanceof Error ? error.message : String(error);
