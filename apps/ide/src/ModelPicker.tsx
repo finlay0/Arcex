@@ -287,19 +287,20 @@ export function AgentChoices(props: { agentId: string; value: Record<string, str
   const effort = choices.find((choice) => choice.category === "thought_level");
   // A mode with a plan value becomes a plan-first switch: on is "plan", off is full access (the engine enforces it).
   // The same rule as the engine: a mode named for full access, else the first that is not a narrower one.
-  const fullValue = (mode?.values.find((entry) => /bypass|full|yolo/i.test(entry.value))
+  const fullValue = (mode?.values.find((entry) => /bypass|full|yolo|autopilot/i.test(entry.value))
     ?? mode?.values.find((entry) => !/plan|read|ask|manual|default|accept|review/i.test(entry.value))
     ?? mode?.values[0])?.value;
-  const planMode: AgentChoice | null = mode && fullValue && mode.values.some((entry) => entry.value === "plan")
-    ? { ...mode, category: "collaboration_mode", values: mode.values.filter((entry) => entry.value === "plan" || entry.value === fullValue), current: mode.current === "plan" ? "plan" : fullValue }
+  const planValue = mode?.values.find((entry) => /(^|[#/:])plan$/i.test(entry.value))?.value;
+  const planMode: AgentChoice | null = mode && fullValue && planValue
+    ? { ...mode, category: "collaboration_mode", values: mode.values.filter((entry) => entry.value === planValue || entry.value === fullValue), current: current(mode) === planValue ? planValue : fullValue }
     : null;
   const switches = [
     ...(planMode ? [planMode] : []),
-    ...choices.filter((choice) => choice.category !== "mode" && choice.category !== "thought_level" && choice.values.length === 2 && onValue(choice)),
+    ...choices.filter((choice) => choice.category !== "mode" && choice.category !== "thought_level" && choice.category !== "permissions" && choice.values.length === 2 && onValue(choice)),
   ];
-  const onValueOf = (choice: AgentChoice) => (choice === planMode ? "plan" : onValue(choice));
+  const onValueOf = (choice: AgentChoice) => (choice === planMode ? planValue : onValue(choice));
   const offValueOf = (choice: AgentChoice) => (choice === planMode ? fullValue! : choice.values.find((entry) => entry.value !== onValue(choice))!.value);
-  const isOn = (choice: AgentChoice) => (choice === planMode ? current(choice) === "plan" : current(choice) === onValue(choice));
+  const isOn = (choice: AgentChoice) => (choice === planMode ? current(choice) === planValue : current(choice) === onValue(choice));
   const onNames = switches.filter(isOn).map((choice) => (choice.category === "collaboration_mode" ? "Plan first" : choice.name));
   const effortName = effort && current(effort) !== "default" ? nameIn(effort) : null;
   return (

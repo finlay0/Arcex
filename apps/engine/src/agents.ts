@@ -31,7 +31,7 @@ export function agentList(settings: Settings): Agent[] {
   ];
 }
 
-type Launch = { command: string; args: string[]; shell: boolean };
+type Launch = { command: string; args: string[]; shell: boolean; env?: Record<string, string> };
 
 function launchOf(agentId: string, settings: Settings): Launch {
   const builtin = BUILTIN[agentId];
@@ -41,10 +41,11 @@ function launchOf(agentId: string, settings: Settings): Launch {
     const manifest = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as { bin: Record<string, string> };
     return { command: process.execPath, args: [path.join(dir, manifest.bin[builtin.adapter.bin]!)], shell: false };
   }
-  const command = builtin?.command ?? settings.agents.find((agent) => agent.id === agentId)?.command;
+  const added = settings.agents.find((agent) => agent.id === agentId);
+  const command = builtin?.command ?? added?.command;
   if (!command) throw new Error("that agent is no longer set up");
   // A command line the user (or Arcex) wrote, so it goes through the shell as typed.
-  return { command, args: [], shell: true };
+  return { command, args: [], shell: true, env: added?.env };
 }
 
 /** A way an agent offers to sign in that Arcex can start without handling any secret, such as "Log in with Google". */
@@ -81,22 +82,39 @@ function commandsOf(list: acp.AvailableCommand[]): SlashCommand[] {
   })).filter((command) => command.name);
 }
 
-/** Agents describe their models as a "model" choice among the session's options. */
-function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Omit<Models, "commands"> & { configId: string }) | null {
+/**
+ * Agents describe their models as a "model" choice among the session's options. Some (GitHub Copilot) still use the
+ * older `models` list, picked with `session/set_model`.
+ */
+function modelsOf(response: { configOptions?: acp.SessionConfigOption[] | null }): (Omit<Models, "commands"> & { configId: string; via: "config" | "set_model" }) | null {
   const option = response.configOptions?.find((entry) => entry.type === "select" && (entry.category === "model" || entry.id === "model"));
-  if (!option || option.type !== "select") return null;
+  if (!option || option.type !== "select") {
+    const older = (response as { models?: { availableModels?: { modelId?: unknown; name?: unknown; description?: unknown }[]; currentModelId?: unknown } | null }).models;
+    if (!Array.isArray(older?.availableModels) || !older.availableModels.length) return null;
+    return {
+      configId: "",
+      via: "set_model",
+      options: older.availableModels
+        .filter((entry) => typeof entry.modelId === "string")
+        .slice(0, 200)
+        .map((entry) => ({ value: String(entry.modelId), name: String(entry.name ?? entry.modelId), description: String(entry.description ?? "") })),
+      current: typeof older.currentModelId === "string" ? older.currentModelId : null,
+      choices: [],
+    };
+  }
   const flat = (option.options as unknown as ({ value?: string; name?: string; description?: string | null; options?: unknown[] })[]).flatMap(
     (entry) => (Array.isArray(entry.options) ? (entry.options as typeof option.options as unknown as { value: string; name: string; description?: string | null }[]) : [entry]),
   );
   return {
     configId: option.id,
+    via: "config",
     options: flat.filter((entry) => typeof entry.value === "string").map((entry) => ({ value: entry.value!, name: entry.name ?? entry.value!, description: entry.description ?? "" })),
     current: typeof option.currentValue === "string" ? option.currentValue : null,
     choices: [],
   };
 }
 
-const CHOICE_CATEGORIES = ["mode", "thought_level", "model_config", "collaboration_mode"];
+const CHOICE_CATEGORIES = ["mode", "thought_level", "model_config", "collaboration_mode", "permissions"];
 
 /** The agent's settings besides its model, as it describes them. */
 function choicesOf(response: { configOptions?: acp.SessionConfigOption[] | null } | null | undefined): AgentChoice[] {
@@ -160,7 +178,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
   signal.throwIfAborted();
   const launch = launchOf(options.agentId, options.settings);
   // Claude Code leaves its task list tools off in SDK sessions unless asked. Arcex shows that list as the plan.
-  const env = { ...process.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true" };
+  const env = { ...process.env, ...launch.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true" };
   const child: ChildProcess = spawn(launch.command, launch.args, { cwd: options.cwd, env, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
   const terminate = () => {
     child.stdin?.destroy();
@@ -272,9 +290,14 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
           const timeout = new Promise<never>((_, reject) => {
             timer = setTimeout(() => reject(new Error("the agent took too long to confirm the model")), 10_000);
           });
-          const result = await Promise.race([agent.request("session/set_config_option", { sessionId: id, configId: models.configId, value }), timeout]);
-          const confirmed = result && typeof result === "object" ? modelsOf(result as Parameters<typeof modelsOf>[0]) : null;
-          if (confirmed?.current !== value) throw new Error("the agent did not confirm that model");
+          if (models.via === "set_model") {
+            // The older call answers with nothing to check, so a success is the confirmation.
+            await Promise.race([(agent.request as (method: string, params: unknown) => Promise<unknown>)("session/set_model", { sessionId: id, modelId: value }), timeout]);
+          } else {
+            const result = await Promise.race([agent.request("session/set_config_option", { sessionId: id, configId: models.configId, value }), timeout]);
+            const confirmed = result && typeof result === "object" ? modelsOf(result as Parameters<typeof modelsOf>[0]) : null;
+            if (confirmed?.current !== value) throw new Error("the agent did not confirm that model");
+          }
           models.current = value;
         } finally {
           clearTimeout(timer);
@@ -335,7 +358,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
  */
 export async function signIn(agentId: string, settings: Settings, cwd: string, methodId: string): Promise<void> {
   const launch = launchOf(agentId, settings);
-  const child = spawn(launch.command, launch.args, { cwd, env: process.env, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
+  const child = spawn(launch.command, launch.args, { cwd, env: { ...process.env, ...launch.env }, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
   const connection = acp.client().connect(acp.ndJsonStream(
     Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
     Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,

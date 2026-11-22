@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
+import type { About, Agent, DirectoryAgent, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
 import { call } from "./store.ts";
 import { Account } from "./Account.tsx";
@@ -266,6 +266,80 @@ const setupGuides: Record<string, string> = {
   gemini: "https://geminicli.com/docs/get-started/",
 };
 
+/** Directory icons are one-colour SVGs, drawn as a mask so they take the text colour, like every other icon. */
+const AgentMark = ({ id }: { id: string }) => {
+  const url = `${import.meta.env.DEV ? "http://127.0.0.1:4517" : ""}/agent-icons/${encodeURIComponent(id)}.svg`;
+  return <span className="agentmark" aria-hidden="true" style={{ WebkitMaskImage: `url("${url}")`, maskImage: `url("${url}")` }} />;
+};
+
+/** Every coding agent in the ACP registry, model makers' own first. One click adds one. */
+function AgentDirectory({ added, fail }: { added: Agent[]; fail(error: unknown): void }) {
+  const [list, setList] = useState<DirectoryAgent[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [adding, setAdding] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  useEffect(() => {
+    call("agents.directory", {}).then(setList).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, []);
+  const have = new Set(added.map((agent) => agent.id));
+  const words = query.toLowerCase().trim();
+  const matches = (list ?? []).filter((agent) => !words || `${agent.name} ${agent.description}`.toLowerCase().includes(words));
+  const shown = words || all ? matches : matches.filter((agent) => agent.featured);
+  return (
+    <>
+      <h2 className="sub2">Add more agents</h2>
+      <p className="sdesc">
+        Coding agents from every major model maker, from the open Agent Client Protocol directory. Each runs as its maker's own tool and signs in with
+        your own account. Programs are downloaded over a secure connection and checked before they run.
+      </p>
+      <div className="field dirsearch">
+        <Icon name="search" />
+        <input value={query} placeholder="Search agents" aria-label="Search agents" onChange={(event) => setQuery(event.target.value)} />
+      </div>
+      {error && <p className="sdesc">{error}</p>}
+      {!list && !error && <p className="sdesc">Loading the directory…</p>}
+      {list && (
+        <div className="card dirlist">
+          {shown.map((agent) => {
+            const isAdded = have.has(`dir-${agent.id}`);
+            return (
+              <div key={agent.id} className="dirrow">
+                <AgentMark id={agent.id} />
+                <div className="dirtext">
+                  <b>{agent.name}</b>
+                  <span>{agent.description}</span>
+                </div>
+                {isAdded ? (
+                  <span className="pillstate ok">Added</span>
+                ) : (
+                  <button
+                    className="btn"
+                    disabled={!agent.runs || adding !== null}
+                    title={agent.runs ? undefined : "No build for this computer yet"}
+                    onClick={() => {
+                      setAdding(agent.id);
+                      call("agents.addFromDirectory", { id: agent.id }).catch(fail).finally(() => setAdding(null));
+                    }}
+                  >
+                    {adding === agent.id ? (agent.runs === "binary" ? "Downloading…" : "Adding…") : agent.runs ? "Add" : "Not on Windows"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {shown.length === 0 && <p className="sdesc">No agents match.</p>}
+        </div>
+      )}
+      {list && !words && (
+        <div>
+          <button className="btn" onClick={() => setAll(!all)}>{all ? "Show model makers' agents only" : `Show all ${list.length} agents`}</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; fail(error: unknown): void }) {
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -314,7 +388,7 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
             >
               {state && (
                   <span className={ready ? "pillstate ok" : "pillstate warn"}>
-                  {!agent.builtin ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : state.signedIn === true ? "Ready" : "Sign-in unchecked"}
+                  {!agent.builtin && state.signedIn === null ? "Added by you" : !state.installed ? "Not installed" : state.signedIn === false ? "Sign in needed" : state.signedIn === true ? "Ready" : "Sign-in unchecked"}
                 </span>
               )}
               {!agent.builtin && <Confirm label="Remove" sure="Remove agent" run={() => call("agents.remove", { agentId: agent.id }).catch(fail)} />}
@@ -371,7 +445,9 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
         </button>
       </div>
 
-      <h2 className="sub2">Add an agent</h2>
+      <AgentDirectory added={agents} fail={fail} />
+
+      <h2 className="sub2">Add an agent by hand</h2>
       <p className="sdesc">
         Any agent that speaks the Agent Client Protocol works. Give it a name and the command that starts it in that mode. Its models then appear in the
         model menu.

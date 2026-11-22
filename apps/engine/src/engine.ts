@@ -2,6 +2,7 @@
 import { createSpeech } from "./speech.ts";
 import { createAttachments } from "./attachments.ts";
 import { mentionLinks, searchFiles } from "./mentions.ts";
+import { createDirectory } from "./directory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
@@ -54,7 +55,9 @@ function usageLimit(text: string): string | null {
 }
 
 /** Mode values that mean the agent acts without asking: Claude "bypassPermissions", Codex "agent-full-access", Gemini "yolo". */
-const FULL_ACCESS = /bypass|full|yolo/i;
+const FULL_ACCESS = /bypass|full|yolo|autopilot/i;
+/** A plan-only mode, named "plan" or ending in "#plan" (GitHub Copilot names modes by URL). */
+const PLAN_MODE = /(^|[#/:])plan$/i;
 /** Modes that hold the agent back: planning only, reading only, or asking first. */
 const NARROW_MODE = /plan|read|ask|manual|default|accept|review/i;
 
@@ -188,6 +191,7 @@ export function createEngine(
   let settings = db.settings();
   const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
   const files = createAttachments(about.dataDir);
+  const directory = createDirectory(about.dataDir);
   const projects = new Map<string, Project>(db.projects().map((p) => [p.id, p]));
   const threads = new Map<string, ThreadRow>(db.threads().map((t) => [t.id, t]));
   const lives = new Map<string, Live>();
@@ -208,7 +212,7 @@ export function createEngine(
     const entries = Object.entries(value as Record<string, unknown>);
     if (entries.length > 10) throw new Error("too many settings");
     return Object.fromEntries(entries.map(([key, choice]) => {
-      if (!/^[\w.-]{1,80}$/.test(key) || typeof choice !== "string" || !/^[\w.:-]{1,80}$/.test(choice)) throw new Error("invalid setting");
+      if (!/^[\w.-]{1,80}$/.test(key) || typeof choice !== "string" || !/^[\w.:/#-]{1,120}$/.test(choice)) throw new Error("invalid setting");
       return [key, choice];
     }));
   };
@@ -220,7 +224,8 @@ export function createEngine(
   function modeFor(session: AgentSession, wanted: string | undefined): { id: string; value: string } | null {
     const mode = session.choices.find((entry) => entry.category === "mode");
     if (!mode) return null;
-    if (wanted === "plan" && mode.values.some((entry) => entry.value === "plan")) return { id: mode.id, value: "plan" };
+    const plan = mode.values.find((entry) => PLAN_MODE.test(entry.value));
+    if (wanted && plan && PLAN_MODE.test(wanted)) return { id: mode.id, value: plan.value };
     // No mode named for full access (OpenCode has "build" and "plan"): take the first that is not a narrower one.
     const full = mode.values.find((entry) => FULL_ACCESS.test(entry.value))
       ?? mode.values.find((entry) => !NARROW_MODE.test(entry.value))
@@ -236,6 +241,13 @@ export function createEngine(
       const target = modeFor(session, wanted[mode.id]);
       if (target) wanted[mode.id] = target.value;
       if (target && thread.choices[mode.id] !== target.value) thread.choices = { ...thread.choices, [mode.id]: target.value };
+    }
+    // Some agents keep full access as its own switch (GitHub Copilot's "allow_all"). It is always on.
+    if (enforceMode) {
+      for (const permission of session.choices.filter((entry) => entry.category === "permissions" && entry.values.length === 2)) {
+        const on = permission.values.find((entry) => !/^(off|false|no|ask|default|disabled?)$/i.test(entry.value));
+        if (on) wanted[permission.id] = on.value;
+      }
     }
     for (const [choiceId, value] of Object.entries(wanted)) {
       const choice = session.choices.find((entry) => entry.id === choiceId);
@@ -608,6 +620,22 @@ export function createEngine(
       return models;
     },
 
+    "agents.directory": (params) => directory.list(params.refresh === true),
+
+    async "agents.addFromDirectory"(params) {
+      const id = text(params.id, "agent", 80);
+      if (settings.agents.some((agent) => agent.directory?.id === id)) throw new Error("that agent is already added");
+      if (settings.agents.length >= 20) throw new Error("that is the most agents Arcex keeps");
+      const installed = await directory.install(id);
+      // Settings may have changed while the download ran.
+      if (settings.agents.some((agent) => agent.directory?.id === id)) return settings;
+      const added = { id: `dir-${id}`, name: installed.name, command: installed.command, env: installed.env, directory: { id, version: installed.version } };
+      settings = { ...settings, agents: [...settings.agents, added] };
+      db.saveSettings(settings);
+      emit({ event: "settings", settings, agents: agentList(settings) });
+      return settings;
+    },
+
     "agents.add"(params) {
       const name = text(params.name, "name", 40);
       const command = text(params.command, "command", 300);
@@ -911,6 +939,8 @@ export function createEngine(
 
   return {
     browse,
+    /** An agent's icon from the directory, as SVG text, or null. */
+    agentIcon: (id: string) => directory.icon(id),
     /** A stored image for a thumbnail, or null. */
     attachmentImage: (id: string) => files.image(id),
     handle: (method: string, params: unknown): Promise<unknown> => {

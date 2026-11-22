@@ -115,7 +115,7 @@ export type Settings = {
   /** The model new threads start with, for the default agent. Null means the agent's own default. */
   defaultModel: { value: string; name: string } | null;
   /** Agents the user added: a name and the command that starts it in ACP mode. */
-  agents: { id: string; name: string; command: string }[];
+  agents: AddedAgent[];
   sendWith: "enter" | "ctrl-enter";
   /** Open the details panel when the app starts. */
   showDetails: boolean;
@@ -123,6 +123,30 @@ export type Settings = {
   notify: boolean;
   /** Let agents search the Arcex research library of real products. */
   research: boolean;
+};
+
+/** An agent the user added: by hand with its command, or from the agent directory. */
+export type AddedAgent = {
+  id: string;
+  name: string;
+  command: string;
+  /** Extra environment the agent needs, from its directory entry. */
+  env?: Record<string, string>;
+  /** Set when it came from the agent directory: its id there and the version added. */
+  directory?: { id: string; version: string };
+};
+
+/** One agent in the ACP registry, the directory of coding agents that speak the Agent Client Protocol. */
+export type DirectoryAgent = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  website: string | null;
+  /** A model maker's own agent, shown first. */
+  featured: boolean;
+  /** How it runs on this computer, or null when it has no build for it. */
+  runs: "npx" | "uvx" | "binary" | null;
 };
 
 /** Whether an agent's own command-line tool is installed and signed in on this computer. */
@@ -159,6 +183,10 @@ export type Requests = {
   "agents.models": { params: { agentId: string; refresh?: boolean }; result: { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] } };
   /** Starts the agent's own sign-in (it may open the browser) and waits for it to finish, up to five minutes. */
   "agents.signIn": { params: { agentId: string; methodId: string }; result: { ok: true } };
+  /** The ACP registry of agents, read at most daily. Icons are served at `/agent-icons/<id>.svg`. */
+  "agents.directory": { params: { refresh?: boolean }; result: DirectoryAgent[] };
+  /** Adds an agent from the directory, downloading it first when it ships as a program. */
+  "agents.addFromDirectory": { params: { id: string }; result: Settings };
   "agents.add": { params: { name: string; command: string }; result: Settings };
   "agents.remove": { params: { agentId: string }; result: Settings };
   "toolbox.list": { params: Record<string, never>; result: Tool[] };

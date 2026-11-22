@@ -182,7 +182,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 | --- | --- | --- | --- | --- | --- |
 | M1 | Gemini (Google) | Gemini CLI as a built-in agent: models, sign-in status, full access ("yolo"), attachments, mentions | P0 | partial | Arcex now sees that Gemini needs sign-in and offers Gemini's own "Log in with Google" in Settings › Agents (ACP `authenticate`; the API key, Vertex and gateway methods are left out because they would need Arcex to handle a secret). Not pressed in testing, because it opens the browser on Finlay's PC. Nothing run through Gemini yet |
 | M2 | OpenCode for everyone else | One open agent that reaches OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter and local models | P0 | partial | Verified November 21 with its default free model: ready with no sign-in, read an @-mentioned file, wrote a file with no approval (its "build" mode counts as full access), and showed folded thinking. Its free model can't see images and said so. Its edits carry no diff, so no line counts. Still to do: signing in to other providers through OpenCode (`opencode auth login`) and showing those models |
-| M3 | More makers' own agents | Built-ins for other ACP agents, such as Qwen Code (Alibaba), GitHub Copilot CLI, Cursor's agent, Goose and Kimi (Moonshot) | P1 | open | Research which speak ACP today and how each signs in. Add each with an install and sign-in command |
+| M3 | More makers' own agents | Built-ins for other ACP agents, such as Qwen Code (Alibaba), GitHub Copilot CLI, Cursor's agent, Goose and Kimi (Moonshot) | P1 | partial | Settings › Agents › Agent directory lists the official ACP registry (46 agents, cached for a day), with the makers' own agents first and their icons. Adding one stores its npx/uvx command at the pinned version, or downloads its Windows build over HTTPS, checks the registry's checksum and unpacks it into Arcex's data folder. Verified November 21: GitHub Copilot added, Ready with the existing GitHub sign-in, wrote a file with no approval card (its autopilot mode and allow_all switch are turned on). Copilot reports no model list over ACP, so it shows Default model. Binary (download) installs and uvx agents are untested |
 | M4 | Agent setup that just works | For every agent: installed or not, signed in or not, the one command to install or sign in, and a retry | P0 | partial | Agents without a status command (Gemini, OpenCode, any added agent) are asked directly: Arcex opens a session without sending anything, and "auth required" means sign-in is needed. The agent's own sign-in methods show as buttons, with the terminal command as a fallback. Verified: OpenCode Ready, Gemini "Sign in needed" with "Log in with Google" |
 | M5 | Models grouped by maker | The model picker groups by maker (OpenCode exposes many) with search | P1 | open | Filter exists. Grouping does not |
 
@@ -201,6 +201,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 Newest first. One line per shipped change, with its commit.
 
 - 2026-11-21 · M4 sign-in status and the agent's own sign-in buttons for every agent; M2 OpenCode verified end to end; agents with no full-access mode run in their first unrestricted mode.
+- 2026-11-21 · M3 agent directory from the ACP registry: add any maker's agent in one click; GitHub Copilot verified end to end with full access.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -219,7 +220,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. Every major model maker (Finlay, November 21): M3 research and add the other makers' agents, M5 models grouped by maker, OpenCode provider sign-in (M2). Run Gemini (M1) once Finlay has signed in. Warn before sending an image to a model that can't see images.
+1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), M5 models grouped by maker, OpenCode provider sign-in (M2). Run Gemini (M1) once Finlay has signed in. Warn before sending an image to a model that can't see images.
 2. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
 3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.

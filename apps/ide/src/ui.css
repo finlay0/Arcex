@@ -506,3 +506,14 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .md .contains-task-list { padding-left: 0; }
 .md .task-list-item { list-style: none; display: flex; align-items: baseline; gap: 8px; }
 .md .task-list-item input[type="checkbox"] { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--ink-2); transform: translateY(2px); }
+
+/* Agent directory (M3) */
+.dirsearch { max-width: 360px; }
+.dirsearch .i { width: 15px; height: 15px; color: var(--ink-3); flex: none; }
+.dirlist { padding: 4px 0; }
+.dirrow { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
+.dirrow + .dirrow { border-top: 1px solid var(--line); }
+.dirtext { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.dirtext b { font-weight: 500; font-size: 14px; }
+.dirtext span { font-size: 13px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agentmark { flex: none; width: 20px; height: 20px; background: var(--ink-2); -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }

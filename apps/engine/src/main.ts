@@ -136,6 +136,16 @@ const server = createServer((request, response) => {
   }
   const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://localhost").pathname);
   if (pathname === "/agent/browser" && request.method === "POST") return agentBrowser(request, response);
+  const agentIcon = /^\/agent-icons\/([\w.-]{1,80})\.svg$/.exec(pathname);
+  if (agentIcon && request.method === "GET") {
+    // Directory icons are one-colour SVGs, used as masks. Served with a policy that blocks anything active in them.
+    void engine.agentIcon(agentIcon[1]!).then((svg) => {
+      if (!svg) return void response.writeHead(404).end("Not found");
+      response.writeHead(200, { "content-type": "image/svg+xml", "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'", "x-content-type-options": "nosniff", "cache-control": "private, max-age=86400" });
+      response.end(svg);
+    });
+    return;
+  }
   const attached = /^\/attachments\/([0-9a-f-]{36})$/.exec(pathname);
   if (attached && request.method === "GET") {
     // Thumbnails of images the user attached. Only plain image types are ever served.
