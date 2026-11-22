@@ -184,6 +184,11 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .reply { position: relative; }
 .copy { position: absolute; right: -6px; bottom: -32px; opacity: 0; transition: opacity .12s; z-index: 1; }
 .reply:hover .copy, .copy:focus-visible { opacity: 1; }
+.you { position: relative; }
+.youacts { position: absolute; right: 0; bottom: -34px; display: flex; gap: 2px; opacity: 0; transition: opacity .12s; z-index: 1; }
+.you:hover .youacts, .youacts:focus-within { opacity: 1; }
+.retry { display: flex; gap: 8px; flex-wrap: wrap; }
+.retry .btn { display: inline-flex; align-items: center; gap: 6px; }
 .oops { color: var(--stop); }
 .note { color: var(--ink-3); font-size: 13px; }
 .answered { color: var(--ink-3); font-size: 14px; }

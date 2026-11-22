@@ -263,7 +263,7 @@ function ThinkRow({ item }: { item: Extract<Item, { kind: "think" }> }) {
 const ENDINGS = { done: "Worked for", stopped: "Stopped after", failed: "Stopped with a problem after", interrupted: "Interrupted after" };
 
 /** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
-function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn; live: boolean; actions: Actions }) {
+function TurnView({ thread, turn, live, actions, edit }: { thread: Thread; turn: Turn; live: boolean; actions: Actions; edit(turn: Turn): void }) {
   const blocks: Block[] = [];
   for (const part of turn.parts) {
     const last = blocks[blocks.length - 1];
@@ -282,7 +282,7 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
           {turn.files.map((attachment) => <li key={attachment.id}><AttachmentChip attachment={attachment} /></li>)}
         </ul>
       )}
-      {turn.user !== null && turn.user !== "" && <div className="you"><Md text={turn.user} /></div>}
+      {turn.user !== null && turn.user !== "" && <YouMessage text={turn.user} edit={() => edit(turn)} />}
       {blocks.map((block, index) => {
         if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} live={live && index === blocks.length - 1} />;
         if (block.kind === "say") return <Reply key={block.id} text={block.text} />;
@@ -341,6 +341,28 @@ function AskCard({ thread, item, actions, active }: { thread: Thread; item: Ask;
         item.detail && item.detail !== item.title && <p title={item.detail}>{item.detail.slice(0, 160)}</p>
       )}
       <AskButtons thread={thread} item={item} actions={actions} />
+    </div>
+  );
+}
+
+/** The user's message, with copy and edit on hover. Edit puts it back in the message box to change and send again. */
+function YouMessage({ text, edit }: { text: string; edit(): void }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="you">
+      <Md text={text} />
+      <div className="youacts">
+        <button className="icon" aria-label={copied ? "Copied" : "Copy message"} title="Copy" onClick={() => {
+          void navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}>
+          <Icon name={copied ? "check" : "copy"} />
+        </button>
+        <button className="icon" aria-label="Edit and send again" title="Edit and send again" onClick={edit}>
+          <Icon name="edit" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -466,7 +488,7 @@ export function Conversation(props: {
   useEffect(() => {
     const el = scroller.current;
     if (el && !away) el.scrollTo({ top: el.scrollHeight });
-  }, [props.items, away]);
+  }, [props.items, away, thread?.state]);
 
   const agentId = thread ? thread.provider : props.choice.agentId;
   const health = props.status?.find((entry) => entry.id === agentId);
@@ -590,7 +612,17 @@ export function Conversation(props: {
       </div>
     );
   }
-  const lastPrompt = list.at(-1)?.user;
+  const lastTurn = list.at(-1);
+  const editTurn = (turn: Turn) => {
+    files.set((current) => [...turn.files, ...current.filter((file) => !turn.files.some((sent) => sent.id === file.id))].slice(0, 10));
+    setDraft([draft, turn.user ?? ""].filter((part) => part.trim()).join("\n\n"));
+    document.querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
+  };
+  const retry = () => {
+    if (!lastTurn || sending) return;
+    setSending(true);
+    actions.prompt(thread.id, lastTurn.user ?? "", lastTurn.files.map((file) => file.id)).catch(actions.fail).finally(() => setSending(false));
+  };
   // The question the agent is waiting on sits just above the message box, like the plan while it works.
   const pendingAsk = working && thread.state === "needs_you"
     ? list.at(-1)?.parts.findLast((part): part is Ask => part.kind === "ask" && !part.answer)
@@ -607,12 +639,15 @@ export function Conversation(props: {
       >
         <div className="flow">
           {list.map((turn, index) => (
-            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} actions={actions} />
+            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} actions={actions} edit={editTurn} />
           ))}
           {thread.state === "interrupted" && <p className="oops">This turn was interrupted. Check the project for partial changes before you retry.</p>}
           {thread.state === "stopped" && <p className="muted">Turn stopped. Any changes already made may still be in the project.</p>}
-          {(thread.state === "failed" || thread.state === "interrupted") && lastPrompt && !draft && (
-            <button className="btn" onClick={() => setDraft(lastPrompt)}>Copy last message into composer</button>
+          {["failed", "interrupted", "stopped"].includes(thread.state) && lastTurn && (lastTurn.user || lastTurn.files.length > 0) && (
+            <div className="retry">
+              <button className="btn" disabled={sending || !props.connected || !!notReady} onClick={retry}><Icon name="reload" /> Try again</button>
+              <button className="btn" onClick={() => editTurn(lastTurn)}><Icon name="edit" /> Edit message</button>
+            </div>
           )}
         </div>
       </div>
