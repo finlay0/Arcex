@@ -48,7 +48,7 @@ State on November 21, 2026, at commit `5b850fb` on `main`. Everything listed as 
 **Unverified or known gaps** (fix or verify before calling parity done)
 
 - C5: thinking never seen live.
-- Codex hit its usage limit on November 21 (it resets at 10:32 PM), so full access, `$` skills, K2 and K3 are still untried with Codex.
+- Codex re-run on November 21 after its limit reset: full access (wrote a file with no prompt), K3 "@" mention (read the mentioned file), K2 pasted image ("Orange"), the K9 meter (Codex sends usage too) and H2 all work. Running a `$` skill is still untried.
 - Plan first with Claude: the switch is shown, but a plan approved into full access has not been run since the mode menu was removed.
 - C5: thinking now seen live with OpenCode. Still never seen with Claude.
 - K7: effort and fast picks reset for new threads after a restart.
@@ -221,6 +221,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · C18 compaction notes, and summarise on request from the meter.
 - 2026-11-21 · H1 project instructions editor.
 - 2026-11-21 · H2 Arcex note to Codex and Claude through ACP's standard system prompt.
+- 2026-11-21 · Codex re-run: full access, K2 image, K3 mention and K9 meter verified.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -241,7 +242,7 @@ Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
-3. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
+3. Run a Codex `$` skill end to end.
 4. Then the P1 items: P3 opt-in terminal, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
