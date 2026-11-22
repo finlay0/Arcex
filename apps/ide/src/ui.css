@@ -204,6 +204,8 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome.undone { background: var(--raised-2); color: var(--ink-2); }
 .undoask { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; max-width: 560px; }
 .undoask .btns { display: flex; gap: 8px; }
+.rewindask { align-self: flex-end; margin-top: 40px; }
+.flow > .note.rewinding { align-self: flex-end; margin-top: 40px; }
 .savever { justify-self: start; margin: -4px 0 8px; height: 30px; font-size: 13px; }
 .versions { display: grid; gap: 2px; }
 .version { display: grid; gap: 6px; }

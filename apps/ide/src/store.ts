@@ -145,6 +145,9 @@ function receive({ data }: MessageEvent) {
   else if (message.event === "gone") {
     if (message.kind === "thread") set({ threads: state.threads.filter((t) => t.id !== message.id) });
     else set({ projects: state.projects.filter((p) => p.id !== message.id), threads: state.threads.filter((t) => t.projectId !== message.id) });
+  } else if (message.event === "items") {
+    if (state.items[message.threadId]) set({ items: { ...state.items, [message.threadId]: message.items } });
+    if (loading.has(message.threadId)) loading.set(message.threadId, message.items);
   } else if (message.event === "item") {
     const loaded = state.items[message.threadId];
     if (loaded) set({ items: { ...state.items, [message.threadId]: upsert(loaded, message.item) } });

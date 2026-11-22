@@ -248,6 +248,15 @@ export type Requests = {
     params: { threadId: string; itemId: string; force?: boolean; path?: string; redo?: boolean };
     result: { undone: string[]; changedSince: string[] };
   };
+  /**
+   * Takes the thread back to just before one of the user's messages: the files the later turns changed are put back,
+   * that message and everything after it are removed, and the agent starts fresh with a recap of what came before.
+   * Files changed again since are listed in `changedSince` and nothing happens, unless `force` is set.
+   */
+  "thread.rewind": {
+    params: { threadId: string; itemId: string; force?: boolean };
+    result: { changedSince: string[]; restored: string[]; text?: string; attachments?: Attachment[] };
+  };
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
@@ -291,6 +300,8 @@ export type EventMessage =
   | { event: "project"; project: Project }
   | { event: "thread"; thread: Thread }
   | { event: "item"; threadId: string; item: Item }
+  /** The thread's whole timeline, after a rewind removed part of it. */
+  | { event: "items"; threadId: string; items: Item[] }
   | { event: "settings"; settings: Settings; agents: Agent[] }
   | { event: "gone"; kind: "project" | "thread"; id: string }
   /** An agent is using the project's browser, so the client shows the Browser tab. */

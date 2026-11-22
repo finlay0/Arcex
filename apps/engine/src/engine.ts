@@ -41,6 +41,8 @@ type Live = {
   questions: Map<string, { item: QuestionItem; schema: Parameters<typeof questionsOf>[0]; resolve(response: acp.CreateElicitationResponse): void }>;
   /** Told to the agent with the next message, after the user undoes a turn. */
   undoNote?: string;
+  /** After a rewind, the next message starts a fresh agent session with this recap of the kept conversation. */
+  rewindNote?: string;
 };
 
 
@@ -561,8 +563,9 @@ export function createEngine(
         put(thread, { id: randomUUID(), kind: "note", text: `${model} can't see images, so ${one ? "the image was" : "the images were"} sent as ${one ? "a file" : "files"} it may not open. Choose a model that sees images to have ${one ? "it" : "them"} looked at.` });
       }
       // Files the message mentions with "@" go along as links the agent can open.
-      const undoNote = live.undoNote;
+      const undoNote = [live.rewindNote, live.undoNote].filter(Boolean).join("\n\n");
       live.undoNote = undefined;
+      live.rewindNote = undefined;
       const result = await session.prompt([...(undoNote ? [{ type: "text" as const, text: undoNote }] : []), ...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
       if (result.stopReason === "cancelled") outcome = "stopped";
       if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
@@ -867,6 +870,52 @@ export function createEngine(
         redo ? `(Note from Arcex: the user put back your changes to ${list}.)` : `(Note from Arcex: the user undid your changes to ${list}. Those files are back the way they were before that turn.)`,
       ].filter(Boolean).join(" ").slice(0, 4000);
       return result;
+    },
+    async "thread.rewind"(params) {
+      const thread = threadOf(params.threadId);
+      if (busyState(thread)) throw new Error("wait for this thread to finish before rewinding");
+      const items = db.items(thread.id);
+      const at = items.findIndex((entry) => entry.id === params.itemId);
+      const message = items[at];
+      if (message?.kind !== "user") throw new Error("pick one of your messages to rewind to");
+      const kept = items.slice(0, at);
+      const later = items.slice(at);
+      // Each file goes back to how it was before the earliest rewound turn touched it, and must still look the way
+      // the latest turn left it (or as an undo left it).
+      const plan = new Map<string, { path: string; from: string; expect: string }>();
+      for (const entry of later) {
+        if (entry.kind !== "result" || !entry.snapshots) continue;
+        const undone = new Set(entry.undone === true ? entry.files : Array.isArray(entry.undone) ? entry.undone : []);
+        for (const file of entry.files) {
+          const expect = undone.has(file) ? entry.snapshots.before : entry.snapshots.after;
+          const known = plan.get(file);
+          plan.set(file, { path: file, from: known?.from ?? entry.snapshots.before, expect });
+        }
+      }
+      const project = projectOf(thread.projectId);
+      const result = plan.size
+        ? await git.rewindFiles(project.cwd, [...plan.values()], path.join(snapshotsDir, `${thread.id}.undo.index`), params.force === true)
+        : { restored: [], changedSince: [] };
+      if (result.changedSince.length && !result.restored.length) return result;
+      if (!threads.has(thread.id) || busyState(thread)) throw new Error("this thread changed while rewinding");
+      db.dropItemsFrom(thread.id, message.id);
+      const live = liveOf(thread.id);
+      closeSession(live);
+      live.undoNote = undefined;
+      // ACP can't trim an agent's memory, so the next message starts a fresh session that gets a short recap instead.
+      const recap = kept
+        .map((entry) => entry.kind === "user" ? `User: ${entry.text}` : entry.kind === "say" ? `You: ${entry.text}` : "")
+        .filter(Boolean)
+        .join("\n\n");
+      live.rewindNote = recap
+        ? `(Note from Arcex: the user rewound this conversation, so you are starting fresh. Here is the conversation so far, most recent last. The project files are back the way they were at this point.)\n\n${recap.length > 12000 ? `…${recap.slice(-12000)}` : recap}`
+        : undefined;
+      thread.sessionId = null;
+      thread.queued = [];
+      db.saveThread(thread);
+      setState(thread, "idle");
+      emit({ event: "items", threadId: thread.id, items: kept });
+      return { ...result, text: message.text, ...(message.attachments?.length ? { attachments: message.attachments } : {}) };
     },
     async "thread.turnDiff"(params) {
       const thread = threadOf(params.threadId);

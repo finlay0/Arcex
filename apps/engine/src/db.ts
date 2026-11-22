@@ -120,6 +120,10 @@ export function openDb(dataDir: string) {
     items: (threadId: string) =>
       db.prepare("SELECT json FROM items WHERE thread_id = ? ORDER BY seq").all(threadId)
         .map((row) => JSON.parse(row.json as string) as Item),
+    /** Removes one item and everything after it in the thread. */
+    dropItemsFrom(threadId: string, itemId: string) {
+      db.prepare("DELETE FROM items WHERE thread_id = ? AND seq >= (SELECT seq FROM items WHERE thread_id = ? AND id = ?)").run(threadId, threadId, itemId);
+    },
     saveItem(threadId: string, item: Item) {
       const { seq } = nextSeq.get(threadId) as { seq: number };
       upsertItem.run(threadId, item.id, seq, JSON.stringify(item));

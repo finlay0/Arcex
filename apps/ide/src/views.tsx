@@ -283,7 +283,7 @@ function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread
           {turn.files.map((attachment) => <li key={attachment.id}><AttachmentChip attachment={attachment} /></li>)}
         </ul>
       )}
-      {turn.user !== null && turn.user !== "" && <YouMessage text={turn.user} edit={() => edit(turn)} />}
+      {turn.user !== null && turn.user !== "" && <YouMessage thread={thread} turn={turn} edit={edit} />}
       {blocks.map((block, index) => {
         if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} live={live && index === blocks.length - 1} />;
         if (block.kind === "say") return <Reply key={block.id} text={block.text} />;
@@ -349,24 +349,61 @@ function AskCard({ thread, item, actions, active }: { thread: Thread; item: Ask;
 }
 
 /** The user's message, with copy and edit on hover. Edit puts it back in the message box to change and send again. */
-function YouMessage({ text, edit }: { text: string; edit(): void }) {
+function YouMessage({ thread, turn, edit }: { thread: Thread; turn: Turn; edit(turn: Turn): void }) {
+  const text = turn.user ?? "";
   const [copied, setCopied] = useState(false);
+  // Rewind asks first, then once more if files changed after the agent's turns.
+  const [rewind, setRewind] = useState<{ step: "confirm" } | { step: "working" } | { step: "changedSince"; files: string[] } | { step: "error"; text: string } | null>(null);
+  const go = (force: boolean) => {
+    setRewind({ step: "working" });
+    call("thread.rewind", { threadId: thread.id, itemId: turn.id, force })
+      .then((result) => {
+        if (result.text === undefined) return setRewind({ step: "changedSince", files: result.changedSince });
+        setRewind(null);
+        if (result.restored.length) window.dispatchEvent(new Event(FILES_CHANGED));
+        edit({ ...turn, user: result.text, files: result.attachments ?? [] });
+      })
+      .catch((error: Error) => setRewind({ step: "error", text: error.message }));
+  };
   return (
-    <div className="you">
-      <Md text={text} />
-      <div className="youacts">
-        <button className="icon" aria-label={copied ? "Copied" : "Copy message"} title="Copy" onClick={() => {
-          void navigator.clipboard.writeText(text);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}>
-          <Icon name={copied ? "check" : "copy"} />
-        </button>
-        <button className="icon" aria-label="Edit and send again" title="Edit and send again" onClick={edit}>
-          <Icon name="edit" />
-        </button>
+    <>
+      <div className="you">
+        <Md text={text} />
+        <div className="youacts">
+          <button className="icon" aria-label={copied ? "Copied" : "Copy message"} title="Copy" onClick={() => {
+            void navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          }}>
+            <Icon name={copied ? "check" : "copy"} />
+          </button>
+          <button className="icon" aria-label="Edit and send again" title="Edit and send again" onClick={() => edit(turn)}>
+            <Icon name="edit" />
+          </button>
+          {!busy(thread) && (
+            <button className="icon" aria-label="Rewind to before this message" title="Rewind to here" onClick={() => setRewind({ step: "confirm" })}>
+              <Icon name="reload" />
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+      {rewind && rewind.step !== "working" && (
+        <div className="undoask rewindask">
+          <p>
+            {rewind.step === "confirm"
+              ? "Go back to before this message? Files the agent changed from here on are put back, this message and everything after it are removed, and your message returns to the box. The agent starts fresh with a recap of the conversation before it."
+              : rewind.step === "changedSince"
+              ? `${rewind.files.length === 1 ? rewind.files[0] : plural(rewind.files.length, "file")} changed after the agent's last turn. Rewinding overwrites ${rewind.files.length === 1 ? "it" : "them"}, and those changes are lost.`
+              : `Couldn't rewind: ${rewind.text}`}
+          </p>
+          <div className="btns">
+            {rewind.step !== "error" && <button className="btn primary" ref={(button) => button?.scrollIntoView({ block: "center" })} onClick={() => go(rewind.step === "changedSince")}>{rewind.step === "confirm" ? "Rewind" : "Rewind anyway"}</button>}
+            <button className="btn" onClick={() => setRewind(null)}>{rewind.step === "error" ? "Close" : "Cancel"}</button>
+          </div>
+        </div>
+      )}
+      {rewind?.step === "working" && <p className="note rewinding">Rewinding…</p>}
+    </>
   );
 }
 

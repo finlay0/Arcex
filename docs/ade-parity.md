@@ -80,7 +80,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C7 | Command output in rows | The command and its output, folded | P1 | done | Last 4 KB of output under "Show the output" |
 | C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` now uses `react-markdown` with GFM and line breaks: tables, task lists, headings, quotes, code blocks with a language label and Copy, web links that open in the browser. Raw HTML stays text and remote images are not loaded. Verified with Claude (`/context` tables, code, link, checklist). Still to do: syntax highlighting, file paths that open the file (needs P2) |
 | C9 | Copy message, retry, edit and resend | Hover actions on messages. Retry a failed turn | P0 | done | Hovering your message shows Copy and "Edit and send again" (text and attached files go back in the message box). A failed, stopped or interrupted turn shows "Try again" (resends the same message and files) and "Edit message". Verified November 21 with Codex and OpenCode. Rewinding the agent's own history isn't possible over ACP, so an edit is sent as a new message |
-| C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | partial | Code: per-turn snapshots and undo exist (G1, G5). Conversation: ACP can't rewind an agent's history, so a rewind would need a new session started from a summary |
+| C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | done | "Rewind to here" on any of your messages puts back the files later turns changed (warning first if they changed again since), removes that message and everything after it, and returns the message to the box. ACP can't trim an agent's memory, so the agent starts fresh with a recap of the kept conversation. Verified November 21 with Claude Haiku: b.txt removed, a.txt restored, and the fresh agent recalled only the kept turn |
 | C11 | Find in thread (Ctrl+F) | Find bar with next and previous | P2 | open | |
 | C12 | Turn outcome and elapsed time | "Worked for 2m 14s", failed or stopped badge | P1 | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" |
 | C13 | Subagents | Rows for subagents working, with their progress | P2 | open | |
@@ -215,6 +215,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · G3 "Save a version" and C14 end-of-turn actions; the side panel refreshes when the window regains focus.
 - 2026-11-21 · G3 saved versions list with Go back.
 - 2026-11-21 · C14 "Open preview" on the last turn.
+- 2026-11-21 · C10 rewind the conversation and files to before any message.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -236,7 +237,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-4. Then the P1 items: C10 conversation rewind, P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+4. Then the P1 items: P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

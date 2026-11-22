@@ -208,6 +208,40 @@ export async function undoTurn(cwd: string, before: string, after: string, files
 }
 
 /**
+ * Puts files back the way they were at an earlier point, for rewinding a conversation over several turns. Each file
+ * names the snapshot to restore it from and the snapshot it should match now; a file that doesn't match was changed
+ * since, and nothing happens unless `force` is set.
+ */
+export async function rewindFiles(cwd: string, files: { path: string; from: string; expect: string }[], scratchIndex: string, force: boolean): Promise<{ restored: string[]; changedSince: string[] }> {
+  if (files.some((file) => !TREE.test(file.from) || !TREE.test(file.expect))) throw new Error("invalid snapshot");
+  const changedSince: string[] = [];
+  for (const file of files) {
+    if ((await blobNow(cwd, file.path)) !== (await blobIn(cwd, file.expect, file.path))) changedSince.push(file.path);
+  }
+  if (changedSince.length && !force) return { restored: [], changedSince };
+  const restored: string[] = [];
+  const byTree = new Map<string, string[]>();
+  for (const file of files) byTree.set(file.from, [...(byTree.get(file.from) ?? []), file.path]);
+  for (const [tree, paths] of byTree) {
+    const env = { GIT_INDEX_FILE: scratchIndex };
+    await gitWith(cwd, ["read-tree", tree], env);
+    try {
+      for (const file of paths) {
+        if (await blobIn(cwd, tree, file)) await gitWith(cwd, ["checkout-index", "-f", "--", file], env);
+        else {
+          const absolute = path.join(cwd, file);
+          if ((await lstat(absolute).catch(() => null))?.isFile()) await rm(absolute);
+        }
+        restored.push(file);
+      }
+    } finally {
+      await rm(scratchIndex, { force: true });
+    }
+  }
+  return { restored, changedSince };
+}
+
+/**
  * Saves everything in the project folder as a new version (a Git commit), so the user can come back to it. It uses
  * the user's own Git name and email; on a computer where Git has none, the computer's user name stands in, so a
  * first-time user isn't stopped by Git setup.
