@@ -599,3 +599,9 @@ button.ctxmeter { border-radius: 9px; }
 button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
 .ctxpop { position: absolute; bottom: calc(100% + 8px); right: -40px; width: 280px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--raised); box-shadow: 0 12px 32px rgb(0 0 0 / .35); display: grid; gap: 10px; font-size: 14px; z-index: 20; }
 .ctxpop .btns { display: flex; gap: 8px; }
+/* Project instructions editor in Settings. */
+.instructions { border-top: 1px solid var(--line); }
+.ieditor { display: grid; gap: 10px; padding: 0 0 16px; }
+.ieditor textarea.textfield { width: 100%; height: auto; min-height: 220px; padding: 10px 12px; font: 13px/20px var(--mono); resize: vertical; }
+.ieditor .btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ieditor .btns .muted { font-size: 13px; margin-left: 4px; }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, DirectoryAgent, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
+import type { About, Agent, DirectoryAgent, InstructionFile, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
 import { call } from "./store.ts";
 import { Account } from "./Account.tsx";
@@ -67,6 +67,84 @@ function SavedField({ value, placeholder, max, save }: { value: string; placehol
       onBlur={commit}
       onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
     />
+  );
+}
+
+/**
+ * The project's standing instructions for agents, edited in place. AGENTS.md is the shared file; CLAUDE.md and
+ * GEMINI.md get their own tab only when the project already has them with more than an import of AGENTS.md.
+ */
+function Instructions({ projectId, fail }: { projectId: string; fail(error: unknown): void }) {
+  const [files, setFiles] = useState<{ name: InstructionFile; text: string | null }[] | null>(null);
+  const [editing, setEditing] = useState<InstructionFile | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState("");
+  const load = () => call("project.instructions", { projectId }).then(setFiles).catch(fail);
+  useEffect(() => void load(), [projectId]);
+  const own = (file: { name: InstructionFile; text: string | null }) => file.name === "AGENTS.md" || (file.text !== null && file.text.trim() !== "@AGENTS.md");
+  const shown = (files ?? []).filter(own);
+  const agents = files?.find((file) => file.name === "AGENTS.md");
+  const open = (name: InstructionFile) => {
+    setEditing(name);
+    setDraft(files?.find((file) => file.name === name)?.text ?? "");
+    setNote("");
+  };
+  const save = () => {
+    if (!editing) return;
+    setSaving(true);
+    call("project.saveInstructions", { projectId, name: editing, text: draft })
+      .then((result) => {
+        setEditing(null);
+        setNote(result.created.includes("CLAUDE.md") ? "Saved. Arcex also added a one-line CLAUDE.md so Claude follows these too." : "Saved.");
+        return load();
+      })
+      .catch(fail)
+      .finally(() => setSaving(false));
+  };
+  const hint = agents?.text?.trim()
+    ? `${agents.text.trim().split(/\s+/).length} words in AGENTS.md. Every agent reads these before it starts.`
+    : "Standing rules every agent follows here, like the tools you use or how to check work. Saved as AGENTS.md in the project folder.";
+  return (
+    <div className="instructions">
+      <Row title="Instructions for agents" hint={note || hint}>
+        {!editing && <button className="btn" disabled={!files} onClick={() => open("AGENTS.md")}>{agents?.text?.trim() ? "Edit" : "Write instructions"}</button>}
+      </Row>
+      {editing && (
+        <div className="ieditor">
+          {shown.length > 1 && (
+            <div className="pick" role="group" aria-label="Instruction file">
+              {shown.map((file) => (
+                <button key={file.name} aria-pressed={editing === file.name} onClick={() => open(file.name)}>{file.name}</button>
+              ))}
+            </div>
+          )}
+          <textarea
+            className="textfield"
+            value={draft}
+            autoFocus
+            spellCheck
+            maxLength={200_000}
+            rows={14}
+            placeholder={"For example:\n- This is a Next.js app with Tailwind.\n- Run the tests before saying a change is done.\n- Keep the design dark and simple."}
+            aria-label={`Contents of ${editing}`}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setEditing(null);
+              if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                save();
+              }
+            }}
+          />
+          <div className="btns">
+            <button className="btn primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
+            <button className="btn" onClick={() => setEditing(null)}>Cancel</button>
+            <span className="muted">{editing === "AGENTS.md" ? "Codex and OpenCode read this directly, Claude through CLAUDE.md." : `Only ${editing === "CLAUDE.md" ? "Claude" : "Gemini"} reads ${editing}.`}</span>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -188,6 +266,7 @@ export function SettingsView(props: {
                   <Row title="What you're building" hint="Agents and the details panel show this.">
                     <SavedField value={project.goal} max={2000} save={(goal) => call("project.update", { projectId: project.id, goal }).catch(fail)} />
                   </Row>
+                  <Instructions projectId={project.id} fail={fail} />
                   <Row title="Folder" hint={project.cwd}>
                     <Confirm label="Remove from Arcex" sure="Remove project and its threads" run={() => call("project.remove", { projectId: project.id }).catch(fail)} />
                   </Row>

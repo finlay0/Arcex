@@ -6,7 +6,7 @@ import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { open, realpath } from "node:fs/promises";
+import { open, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
@@ -660,6 +660,9 @@ export function createEngine(
     }
   }
 
+  const INSTRUCTION_FILES = ["AGENTS.md", "CLAUDE.md", "GEMINI.md"] as const;
+  const MAX_INSTRUCTIONS = 200_000;
+
   const busyState = (thread: ThreadRow) => thread.state === "working" || thread.state === "starting" || thread.state === "needs_you" || thread.state === "stopping";
 
   /** Stops a thread's agent and forgets it in memory. The caller removes it from the database. */
@@ -857,6 +860,29 @@ export function createEngine(
         .map((entry) => ({ name: entry.name, kind: entry.isDirectory() ? ("folder" as const) : ("file" as const) }))
         .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1))
         .slice(0, 300);
+    },
+
+    async "project.instructions"(params) {
+      const project = projectOf(params.projectId);
+      return Promise.all(INSTRUCTION_FILES.map(async (name) => ({
+        name,
+        text: await readFile(path.join(project.cwd, name), "utf8").then((text) => text.slice(0, MAX_INSTRUCTIONS)).catch(() => null),
+      })));
+    },
+
+    async "project.saveInstructions"(params) {
+      const project = projectOf(params.projectId);
+      const name = INSTRUCTION_FILES.find((file) => file === params.name);
+      if (!name) throw new Error("that isn't an instructions file");
+      if (typeof params.text !== "string" || params.text.length > MAX_INSTRUCTIONS) throw new Error("instructions can be at most 200,000 characters");
+      const text = params.text.replace(/\r\n/g, "\n");
+      await writeFile(path.join(project.cwd, name), text.endsWith("\n") || !text ? text : `${text}\n`, "utf8");
+      const created: string[] = [];
+      // Claude reads CLAUDE.md, not AGENTS.md. A one-line import makes it follow the same rules.
+      if (name === "AGENTS.md" && !existsSync(path.join(project.cwd, "CLAUDE.md"))) {
+        await writeFile(path.join(project.cwd, "CLAUDE.md"), "@AGENTS.md\n", { encoding: "utf8", flag: "wx" }).then(() => created.push("CLAUDE.md")).catch(() => {});
+      }
+      return { created };
     },
 
     async "project.readFile"(params) {

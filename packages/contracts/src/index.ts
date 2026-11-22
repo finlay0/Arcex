@@ -111,6 +111,9 @@ export type Item =
 export type PlanEntry = { content: string; status: "pending" | "in_progress" | "completed" };
 
 /** One entry in a project folder. */
+/** Files at the project's top level that agents read as standing instructions. */
+export type InstructionFile = "AGENTS.md" | "CLAUDE.md" | "GEMINI.md";
+
 export type FileEntry = { name: string; kind: "folder" | "file" };
 
 /** A project file or folder found by "@" search. `path` is relative, with forward slashes. */
@@ -230,6 +233,13 @@ export type Requests = {
   /** Lists one folder of the project. `dir` is relative to the project folder; empty means the top. */
   "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
   /** Finds project files and folders by a few letters of their path, best first. Empty query lists the top ones. */
+  /** The project's instruction files for agents. `text` is null when the file doesn't exist. */
+  "project.instructions": { params: { projectId: string }; result: { name: InstructionFile; text: string | null }[] };
+  /**
+   * Saves one instruction file. Saving AGENTS.md when there is no CLAUDE.md also creates a CLAUDE.md that imports it,
+   * so Claude follows the same rules.
+   */
+  "project.saveInstructions": { params: { projectId: string; name: InstructionFile; text: string }; result: { created: string[] } };
   /**
    * One project file to read in the side panel, at most 1 MB of it. `text` is missing for binary files and for files
    * too large to show.
