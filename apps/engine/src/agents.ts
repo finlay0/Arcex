@@ -239,7 +239,8 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
       agent.request("initialize", {
         protocolVersion: acp.PROTOCOL_VERSION,
         // Arcex answers form questions (question cards). It doesn't take URL ones.
-        clientCapabilities: { elicitation: { form: {} } },
+        // Compaction and notices arrive as their own updates, shown as plain notes, instead of a made-up tool call.
+        clientCapabilities: { elicitation: { form: {} }, session: { compaction: {}, notices: {} } },
         clientInfo: { name: "arcex", title: "Arcex", version: "0.1.0" },
       }),
     );

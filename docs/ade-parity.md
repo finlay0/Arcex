@@ -88,7 +88,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C15 | Side question | Ask a quick question beside the thread without derailing the running turn (T3 `useSideChat`, `SideThreadPane`) | P2 | open | |
 | C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | open | |
 | C17 | Rich media in replies | Mermaid diagrams, math, zoomable images, rendered HTML preview (T3 `MermaidDiagram`, `MathTypeset`, `HtmlRenderDialog`) | P2 | open | Pairs with C8 |
-| C18 | Context compaction | Summarise a long thread to free context, by hand or automatically (Claude `/compact`, T3 `compaction.logic`) | P1 | open | Check what each ACP adapter exposes first |
+| C18 | Context compaction | Summarise a long thread to free context, by hand or automatically (Claude `/compact`, T3 `compaction.logic`) | P1 | done | Arcex advertises ACP `session.compaction` (and `notices`), so a compaction shows as a plain note, "Summarising older messages…" then "Summarised older messages to free up the agent's memory", instead of a fake tool call. By hand: click the context meter (K9) and confirm, which sends the agent's own `/compact` (only offered when the agent lists that command). Agent notices show as notes too. Verified November 21 with Claude Haiku. Codex's own compaction not yet seen |
 | C19 | Timeline minimap | A strip beside long threads to jump to any turn (T3 `TimelineMinimap`) | P2 | open | |
 
 ### Composer
@@ -218,6 +218,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · C10 rewind the conversation and files to before any message.
 - 2026-11-21 · P2 file viewer in the side panel.
 - 2026-11-21 · K9 context meter by the message box.
+- 2026-11-21 · C18 compaction notes, and summarise on request from the meter.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -239,7 +240,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-4. Then the P1 items: P3 opt-in terminal, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+4. Then the P1 items: P3 opt-in terminal, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

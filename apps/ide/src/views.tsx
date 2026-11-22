@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, Requests, Thread } from "@arcex/contracts";
-import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
+import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
@@ -720,7 +720,7 @@ export function Conversation(props: {
         />
         <span className="fill" />
         <span className="ends">
-        {thread?.context && <ContextMeter context={thread.context} />}
+        {thread?.context && <ContextMeter thread={thread} compact={() => void actions.prompt(thread.id, "/compact").catch(actions.fail)} />}
         <Dictation onText={addSpoken} fail={actions.fail} disabled={!props.connected} />
         {working ? (
           <button className="send" aria-label={thread.state === "stopping" ? "Stopping" : "Stop"} title="Stop" disabled={!props.connected || thread.state === "stopping"} onClick={() => void actions.cancel(thread.id)}>
@@ -1112,20 +1112,40 @@ function FileView({ project, path, refresh, back }: { project: Project; path: st
 }
 
 /** How full the agent's context window is: a small ring by the message box, with the numbers on hover. */
-function ContextMeter({ context }: { context: { used: number; size: number } }) {
+function ContextMeter({ thread, compact }: { thread: Thread; compact(): void }) {
+  const context = thread.context!;
   const share = Math.min(1, context.used / context.size);
   const percent = Math.round(share * 100);
   const tokens = (count: number) => (count >= 1_000_000 ? `${Math.round(count / 100_000) / 10}M` : count >= 1000 ? `${Math.round(count / 1000)}k` : String(count));
-  const label = `${percent}% of the agent's memory for this thread used (${tokens(context.used)} of ${tokens(context.size)} tokens).${percent >= 80 ? " It will start summarising older messages soon; a new thread starts clean." : ""}`;
+  // Agents with a "compact" command can summarise on request; the meter offers it.
+  const canCompact = useAgentCommands(thread.provider).some((command) => command.name === "compact") && !busy(thread);
+  const [asking, setAsking] = useState(false);
+  const label = `${percent}% of the agent's memory for this thread used (${tokens(context.used)} of ${tokens(context.size)} tokens).${percent >= 80 ? " It will start summarising older messages soon; a new thread starts clean." : ""}${canCompact ? " Click to summarise older messages now." : ""}`;
   const r = 7;
   const length = 2 * Math.PI * r;
-  return (
-    <span className={percent >= 80 ? "ctxmeter high" : "ctxmeter"} role="img" aria-label={label} title={label}>
+  const ring = (
+    <>
       <svg viewBox="0 0 18 18" aria-hidden="true">
         <circle cx="9" cy="9" r={r} className="track" />
         <circle cx="9" cy="9" r={r} className="fillring" strokeDasharray={`${share * length} ${length}`} transform="rotate(-90 9 9)" />
       </svg>
       {percent >= 50 && <span className="ctxpct">{percent}%</span>}
+    </>
+  );
+  const className = percent >= 80 ? "ctxmeter high" : "ctxmeter";
+  if (!canCompact) return <span className={className} role="img" aria-label={label} title={label}>{ring}</span>;
+  return (
+    <span className="ctxwrap">
+      <button className={className} aria-label={label} title={label} aria-expanded={asking} onClick={() => setAsking(!asking)}>{ring}</button>
+      {asking && (
+        <div className="ctxpop" role="dialog" aria-label="Summarise older messages">
+          <p>Summarise older messages now? The agent keeps a short summary and frees up memory, so early details may need repeating.</p>
+          <div className="btns">
+            <button className="btn primary" autoFocus onClick={() => { setAsking(false); compact(); }}>Summarise</button>
+            <button className="btn" onClick={() => setAsking(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </span>
   );
 }

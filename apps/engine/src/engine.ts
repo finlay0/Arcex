@@ -37,6 +37,8 @@ type Live = {
   think: { item: Think; started: number } | null;
   plan: Extract<Item, { kind: "plan" }> | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
+  /** Notes for the agent summarising older messages, by the agent's compaction id. */
+  compactions: Map<string, Item & { kind: "note" }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
   /** The agent's questions waiting on the user, with the form they came in. */
   questions: Map<string, { item: QuestionItem; schema: Parameters<typeof questionsOf>[0]; resolve(response: acp.CreateElicitationResponse): void }>;
@@ -300,7 +302,7 @@ export function createEngine(
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
-    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), asks: new Map(), questions: new Map() }));
+    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), compactions: new Map(), asks: new Map(), questions: new Map() }));
     return live;
   };
   const projectOf = (id: unknown): Project => {
@@ -360,6 +362,31 @@ export function createEngine(
       return;
     }
     if (!live?.turn) return;
+    if (update.sessionUpdate === "compaction_update") {
+      // The agent summarises older messages when its context fills up, or when asked with /compact.
+      const id = String(update.compactionId).slice(0, 200);
+      let note = live.compactions.get(id);
+      if (!note) {
+        if (live.compactions.size > 50) live.compactions.clear();
+        live.compactions.set(id, (note = { id: randomUUID(), kind: "note", text: "" }));
+      }
+      const error = typeof update.error === "string" ? update.error.slice(0, 300) : "";
+      note.text = update.status === "completed" ? "Summarised older messages to free up the agent's memory. Details from early in the thread may need repeating."
+        : update.status === "failed" ? `Couldn't summarise older messages${error ? `: ${error}` : "."}`
+        : update.status === "cancelled" ? "Stopped summarising older messages."
+        : "Summarising older messages to free up the agent's memory…";
+      endSay(thread);
+      put(thread, { ...note });
+      return;
+    }
+    if (update.sessionUpdate === "notice") {
+      const title = String(update.title ?? "").trim().slice(0, 200);
+      const description = String(update.description ?? "").trim().slice(0, 600);
+      if (!title && !description) return;
+      endSay(thread);
+      put(thread, { id: randomUUID(), kind: "note", text: [title, description].filter(Boolean).join(": ") });
+      return;
+    }
     if (update.sessionUpdate === "agent_thought_chunk") {
       if (update.content.type !== "text") return;
       if (live.say) endSay(thread);

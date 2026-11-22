@@ -594,3 +594,8 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .ctxmeter .fillring { stroke: var(--ink-3); stroke-linecap: round; }
 .ctxmeter.high .fillring { stroke: var(--ink); }
 .ctxmeter.high { color: var(--ink-2); }
+.ctxwrap { position: relative; display: inline-flex; }
+button.ctxmeter { border-radius: 9px; }
+button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+.ctxpop { position: absolute; bottom: calc(100% + 8px); right: -40px; width: 280px; padding: 12px 14px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--raised); box-shadow: 0 12px 32px rgb(0 0 0 / .35); display: grid; gap: 10px; font-size: 14px; z-index: 20; }
+.ctxpop .btns { display: flex; gap: 8px; }
