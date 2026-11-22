@@ -47,6 +47,30 @@ function launchOf(agentId: string, settings: Settings): Launch {
   return { command, args: [], shell: true };
 }
 
+/** A way an agent offers to sign in that Arcex can start without handling any secret, such as "Log in with Google". */
+export type SignInMethod = { id: string; name: string };
+
+/** The agent is installed but wants the user to sign in before it opens a session. */
+export class SignInNeeded extends Error {
+  constructor(readonly methods: SignInMethod[]) {
+    super("needs you to sign in");
+  }
+}
+
+/** Sign-in methods that open the maker's own sign-in. Ones that take an API key or a gateway are left to the maker's tool. */
+function interactiveMethods(methods: acp.AuthMethod[] | null | undefined): SignInMethod[] {
+  return (methods ?? [])
+    .filter((method) => {
+      const meta = (method as { _meta?: Record<string, unknown> | null })._meta ?? {};
+      return !("api-key" in meta) && !("gateway" in meta) && !/api.?key|vertex|gateway|token/i.test(`${method.id} ${method.name}`);
+    })
+    .slice(0, 5)
+    .map((method) => ({ id: String(method.id).slice(0, 80), name: String(method.name).slice(0, 80) }));
+}
+
+/** How agents say "sign in first": the ACP auth_required error, or wording about a missing key or login. */
+const AUTH_FAILURE = /auth|api key|sign.?in|log.?in|credential|unauthori[sz]ed/i;
+
 export type Models = { options: ModelOption[]; current: string | null; choices: AgentChoice[]; commands: SlashCommand[] };
 
 function commandsOf(list: acp.AvailableCommand[]): SlashCommand[] {
@@ -217,7 +241,15 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
       signal.throwIfAborted();
       // Claude keeps its task tools behind ToolSearch, so smaller models rarely find them. Arcex shows the task list
       // as the plan above the message box, so it asks for one. Other agents ignore this field.
-      const created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, _meta: { systemPrompt: { append: PLAN_NOTE } } }));
+      let created: acp.NewSessionResponse;
+      try {
+        created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, _meta: { systemPrompt: { append: PLAN_NOTE } } }));
+      } catch (error) {
+        const code = error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : null;
+        const message = error instanceof Error ? error.message : String(error);
+        if (code === -32000 || AUTH_FAILURE.test(message)) throw new SignInNeeded(interactiveMethods(init.authMethods));
+        throw error;
+      }
       sessionId = created.sessionId;
       models = modelsOf(created);
       choices = choicesOf(created);
@@ -294,6 +326,39 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     throw error;
   } finally {
     signal.removeEventListener("abort", onAbort);
+  }
+}
+
+/**
+ * Starts the agent's own sign-in, such as Gemini's "Log in with Google", which opens the browser. The agent keeps
+ * whatever it receives. Arcex only waits for it to say it is done, for up to five minutes.
+ */
+export async function signIn(agentId: string, settings: Settings, cwd: string, methodId: string): Promise<void> {
+  const launch = launchOf(agentId, settings);
+  const child = spawn(launch.command, launch.args, { cwd, env: process.env, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
+  const connection = acp.client().connect(acp.ndJsonStream(
+    Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
+    Readable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
+  ));
+  child.stderr!.resume();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const exited = new Promise<never>((_, reject) => child.once("exit", (code) => reject(new Error(`the agent stopped (${code})`))));
+  const limit = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("sign-in took longer than five minutes")), 300_000)));
+  try {
+    const init = await Promise.race([
+      connection.agent.request("initialize", { protocolVersion: acp.PROTOCOL_VERSION, clientCapabilities: {}, clientInfo: { name: "arcex", title: "Arcex", version: "0.1.0" } }),
+      exited, limit,
+    ]);
+    if (!interactiveMethods(init.authMethods).some((method) => method.id === methodId)) throw new Error("the agent doesn't offer that sign-in");
+    await Promise.race([connection.agent.request("authenticate", { methodId }), exited, limit]);
+  } finally {
+    clearTimeout(timer);
+    connection.close();
+    child.stdin?.destroy();
+    if (child.exitCode === null) {
+      if (process.platform === "win32" && child.pid) execFile(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"), ["/pid", String(child.pid), "/t", "/f"], { windowsHide: true }, () => {});
+      else child.kill();
+    }
   }
 }
 

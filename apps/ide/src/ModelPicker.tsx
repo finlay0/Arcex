@@ -286,7 +286,10 @@ export function AgentChoices(props: { agentId: string; value: Record<string, str
   const mode = choices.find((choice) => choice.category === "mode");
   const effort = choices.find((choice) => choice.category === "thought_level");
   // A mode with a plan value becomes a plan-first switch: on is "plan", off is full access (the engine enforces it).
-  const fullValue = mode?.values.find((entry) => /bypass|full|yolo/i.test(entry.value))?.value ?? mode?.values.at(-1)?.value;
+  // The same rule as the engine: a mode named for full access, else the first that is not a narrower one.
+  const fullValue = (mode?.values.find((entry) => /bypass|full|yolo/i.test(entry.value))
+    ?? mode?.values.find((entry) => !/plan|read|ask|manual|default|accept|review/i.test(entry.value))
+    ?? mode?.values[0])?.value;
   const planMode: AgentChoice | null = mode && fullValue && mode.values.some((entry) => entry.value === "plan")
     ? { ...mode, category: "collaboration_mode", values: mode.values.filter((entry) => entry.value === "plan" || entry.value === fullValue), current: mode.current === "plan" ? "plan" : fullValue }
     : null;

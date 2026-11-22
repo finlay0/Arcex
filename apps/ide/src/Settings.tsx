@@ -269,6 +269,7 @@ const setupGuides: Record<string, string> = {
 function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; fail(error: unknown): void }) {
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [command, setCommand] = useState("");
   const check = () => {
@@ -326,8 +327,31 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
                 }}>Open setup guide <Icon name="out" /></button>
               </Row>
             )}
+            {state && state.installed && state.signedIn === false && (state.signInMethods?.length ?? 0) > 0 && (
+              <Row
+                title="Sign in"
+                hint={signingIn === agent.id ? `Finish signing in to ${agent.name} in your browser. This updates by itself when you're done.` : `${agent.name} handles the sign-in and keeps it. Arcex never sees it.`}
+              >
+                {state.signInMethods!.map((method) => (
+                  <button
+                    key={method.id}
+                    className="btn"
+                    disabled={signingIn !== null}
+                    onClick={() => {
+                      setSigningIn(agent.id);
+                      call("agents.signIn", { agentId: agent.id, methodId: method.id })
+                        .then(check)
+                        .catch(fail)
+                        .finally(() => setSigningIn(null));
+                    }}
+                  >
+                    {signingIn === agent.id ? "Waiting for your browser…" : method.name}
+                  </button>
+                ))}
+              </Row>
+            )}
             {state && agent.builtin && state.installed && state.signedIn === false && state.signInCommand && (
-              <Row title="Sign in" hint="Run this in a terminal, finish in your browser, then check again.">
+              <Row title={(state.signInMethods?.length ?? 0) > 0 ? "Or sign in from a terminal" : "Sign in"} hint="Run this in a terminal, finish in your browser, then check again.">
                 <button
                   className="btn mono"
                   onClick={() => {

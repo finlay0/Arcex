@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
 import type { About, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
-import { BUILTIN, agentList, listModels, startSession, type AgentSession, type Models } from "./agents.ts";
+import { BUILTIN, SignInNeeded, agentList, listModels, signIn, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
 import { providerStatus } from "./providers.ts";
@@ -55,6 +55,8 @@ function usageLimit(text: string): string | null {
 
 /** Mode values that mean the agent acts without asking: Claude "bypassPermissions", Codex "agent-full-access", Gemini "yolo". */
 const FULL_ACCESS = /bypass|full|yolo/i;
+/** Modes that hold the agent back: planning only, reading only, or asking first. */
+const NARROW_MODE = /plan|read|ask|manual|default|accept|review/i;
 
 /**
  * The choices on an approval card. For a plan, only going ahead in full access or keeping on planning are offered,
@@ -219,7 +221,10 @@ export function createEngine(
     const mode = session.choices.find((entry) => entry.category === "mode");
     if (!mode) return null;
     if (wanted === "plan" && mode.values.some((entry) => entry.value === "plan")) return { id: mode.id, value: "plan" };
-    const full = mode.values.find((entry) => FULL_ACCESS.test(entry.value)) ?? mode.values.at(-1);
+    // No mode named for full access (OpenCode has "build" and "plan"): take the first that is not a narrower one.
+    const full = mode.values.find((entry) => FULL_ACCESS.test(entry.value))
+      ?? mode.values.find((entry) => !NARROW_MODE.test(entry.value))
+      ?? mode.values[0];
     return full ? { id: mode.id, value: full.value } : null;
   }
 
@@ -514,7 +519,7 @@ export function createEngine(
         const limit = usageLimit(said);
         const friendly = limit !== null
           ? `${nameOf(thread.provider)} has reached its usage limit${limit ? ` until ${limit}` : ""}. Try again then, or switch to another agent or model for this thread.`
-          : /auth|sign.in required/i.test(message)
+          : error instanceof SignInNeeded || /auth|sign.in required/i.test(message)
           ? `${nameOf(thread.provider)} needs you to sign in. Open Agents to set it up, then retry your message.`
           : `${nameOf(thread.provider)} couldn't finish: ${message.slice(0, 400)}`;
         put(thread, { id: randomUUID(), kind: "error", text: friendly });
@@ -623,7 +628,27 @@ export function createEngine(
       return settings;
     },
 
-    "providers.status": () => providerStatus(settings),
+    "providers.status": () =>
+      providerStatus(settings, async (agentId) => {
+        // An agent that opened a session before is signed in. Otherwise open one now, which also fills the model list.
+        if (modelCache.has(agentId)) return { signedIn: true, methods: [] };
+        try {
+          modelCache.set(agentId, await listModels(agentId, settings, about.dataDir));
+          return { signedIn: true, methods: [] };
+        } catch (error) {
+          if (error instanceof SignInNeeded) return { signedIn: false, methods: error.methods };
+          return { signedIn: null, methods: [] };
+        }
+      }),
+
+    async "agents.signIn"(params) {
+      const agentId = text(params.agentId, "agent", 80);
+      const methodId = text(params.methodId, "sign-in", 80);
+      if (!agentList(settings).some((agent) => agent.id === agentId)) throw new Error("unknown agent");
+      await signIn(agentId, settings, about.dataDir, methodId);
+      modelCache.delete(agentId);
+      return { ok: true };
+    },
     "toolbox.list": () => TOOLBOX,
 
     async "project.create"(params) {
