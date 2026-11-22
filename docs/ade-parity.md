@@ -23,6 +23,8 @@ Rules that still apply (from AGENTS.md and Finlay's standing decisions):
 | Codex app | Closed source. The Codex CLI and TUI are Apache-2.0: `git clone --depth 1 --filter=blob:none --sparse https://github.com/openai/codex` then `git -c core.longpaths=true sparse-checkout set codex-rs/tui/src codex-rs/core`. | Approval modes, question cards, voice strip, status line, slash commands, review mode, AGENTS.md handling, prompts |
 | T3 Code | MIT. `git -c core.longpaths=true clone --depth 1 https://github.com/pingdotgg/t3code`. Clone into a scratch folder, never into this repo. | How a full ADE is wired: `apps/web/src/components/chat` (composer, timeline, work groups, approvals, plan card, queue, rewind, find), `diffs`, `files`, `settings`, `apps/server/src/speech` (local dictation via `transcribe-cpp`) |
 
+Study log: November 21, 2026, a pass over T3 Code `apps/web/src/components` (including `chat`) and the Codex TUI `codex-rs/tui/src` (including `bottom_pane`) added C15 to C19, K11 to K14, A3, A4, G7, G8, P6, S6 to S10, H6 to H10, X4 and X5. Repeat a pass like this whenever the "Next up" list runs short, and log it here.
+
 ## Handoff: start here
 
 State on November 21, 2026, at commit `5b850fb` on `main`. Everything listed as done is pushed. The working tree is clean apart from `.claude/` and `branding-concepts/`, which stay untracked on purpose.
@@ -81,6 +83,11 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C12 | Turn outcome and elapsed time | "Worked for 2m 14s", failed or stopped badge | P1 | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" |
 | C13 | Subagents | Rows for subagents working, with their progress | P2 | open | |
 | C14 | Wrap-up / next-step box | Recap plus buttons (commit, PR, verify) at the end of a turn | P1 | open | Arcex version: summary plus Commit, Open preview and Undo |
+| C15 | Side question | Ask a quick question beside the thread without derailing the running turn (T3 `useSideChat`, `SideThreadPane`) | P2 | open | |
+| C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | open | |
+| C17 | Rich media in replies | Mermaid diagrams, math, zoomable images, rendered HTML preview (T3 `MermaidDiagram`, `MathTypeset`, `HtmlRenderDialog`) | P2 | open | Pairs with C8 |
+| C18 | Context compaction | Summarise a long thread to free context, by hand or automatically (Claude `/compact`, T3 `compaction.logic`) | P1 | open | Check what each ACP adapter exposes first |
+| C19 | Timeline minimap | A strip beside long threads to jump to any turn (T3 `TimelineMinimap`) | P2 | open | |
 
 ### Composer
 
@@ -96,13 +103,20 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | open | |
 | K9 | Context and usage meter | Context % used, plan usage limits | P1 | open | ACP `usage_update` |
 | K10 | Stop and steer | Stop. Sending while working steers or queues | P0 | partial | Stop exists, and sending while working queues (K5). Steering (inject into the running turn) is missing |
+| K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | open | |
+| K12 | Suggested next prompts | One-click follow-ups after a turn (T3 `usePromptSuggestion`, Claude next-step buttons) | P1 | decide | Generating them spends usage. Ask Finlay (background intelligence rule) |
+| K13 | Expand an attached image | Click a thumbnail to see it full size (T3 `ExpandedImageDialog`) | P2 | open | K2 follow-up |
+| K14 | Send to several models | Run one prompt on two agents or models side by side (T3 `useMultipleModelSend`) | P2 | open | |
 
 ### Approvals and safety
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | A1 | Approval cards | Allow once, Always allow, Deny, with the exact command or diff | P0 | partial | Docked above the composer and shows the diff, command or plan as `body`. Still to verify with real Claude in Manual mode and Codex in Read-only |
-| A2 | Plan mode approval | Agent proposes a plan, the user approves, then it executes | P0 | done | Claude `ExitPlanMode` arrives as a permission request with `rawInput.plan`; the card reads "Here's the plan. Go ahead?" with Claude's own options. Verified: approving into Auto moves the mode chip to Auto |
+| A2 | Plan mode approval |
+ Agent proposes a plan, the user approves, then it executes | P0 | done | Claude `ExitPlanMode` arrives as a permission request with `rawInput.plan`; the card reads "Here's the plan. Go ahead?" with Claude's own options. Verified: approving into Auto moves the mode chip to Auto |
+| A3 | MCP input requests | Forms an MCP server asks the user to fill in mid-turn (Codex `mcp_server_elicitation`) | P2 | open | |
+| A4 | Approvals across threads | One place listing every thread waiting on the user (Codex `pending_thread_approvals`, Claude "needs you") | P1 | open | Pairs with S1 |
 
 ### Review, git and shipping
 
@@ -114,6 +128,8 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
 | G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | open | Pairs with C10 |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | open | Desktop `shell.openPath` |
+| G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | open | |
+| G8 | Start from a pull request | Open a thread on a PR, with its description and diff as context (T3 `PullRequestThreadDialog`) | P2 | open | Hidden by default |
 
 ### Panes and layout
 
@@ -124,6 +140,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | P3 | Terminal pane (opt-in) | A real shell per project, hidden by default | P1 | open | node-pty or ConPTY in the engine. Opt-in only |
 | P4 | Resizable and expandable panels | Drag to resize, expand a pane, split view | P1 | open | Audit: widths compete at 1100 px |
 | P5 | Tasks / background processes pane | Running background commands with timers | P2 | open | |
+| P6 | Project scripts as buttons | Run dev, test or build with one click, from package.json or the user's own list (T3 `ProjectScriptsControl`) | P1 | open | Ties into P1 starting the dev server |
 
 ### Sidebar and sessions
 
@@ -134,6 +151,11 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | S3 | Search threads | Search titles and transcripts | P1 | partial | Titles only |
 | S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | partial | Exists. Audit says failures can read "Finished" |
 | S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | partial | |
+| S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | partial | Ctrl+K finds active thread titles today. Add actions, projects and settings |
+| S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
+| S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | open | |
+| S9 | Parallel sessions with linked status | Start a side session for separate work and see its state from the parent (Claude side sessions) | P2 | open | Depends on G4 |
+| S10 | Follow from another device | Watch and answer a thread from a phone (Claude Remote Control, T3 device pairing) | P2 | decide | Large. Ask Finlay |
 
 ### Agent harness and instructions
 
@@ -144,6 +166,11 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | H3 | MCP connectors | Add MCP servers per project or globally | P1 | partial | Toolbox plus the Arcex connector |
 | H4 | Model list per agent | Live models from each agent | P0 | done | `agents.models` |
 | H5 | Session resume across restarts | Reopen a thread and continue the same agent session | P0 | done | `session/load` |
+| H6 | Skills and hooks manager | See, turn on or off and add skills and hooks per project (Codex `skills_toggle_view`, `hooks_browser`) | P1 | open | |
+| H7 | Agent memory | View and edit what the agent remembers across sessions (Codex `memories_settings_view`, Claude memory) | P2 | open | |
+| H8 | Extra folders | Let a thread read and write a second folder (Codex `additional_dirs`, Claude added directories) | P2 | open | |
+| H9 | Agent CLI updates | Notice when Claude or Codex has an update and offer it (T3 `ProviderUpdatesAction`) | P1 | open | |
+| H10 | Scheduled and recurring runs | Run a prompt on a schedule (Claude routines and `/loop`, T3 `ThreadAutomationsPanel`) | P2 | decide | Spends usage unattended. Ask Finlay |
 
 ### Settings and polish
 
@@ -152,11 +179,14 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | X1 | Settings sections | General, Agents, Voice, Notifications, Shortcuts, Projects, Archived, About | P1 | partial | |
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
 | X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | open | See `ade-ux-audit-2026-11-17.md` |
+| X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
+| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | open | Pairs with K9 |
 
 ## Work log
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
 - 2026-11-21 · K3 @-mention project files: fuzzy picker in the message box; mentioned text files go to the agent in full.
 - 2026-11-21 · K2 image and file attachments: paste, drop or pick files; thumbnails in the box and the thread; queued messages keep them.
 - 2026-11-21 · K4 slash command menu in the message box, from the agent's reported commands.
@@ -176,9 +206,9 @@ Work these in order unless Finlay redirects:
 2. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
 3. C5 thinking stream, then remember K6 and K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
-5. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions.
+5. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
-G4 (worktree per thread) needs Finlay's decision before any work.
+G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
 ## How to verify a change
 
