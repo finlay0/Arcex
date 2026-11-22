@@ -1107,6 +1107,22 @@ export function createEngine(
       return { ok: true };
     },
 
+    "thread.search"(params) {
+      const query = text(params.query, "search", 200).trim();
+      if (query.length < 2) return [];
+      const found = new Map<string, string>();
+      for (const row of db.searchItems(query, 400)) {
+        if (found.has(row.threadId) || !threads.has(row.threadId)) continue;
+        // A short window around the first match, on one line.
+        const at = row.text.toLowerCase().indexOf(query.toLowerCase());
+        const start = Math.max(0, at - 40);
+        const snippet = `${start > 0 ? "…" : ""}${row.text.slice(start, at + query.length + 60).replace(/\s+/g, " ").trim()}${at + query.length + 60 < row.text.length ? "…" : ""}`;
+        found.set(row.threadId, snippet);
+        if (found.size >= 30) break;
+      }
+      return [...found].map(([threadId, snippet]) => ({ threadId, snippet }));
+    },
+
     "thread.items"(params) {
       const thread = threadOf(params.threadId);
       const items = db.items(thread.id);

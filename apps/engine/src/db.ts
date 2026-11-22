@@ -120,6 +120,19 @@ export function openDb(dataDir: string) {
     items: (threadId: string) =>
       db.prepare("SELECT json FROM items WHERE thread_id = ? ORDER BY seq").all(threadId)
         .map((row) => JSON.parse(row.json as string) as Item),
+    /** Messages (the user's and the agent's) whose text contains `needle`, newest threads first. */
+    searchItems(needle: string, limit: number) {
+      // "!" escapes LIKE's own wildcards, so a search for "50%" means those characters.
+      const pattern = `%${needle.replace(/[!%_]/g, (char) => `!${char}`)}%`;
+      return db
+        .prepare(
+          `SELECT items.thread_id AS threadId, json_extract(items.json, '$.text') AS text FROM items JOIN threads ON threads.id = items.thread_id
+           WHERE json_extract(items.json, '$.kind') IN ('user', 'say') AND json_extract(items.json, '$.text') LIKE ? ESCAPE '!'
+           ORDER BY threads.updated_at DESC, items.seq LIMIT ?`,
+        )
+        .all(pattern, limit)
+        .map((row) => ({ threadId: row.threadId as string, text: String(row.text ?? "") }));
+    },
     /** Removes one item and everything after it in the thread. */
     dropItemsFrom(threadId: string, itemId: string) {
       db.prepare("DELETE FROM items WHERE thread_id = ? AND seq >= (SELECT seq FROM items WHERE thread_id = ? AND id = ?)").run(threadId, threadId, itemId);

@@ -284,6 +284,8 @@ export type Requests = {
   "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[] }; result: Thread };
   "thread.update": { params: { threadId: string; title?: string; archived?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
+  /** Threads whose messages contain `query`, with a snippet around the first match. */
+  "thread.search": { params: { query: string }; result: { threadId: string; snippet: string }[] };
   "thread.items": { params: { threadId: string }; result: Item[] };
   "thread.prompt": { params: { threadId: string; text: string; attachments?: string[]; /** While the agent works, add it to the queue instead. */ queue?: boolean }; result: { ok: true; queued?: boolean } };
   /** Takes a message out of the queue, returning it so the client can put it back in the message box. */

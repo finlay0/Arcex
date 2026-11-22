@@ -6,6 +6,7 @@ import { Icon, Menu, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, 
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
+import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
@@ -83,6 +84,7 @@ export function App() {
   const [query, setQuery] = useState("");
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [palette, setPalette] = useState(false);
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   // The last agent, model and options picked for a new thread, kept across restarts like the other apps do.
   const [choice, setChoiceState] = useState<Choice | null>(() => {
@@ -104,7 +106,6 @@ export function App() {
   // Text placed in the new-thread box by another screen, such as the toolbox.
   const [seed, setSeed] = useState("");
   const [unassignedDraft, setUnassignedDraft] = useState("");
-  const search = useRef<HTMLInputElement>(null);
 
   const overlay = screen.kind === "settings" || screen.kind === "toolbox";
   // When an agent uses the browser of the project on screen, show it so the user can watch.
@@ -202,16 +203,14 @@ export function App() {
   detailsDefault.current = settings?.showDetails ?? true;
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && overlayRef.current && !document.querySelector(".mpop, .menu")) return backRef.current();
+      if (event.key === "Escape" && overlayRef.current && !document.querySelector(".mpop, .menu, .palette")) return backRef.current();
       if (!event.ctrlKey && !event.metaKey) return;
       if (event.key === "b") setSidebar((open) => !open);
       else if (event.key === "j") setPanel((open) => !(open ?? detailsDefault.current));
       else if (event.key === "n") screenRef.current({ kind: "thread", threadId: null });
       else if (event.key === ",") screenRef.current({ kind: "settings", section: "general" });
-      else if (event.key === "k") {
-        setSidebar(true);
-        setTimeout(() => search.current?.focus());
-      } else return;
+      else if (event.key === "k") setPalette((open) => !open);
+      else return;
       event.preventDefault();
     };
     window.addEventListener("keydown", onKey);
@@ -280,6 +279,48 @@ export function App() {
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
   ];
 
+  // Everything Ctrl+K can reach. Threads waiting on the user come first, so one place lists them all.
+  const projectName = (id: string) => store.projects.find((p) => p.id === id)?.name ?? "";
+  const threadEntry = (t: Thread, group: string, hint?: string): PaletteEntry => ({
+    id: `thread:${t.id}`,
+    group,
+    label: t.title,
+    hint: hint ?? [projectName(t.projectId), stateLabel(t)].filter(Boolean).join(" · "),
+    icon: "chat",
+    run: () => openThread(t),
+  });
+  const paletteEntries = (): PaletteEntry[] => {
+    const byRecent = [...live].sort((a, b) => b.updatedAt - a.updatedAt);
+    const waiting = byRecent.filter((t) => t.state === "needs_you");
+    const settingsAt = (section: Section, label: string, icon = "gear"): PaletteEntry => ({ id: `settings:${section}`, group: "Settings", label, icon, run: () => setScreen({ kind: "settings", section }) });
+    return [
+      ...waiting.map((t) => threadEntry(t, "Needs you")),
+      { id: "new-thread", group: "Actions", label: "New thread", icon: "plus", keys: "Ctrl N", run: () => newThreadIn(project?.id ?? null) },
+      { id: "new-project", group: "Actions", label: "New project", icon: "folder", run: () => setScreen({ kind: "new-project" }) },
+      ...(project ? [{ id: "review", group: "Actions", label: `Review unsaved changes in ${project.name}`, icon: "search", run: () => void startThread(REVIEW_PROMPT).catch(fail) }] : []),
+      { id: "sidebar", group: "Actions", label: sidebar ? "Hide sidebar" : "Show sidebar", icon: "sidebar", keys: "Ctrl B", run: () => setSidebar(!sidebar) },
+      ...(project ? [
+        { id: "details", group: "Actions", label: panelOpen && tab === "details" ? "Hide details panel" : "Show details panel", icon: "panel", keys: "Ctrl J", run: () => { setPanel(!(panelOpen && tab === "details")); setTab("details"); } },
+        { id: "browser", group: "Actions", label: "Show the project's browser", icon: "globe", run: () => { setPanel(true); setTab("browser"); } },
+      ] : []),
+      { id: "toolbox", group: "Actions", label: "Open the toolbox", icon: "box", run: () => setScreen({ kind: "toolbox" }) },
+      ...(["dark", "light", "system"] as const).filter((value) => value !== settings?.theme).map((value) => ({
+        id: `theme:${value}`, group: "Actions", label: value === "system" ? "Match the system theme" : `Switch to ${value} theme`, icon: value === "light" ? "sun" : "moon",
+        run: () => void call("settings.set", { theme: value }).catch(fail),
+      })),
+      ...byRecent.filter((t) => t.state !== "needs_you").map((t) => threadEntry(t, "Threads")),
+      ...store.projects.map((p) => ({ id: `project:${p.id}`, group: "Projects", label: p.name, hint: "New thread here", icon: "folder", run: () => newThreadIn(p.id) })),
+      settingsAt("general", "General settings", "gear"),
+      settingsAt("agents", "Agents and sign-in", "layers"),
+      settingsAt("appearance", "Appearance", "sun"),
+      settingsAt("projects", "Projects and instructions for agents", "folder"),
+      settingsAt("archived", "Archived threads", "box"),
+      settingsAt("shortcuts", "Keyboard shortcuts", "sliders"),
+      settingsAt("profile", "Profile and account", "chat"),
+      settingsAt("about", "About Arcex", "spark"),
+    ];
+  };
+
   // A dropped engine is reconnected on its own. A brief drop shows a small note; only a long one asks for attention.
   const connectionNotice = store.status === "lost"
     ? <div className="connection problem" role="status"><span className="dot needs" />Still reconnecting to the Arcex engine. Your work is saved. <button className="btn" onClick={() => void reconnect().catch(fail)}>Try now</button></div>
@@ -311,17 +352,9 @@ export function App() {
           <button className="row" aria-current={view.kind === "settings" && view.section !== "agents"} onClick={() => setScreen({ kind: "settings", section: "general" })}>
             <Icon name="gear" /> Settings
           </button>
-          <label className="row find">
-            <Icon name="search" />
-            <input ref={search} value={query} placeholder="Find active thread titles" aria-label="Find active thread titles" onChange={(event) => setQuery(event.target.value)} />
-            {query ? (
-              <button className="icon" aria-label="Clear" onClick={() => setQuery("")}>
-                <Icon name="x" />
-              </button>
-            ) : (
-              <kbd>Ctrl K</kbd>
-            )}
-          </label>
+          <button className="row" onClick={() => setPalette(true)}>
+            <Icon name="search" /> Search <kbd>Ctrl K</kbd>
+          </button>
         </nav>
         <div className="tree">
           <div className="label heading">
@@ -543,6 +576,16 @@ export function App() {
         </div>
       </section>
 
+      {palette && (
+        <Palette
+          entries={paletteEntries()}
+          threadEntry={(id, snippet) => {
+            const t = live.find((entry) => entry.id === id);
+            return t ? threadEntry(t, "In messages", snippet) : null;
+          }}
+          close={() => setPalette(false)}
+        />
+      )}
       {toast && <div className="toast" role="alert">{toast}</div>}
     </div>
   );

@@ -307,7 +307,7 @@ export function SettingsView(props: {
                   ["New thread", "Ctrl N"],
                   ["Show or hide the sidebar", "Ctrl B"],
                   ["Show or hide the details panel", "Ctrl J"],
-                  ["Find a thread", "Ctrl K"],
+                  ["Search threads, messages, settings and actions", "Ctrl K"],
                   ["Settings", "Ctrl ,"],
                   ["Back from Settings or the Toolbox", "Esc"],
                   ["Send a message", settings.sendWith === "enter" ? "Enter" : "Ctrl Enter"],

@@ -118,7 +118,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | A2 | Plan mode approval |
  Agent proposes a plan, the user approves, then it executes | P0 | done | Claude `ExitPlanMode` arrives as a permission request with `rawInput.plan`; the card reads "Here's the plan. Go ahead?" with Claude's own options. Verified: approving into Auto moves the mode chip to Auto |
 | A3 | MCP input requests | Forms an MCP server asks the user to fill in mid-turn (Codex `mcp_server_elicitation`) | P2 | open | |
-| A4 | Approvals across threads | One place listing every thread waiting on the user (Codex `pending_thread_approvals`, Claude "needs you") | P1 | open | Pairs with S1 |
+| A4 | Approvals across threads | One place listing every thread waiting on the user (Codex `pending_thread_approvals`, Claude "needs you") | P1 | done | Threads waiting on you are the first group, "Needs you", in Ctrl+K, as well as the sidebar dots (S1). Not yet seen with a real waiting thread, since full access makes them rare |
 
 ### Review, git and shipping
 
@@ -150,10 +150,10 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | --- | --- | --- | --- | --- | --- |
 | S1 | Thread status in sidebar | Spinner while working, dot when unread, needs-you badge | P0 | done | Working, needs-you and failed dots in the sidebar. A thread that moves on while you're in another one turns bold with a white dot until you open it (last-seen times kept per thread on this computer). Verified November 21 |
 | S2 | Rename, pin, archive and delete threads | Context menu and inline rename | P1 | partial | Archive and remove exist. Check rename and pin |
-| S3 | Search threads | Search titles and transcripts | P1 | partial | Titles only |
+| S3 | Search threads | Search titles and transcripts | P1 | done | Ctrl+K (or Search in the sidebar) matches thread titles and, through the engine's `thread.search`, what was said in any thread (yours and the agent's messages), with a snippet around the match under "In messages". Verified November 22: "kelp" found a thread by its message and Enter opened it |
 | S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | partial | Exists. Audit says failures can read "Finished" |
 | S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | partial | |
-| S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | partial | Ctrl+K finds active thread titles today. Add actions, projects and settings |
+| S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | done | `Palette.tsx`: Needs you, Actions (new thread or project, review changes, sidebar, details, browser, toolbox, theme), Threads, Projects (new thread there), Settings sections, then matches in messages. Ranked by start, word start, substring, then letters in order. Arrows, Enter, Esc. Replaces the sidebar's title filter. Verified November 22 |
 | S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
 | S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | open | |
 | S9 | Parallel sessions with linked status | Start a side session for separate work and see its state from the parent (Claude side sessions) | P2 | open | Depends on G4 |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · S6 command palette, S3 search in messages, A4 "Needs you" first in it.
 - 2026-11-22 · G7 "Review changes" starts a review thread for the unsaved changes.
 - 2026-11-22 · G6 open the project or a file in an editor or File Explorer.
 - 2026-11-21 · M4 sign-in status and the agent's own sign-in buttons for every agent; M2 OpenCode verified end to end; agents with no full-access mode run in their first unrestricted mode.
