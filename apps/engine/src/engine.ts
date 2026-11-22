@@ -52,7 +52,27 @@ type Live = {
   undoNote?: string;
   /** After a rewind, the next message starts a fresh agent session with this recap of the kept conversation. */
   rewindNote?: string;
+  /** The thread's folders changed during a turn, so the next message reopens the session with them. */
+  reopen?: boolean;
 };
+
+/** Checks the extra folders a thread may use: up to five absolute, existing folders, other than the project itself. */
+function foldersFrom(value: unknown, projectCwd: string): string[] {
+  if (!Array.isArray(value) || value.length > 5) throw new Error("a thread can use at most five extra folders");
+  const seen = new Set<string>();
+  const folders: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "string" || entry.length > 1000 || !path.isAbsolute(entry)) throw new Error("folders need their full path");
+    const folder = path.resolve(entry);
+    if (!existsSync(folder) || !statSync(folder).isDirectory()) throw new Error(`${folder} isn't a folder`);
+    const key = process.platform === "win32" ? folder.toLowerCase() : folder;
+    if (key === (process.platform === "win32" ? path.resolve(projectCwd).toLowerCase() : path.resolve(projectCwd))) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    folders.push(folder);
+  }
+  return folders;
+}
 
 
 /** A message's text. It may be empty only when files are attached. */
@@ -339,7 +359,11 @@ export function createEngine(
       at: Date.now(),
     };
   };
-  const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => ({ ...thread, steering: lives.get(thread.id)?.session?.steering === true });
+  const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => ({
+    ...thread,
+    steering: lives.get(thread.id)?.session?.steering === true,
+    ...(thread.folders.length && lives.get(thread.id)?.session?.folders === false ? { foldersSupported: false } : {}),
+  });
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
     if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), compactions: new Map(), asks: new Map(), questions: new Map() }));
@@ -563,11 +587,14 @@ export function createEngine(
   }
 
   async function ensureSession(thread: ThreadRow, project: Project, live: Live, signal: AbortSignal): Promise<AgentSession> {
+    if (live.session && live.reopen) closeSession(live);
+    live.reopen = false;
     if (live.session) return live.session;
     const session = await startSession({
       agentId: thread.provider,
       settings,
       cwd: project.cwd,
+      folders: thread.folders.filter((folder) => existsSync(folder)),
       resumeId: thread.sessionId,
       signal,
       mcpServers: [
@@ -1172,7 +1199,7 @@ export function createEngine(
       const now = Date.now();
       const thread: ThreadRow = {
         id: randomUUID(), projectId: project.id, provider: params.provider, model, choices, queued: [], title: prompt ? titleFrom(prompt) : attached[0]!.name.slice(0, 60),
-        state: "starting", archived: false, pinned: false, sessionId: null, createdAt: now, updatedAt: now,
+        state: "starting", archived: false, pinned: false, folders: [], sessionId: null, createdAt: now, updatedAt: now,
       };
       db.insertThread(thread);
       threads.set(thread.id, thread);
@@ -1220,6 +1247,17 @@ export function createEngine(
       if (params.title !== undefined) thread.title = title;
       if (params.archived !== undefined) thread.archived = params.archived === true;
       if (params.pinned !== undefined) thread.pinned = params.pinned === true;
+      if (params.folders !== undefined) {
+        const folders = foldersFrom(params.folders, projectOf(thread.projectId).cwd);
+        if (folders.join("|") !== thread.folders.join("|")) {
+          thread.folders = folders;
+          // The agent learns its folders when its session opens, so an idle one reopens with them on the next message.
+          // A running turn keeps its folders until it ends; the next message after that picks up the change.
+          const live = lives.get(thread.id);
+          if (live?.session && !live.turn) closeSession(live);
+          else if (live?.session) live.reopen = true;
+        }
+      }
       db.saveThread(thread);
       emit({ event: "thread", thread: publicThread(thread) });
       return publicThread(thread);

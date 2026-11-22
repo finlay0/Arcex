@@ -220,8 +220,8 @@ app.whenReady().then(async () => {
   const fromWorkspace = (event) => event.sender === win.webContents && event.senderFrame?.parent === null && event.senderFrame.url.startsWith(engineUrl);
   ipcMain.handle("update-check", (event) => (fromWorkspace(event) ? checkForUpdate() : null));
   ipcMain.handle("update-app", (event) => (fromWorkspace(event) ? updateApp() : { error: "Only the Arcex workspace can update." }));
-  ipcMain.handle("pick-folder", async () => {
-    const result = await dialog.showOpenDialog(win, { title: "Choose your project folder", properties: ["openDirectory"] });
+  ipcMain.handle("pick-folder", async (_event, title) => {
+    const result = await dialog.showOpenDialog(win, { title: typeof title === "string" && title ? title.slice(0, 100) : "Choose your project folder", properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);
   });
   ipcMain.on("set-theme", (_event, theme) => {

@@ -38,6 +38,7 @@ export function openDb(dataDir: string) {
   if (!columns.includes("queued")) db.exec("ALTER TABLE threads ADD COLUMN queued TEXT");
   if (!columns.includes("choices")) db.exec("ALTER TABLE threads ADD COLUMN choices TEXT");
   if (!columns.includes("pinned")) db.exec("ALTER TABLE threads ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0");
+  if (!columns.includes("folders")) db.exec("ALTER TABLE threads ADD COLUMN folders TEXT");
   if (!columns.includes("state")) db.exec("ALTER TABLE threads ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'");
   db.exec("UPDATE threads SET state = 'interrupted' WHERE state IN ('starting', 'working', 'needs_you', 'stopping')");
 
@@ -61,6 +62,7 @@ export function openDb(dataDir: string) {
     state: row.state as Thread["state"],
     archived: row.archived === 1,
     pinned: row.pinned === 1,
+    folders: row.folders ? (JSON.parse(row.folders as string) as string[]) : [],
     sessionId: (row.session_id as string | null) ?? null,
     createdAt: row.created_at as number,
     updatedAt: row.updated_at as number,
@@ -110,8 +112,8 @@ export function openDb(dataDir: string) {
       ).run(t.id, t.projectId, t.provider, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.title, t.sessionId, t.createdAt, t.updatedAt, t.state);
     },
     saveThread(t: ThreadRow) {
-      db.prepare("UPDATE threads SET title = ?, archived = ?, pinned = ?, model = ?, choices = ?, queued = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
-        t.title, t.archived ? 1 : 0, t.pinned ? 1 : 0, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.sessionId, t.updatedAt, t.state, t.id,
+      db.prepare("UPDATE threads SET title = ?, archived = ?, pinned = ?, folders = ?, model = ?, choices = ?, queued = ?, session_id = ?, updated_at = ?, state = ? WHERE id = ?").run(
+        t.title, t.archived ? 1 : 0, t.pinned ? 1 : 0, t.folders.length ? JSON.stringify(t.folders) : null, t.model ? JSON.stringify(t.model) : null, JSON.stringify(t.choices), JSON.stringify(t.queued), t.sessionId, t.updatedAt, t.state, t.id,
       );
     },
     removeThread(id: string) {

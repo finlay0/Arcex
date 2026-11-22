@@ -4,7 +4,7 @@ import type { Agent, Thread, UsageLimit } from "@arcex/contracts";
 declare global {
   interface Window {
     /** Present only inside the desktop shell. */
-    arcex?: { pickFolder(): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void; ensureEngine(): Promise<void>;
+    arcex?: { pickFolder(title?: string): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void; ensureEngine(): Promise<void>;
       checkForUpdate?(): Promise<{ behind: number; changed: boolean } | null>;
       update?(): Promise<{ ok?: true; error?: string; detail?: string }> };
   }

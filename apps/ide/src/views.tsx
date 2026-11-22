@@ -997,6 +997,8 @@ export function Panel(props: {
   openFile: { path: string; line: number | null; nonce: number } | null;
   /** The user turned on the opt-in terminal. */
   terminal: boolean;
+  /** The thread on screen, if one is. */
+  thread: Thread | null;
   fail(error: unknown): void;
   close(): void;
 }) {
@@ -1108,6 +1110,7 @@ export function Panel(props: {
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
           <Publish project={project} refresh={settled} fail={fail} />
+          {props.thread && <Folders thread={props.thread} fail={fail} />}
           {recent.length > 0 && (
             <section className="sec">
               <header><b>Recent activity</b></header>
@@ -1389,6 +1392,43 @@ function Publish({ project, refresh, fail }: { project: Project; refresh: string
           <button className="btn small" disabled={doing !== null} onClick={() => act("pr")}>{doing === "pr" ? "Opening…" : "Create pull request"}</button>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Asks for a folder and lets the thread's agent work in it too. */
+export async function addThreadFolder(thread: Thread, fail: (error: unknown) => void) {
+  const chosen = window.arcex ? await window.arcex.pickFolder("Choose a folder this thread can also use") : window.prompt("Full path of the folder");
+  if (!chosen?.trim()) return;
+  await call("thread.update", { threadId: thread.id, folders: [...thread.folders, chosen.trim()] }).catch(fail);
+}
+
+/** Folders outside the project that this thread's agent may also read and write. */
+function Folders({ thread, fail }: { thread: Thread; fail(error: unknown): void }) {
+  const remove = (folder: string) => void call("thread.update", { threadId: thread.id, folders: thread.folders.filter((entry) => entry !== folder) }).catch(fail);
+  return (
+    <section className="sec">
+      <header>
+        <b>Other folders</b>
+        {thread.folders.length < 5 && <button className="link" onClick={() => void addThreadFolder(thread, fail)}>Add a folder</button>}
+      </header>
+      {thread.folders.length === 0 ? (
+        <p className="folderhint">This thread works in the project folder. Add another folder to let the agent use it too.</p>
+      ) : (
+        thread.folders.map((folder) => (
+          <div key={folder} className="vrow" title={folder}>
+            <Icon name="folder" />
+            <span className="trunc">
+              {folder.split(/[\\/]/).filter(Boolean).pop() ?? folder}
+              <span className="when"> {folder.replace(/[\\/][^\\/]+[\\/]?$/, "")}</span>
+            </span>
+            <button className="icon" aria-label={`Stop using ${folder}`} title="Remove" onClick={() => remove(folder)}>
+              <Icon name="x" />
+            </button>
+          </div>
+        ))
+      )}
+      {thread.foldersSupported === false && <p className="folderhint">{"This agent can't use extra folders, so it only sees the project folder."}</p>}
     </section>
   );
 }

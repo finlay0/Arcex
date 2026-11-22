@@ -2,7 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 // The only desktop ability the client gets directly. Everything else goes through the engine.
 contextBridge.exposeInMainWorld("arcex", {
-  pickFolder: () => ipcRenderer.invoke("pick-folder"),
+  pickFolder: (title) => ipcRenderer.invoke("pick-folder", typeof title === "string" ? title.slice(0, 100) : undefined),
   ensureEngine: () => ipcRenderer.invoke("ensure-engine"),
   // Development builds run from source: check for newer code, and rebuild and restart onto it.
   checkForUpdate: () => ipcRenderer.invoke("update-check"),

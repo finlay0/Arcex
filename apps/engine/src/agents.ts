@@ -152,6 +152,8 @@ export type AgentSession = {
   prompt(blocks: acp.ContentBlock[]): Promise<acp.PromptResponse>;
   /** The agent takes messages into a running turn (the `_session/steering` extension). */
   steering: boolean;
+  /** The agent took the extra folders it was given (false when it has no way to). */
+  folders: boolean;
   /** Adds a message to the running turn. "later" means no turn could take it, so it should go as a normal prompt. */
   steer(blocks: acp.ContentBlock[]): Promise<"steered" | "later">;
   cancel(): Promise<void>;
@@ -163,6 +165,8 @@ export async function startSession(options: {
   agentId: string;
   settings: Settings;
   cwd: string;
+  /** More folders the agent may work in, passed when the agent supports them. */
+  folders?: string[];
   resumeId: string | null;
   signal?: AbortSignal;
   /** MCP servers the agent may use in this session. Web-based ones are dropped if the agent cannot reach them. */
@@ -254,12 +258,14 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     const canHttp = init.agentCapabilities?.mcpCapabilities?.http === true;
     const mcpServers = options.mcpServers.filter((server) => !("type" in server && server.type === "http") || canHttp);
 
+    const canFolders = !!(init.agentCapabilities as { sessionCapabilities?: { additionalDirectories?: unknown } } | undefined)?.sessionCapabilities?.additionalDirectories;
+    const extra = canFolders && options.folders?.length ? { additionalDirectories: options.folders } : {};
     let sessionId: string | null = null;
     let models: ReturnType<typeof modelsOf> = null;
     let choices: AgentChoice[] = [];
     if (options.resumeId && init.agentCapabilities?.loadSession) {
       try {
-        const loaded = await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers }));
+        const loaded = await wait(agent.request("session/load", { sessionId: options.resumeId, cwd: options.cwd, mcpServers, ...extra } as acp.LoadSessionRequest));
         models = modelsOf(loaded);
         choices = choicesOf(loaded);
         sessionId = options.resumeId;
@@ -279,7 +285,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         : { _meta: { systemPrompt: { append: PLAN_NOTE } } };
       let created: acp.NewSessionResponse;
       try {
-        created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, ...note } as acp.NewSessionRequest));
+        created = await wait(agent.request("session/new", { cwd: options.cwd, mcpServers, ...extra, ...note } as acp.NewSessionRequest));
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? (error as { code: unknown }).code : null;
         const message = error instanceof Error ? error.message : String(error);
@@ -353,6 +359,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
         clearTimeout(timer);
       },
       prompt: (blocks) => agent.request("session/prompt", { sessionId: id, prompt: blocks }),
+      folders: canFolders,
       steering: (init as { _meta?: { steering?: { supported?: unknown } } })._meta?.steering?.supported === true,
       async steer(blocks) {
         const result = await (agent.request as (method: string, params: unknown) => Promise<unknown>)("_session/steering", {

@@ -105,6 +105,10 @@ export type Thread = {
   archived: boolean;
   /** Pinned threads stay at the top of their project in the sidebar. */
   pinned: boolean;
+  /** Folders outside the project the agent may also read and write in this thread. */
+  folders: string[];
+  /** False once the thread's agent has said it can't use extra folders. */
+  foldersSupported?: boolean;
   /** The thread's running agent takes messages into a turn that is under way. */
   steering?: boolean;
   /** How full the agent's context window is, as its last report gave it. Missing until the agent reports it. */
@@ -371,7 +375,7 @@ export type Requests = {
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */
   "thread.create": { params: { projectId: string; provider: ProviderId; model?: { value: string; name: string } | null; choices?: Record<string, string>; text: string; attachments?: string[] }; result: Thread };
-  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; pinned?: boolean; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
+  "thread.update": { params: { threadId: string; title?: string; archived?: boolean; pinned?: boolean; folders?: string[]; model?: { value: string; name: string } | null; choices?: Record<string, string> }; result: Thread };
   "thread.remove": { params: { threadId: string }; result: { ok: true } };
   /** Threads whose messages contain `query`, with a snippet around the first match. */
   "thread.search": { params: { query: string }; result: { threadId: string; snippet: string }[] };

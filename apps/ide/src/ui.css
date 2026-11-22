@@ -213,6 +213,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .vrow .trunc { flex: 1; }
 .vrow .when { color: var(--ink-4); font-size: 12px; }
 .vrow .link { font-size: 13px; }
+.folderhint { margin: 0; color: var(--ink-3); font-size: 13px; line-height: 1.45; }
 .tcfile { display: flex; align-items: center; gap: 6px; }
 .tcfile > .file { flex: 1; min-width: 0; }
 .tcfile > .link { padding: 0 8px; font-size: 13px; }

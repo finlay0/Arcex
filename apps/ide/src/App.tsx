@@ -8,7 +8,7 @@ import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { OPEN_FILE } from "./md.tsx";
-import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, type PanelTab } from "./views.tsx";
+import { Conversation, NewProject, OPEN_PREVIEW, Panel, REVIEW_PROMPT, addThreadFolder, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
 type Screen =
@@ -364,6 +364,7 @@ export function App() {
           { label: "Snooze for an hour", run: () => snooze(t.id, Date.now() + 3_600_000) },
           { label: "Snooze until tomorrow", run: () => snooze(t.id, tomorrowMorning()) },
         ]),
+    ...(t.folders.length < 5 ? [{ label: "Add a folder…", run: () => void addThreadFolder(t, fail) }] : []),
     { label: t.pinned ? "Unpin" : "Pin to top", run: () => void call("thread.update", { threadId: t.id, pinned: !t.pinned }).catch(fail) },
     { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
@@ -748,7 +749,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={(prompt) => void startThread(prompt ?? REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={(prompt) => void startThread(prompt ?? REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} thread={thread} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>
