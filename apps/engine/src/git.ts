@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
 import { lstat, open, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import type { Change } from "@arcex/contracts";
 
@@ -204,4 +205,26 @@ export async function undoTurn(cwd: string, before: string, after: string, files
     await rm(scratchIndex, { force: true });
   }
   return { undone, changedSince };
+}
+
+/**
+ * Saves everything in the project folder as a new version (a Git commit), so the user can come back to it. It uses
+ * the user's own Git name and email; on a computer where Git has none, the computer's user name stands in, so a
+ * first-time user isn't stopped by Git setup.
+ */
+export async function saveVersion(cwd: string, message: string): Promise<{ id: string }> {
+  const status = await git(cwd, ["status", "--porcelain", "-uall", "--", "."]);
+  if (!status.trim()) throw new Error("there's nothing new to save");
+  const configured = (await git(cwd, ["config", "user.email"], true)).trim();
+  const name = (() => {
+    try {
+      return os.userInfo().username.replace(/[^\w .-]/g, "").slice(0, 60) || "Arcex user";
+    } catch {
+      return "Arcex user";
+    }
+  })();
+  const identity = configured ? [] : ["-c", `user.name=${name}`, "-c", `user.email=${name.replace(/\s+/g, ".").toLowerCase()}@localhost`];
+  await git(cwd, ["add", "-A", "--", "."]);
+  await git(cwd, [...identity, "commit", "-q", "-m", message.slice(0, 500)]);
+  return { id: (await git(cwd, ["rev-parse", "--short", "HEAD"])).trim() };
 }

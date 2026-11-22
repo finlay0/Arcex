@@ -84,7 +84,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C11 | Find in thread (Ctrl+F) | Find bar with next and previous | P2 | open | |
 | C12 | Turn outcome and elapsed time | "Worked for 2m 14s", failed or stopped badge | P1 | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" |
 | C13 | Subagents | Rows for subagents working, with their progress | P2 | open | |
-| C14 | Wrap-up / next-step box | Recap plus buttons (commit, PR, verify) at the end of a turn | P1 | open | Arcex version: summary plus Commit, Open preview and Undo |
+| C14 | Wrap-up / next-step box | Recap plus buttons (commit, PR, verify) at the end of a turn | P1 | partial | A turn that changed files ends with "Changed N files +X −Y", Undo/Redo and, on the last turn, "Save a version". Verified November 21. Still missing: Open preview, and a recap (the agent's last reply serves for now) |
 | C15 | Side question | Ask a quick question beside the thread without derailing the running turn (T3 `useSideChat`, `SideThreadPane`) | P2 | open | |
 | C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | open | |
 | C17 | Rich media in replies | Mermaid diagrams, math, zoomable images, rendered HTML preview (T3 `MermaidDiagram`, `MathTypeset`, `HtmlRenderDialog`) | P2 | open | Pairs with C8 |
@@ -126,7 +126,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | --- | --- | --- | --- | --- | --- |
 | G1 | Diff pane | Changes +N −M per file, unified diff, per-turn and whole-branch views | P0 | partial | Changes list with +N −M per file and in total, including line counts for new files Git doesn't track yet. The diff shows old and new line numbers and a ⋯ gap where unchanged lines are skipped. Verified November 21. Per turn: Arcex snapshots the folder as a Git tree before and after each turn, with its own index file so the user's staging, branch and history are untouched, and "Changed N files +X −Y" in the conversation opens that turn's files and diffs alone, including changes made by commands. Verified November 21 with two OpenCode turns (+3 −0, then +1 −1). Skipped for folders without Git or over 50 MB of new untracked files. Two threads working in one folder at once see each other's changes. Still missing: whole-branch view |
 | G2 | Inline review comments | Comment on a diff line and send it to the agent | P1 | open | |
-| G3 | Commit, push and PR from the app | Buttons with a generated message, PR status and CI | P1 | open | Hidden by default for vibe coders. Show a "Save a version" button |
+| G3 | Commit, push and PR from the app | Buttons with a generated message, PR status and CI | P1 | partial | "Save a version" in the side panel (now "Unsaved changes") and on the last turn commits everything in the project, with the thread's name or "Save N changed files" as the message, using the user's Git identity (or the computer's user name when Git has none). Refused while an agent in the project is working. Verified November 21. Still missing: a list of versions to go back to, push and PR (opt-in, for people who use GitHub) |
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
 | G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | done | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. Each file in a multi-file turn has its own Undo, and undone changes have Redo (whole turn or one file); redo also checks for later changes. Verified November 21: redo of two turns, then undo of one file out of two |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | open | Desktop `shell.openPath` |
@@ -212,6 +212,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · C5 Claude thinking summaries; K7 last pick remembered for new threads.
 - 2026-11-21 · C4 the agent's own questions as a card (options, number keys, own answer, skip); the main column no longer grows past the window.
 - 2026-11-21 · S1 unread dots.
+- 2026-11-21 · G3 "Save a version" and C14 end-of-turn actions; the side panel refreshes when the window regains focus.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -232,9 +233,9 @@ Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
-3. C14 wrap-up box with G3 "Save a version".
+3. G3 list of saved versions to go back to; C14 Open preview.
 4. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-5. Then the P1 items: C10 conversation rewind, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+5. Then the P1 items: C10 conversation rewind, P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

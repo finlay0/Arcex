@@ -198,11 +198,13 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
 .outcome span { color: var(--ink-2); font-weight: 400; }
 .turnchanges { display: grid; gap: 6px; align-self: stretch; }
-.tcrow { display: flex; align-items: center; gap: 12px; }
+.tcrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.tcrow > * { white-space: nowrap; }
 .tcrow > .outcome { cursor: pointer; }
 .outcome.undone { background: var(--raised-2); color: var(--ink-2); }
 .undoask { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; max-width: 560px; }
 .undoask .btns { display: flex; gap: 8px; }
+.savever { justify-self: start; margin: -4px 0 8px; height: 30px; font-size: 13px; }
 .tcfile { display: flex; align-items: center; gap: 6px; }
 .tcfile > .file { flex: 1; min-width: 0; }
 .tcfile > .link { padding: 0 8px; font-size: 13px; }

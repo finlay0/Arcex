@@ -827,6 +827,13 @@ export function createEngine(
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
+    async "project.saveVersion"(params) {
+      const project = projectOf(params.projectId);
+      // A turn still writing could leave half its work in the version.
+      if ([...threads.values()].some((thread) => thread.projectId === project.id && busyState(thread))) throw new Error("wait for the agents in this project to finish first");
+      const message = typeof params.message === "string" && params.message.trim() ? params.message.trim().replace(/\s+/g, " ") : "Save a version";
+      return git.saveVersion(project.cwd, message);
+    },
     async "thread.undoTurn"(params) {
       const thread = threadOf(params.threadId);
       if (busyState(thread)) throw new Error("wait for this thread to finish before undoing a turn");

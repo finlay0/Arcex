@@ -230,6 +230,8 @@ export type Requests = {
   /** Finds project files and folders by a few letters of their path, best first. Empty query lists the top ones. */
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
+  /** Saves everything in the project folder as a version (a Git commit, kept out of sight). */
+  "project.saveVersion": { params: { projectId: string; message: string }; result: { id: string } };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
   /** One file's diff within one turn, from that turn's result. */
   "thread.turnDiff": { params: { threadId: string; itemId: string; path: string }; result: { text: string } };

@@ -264,7 +264,7 @@ function ThinkRow({ item }: { item: Extract<Item, { kind: "think" }> }) {
 const ENDINGS = { done: "Worked for", stopped: "Stopped after", failed: "Stopped with a problem after", interrupted: "Interrupted after" };
 
 /** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
-function TurnView({ thread, turn, live, actions, edit }: { thread: Thread; turn: Turn; live: boolean; actions: Actions; edit(turn: Turn): void }) {
+function TurnView({ thread, turn, live, last, actions, edit }: { thread: Thread; turn: Turn; live: boolean; last: boolean; actions: Actions; edit(turn: Turn): void }) {
   const blocks: Block[] = [];
   for (const part of turn.parts) {
     const last = blocks[blocks.length - 1];
@@ -294,7 +294,7 @@ function TurnView({ thread, turn, live, actions, edit }: { thread: Thread; turn:
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
-        if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} />;
+        if (block.kind === "result" && block.changes && block.snapshots) return <TurnChanges key={block.id} thread={thread} item={block} last={last} fail={actions.fail} />;
         return (
           <p key={block.id} className="outcome">
             <Icon name="check" /> Changed {plural(block.files.length, "file")} <span>{block.files.map((file) => file.split(/[\\/]/).pop()).join(", ")}</span>
@@ -756,7 +756,7 @@ export function Conversation(props: {
       >
         <div className="flow">
           {list.map((turn, index) => (
-            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} actions={actions} edit={editTurn} />
+            <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} last={index === list.length - 1} actions={actions} edit={editTurn} />
           ))}
           {thread.state === "interrupted" && <p className="oops">This turn was interrupted. Check the project for partial changes before you retry.</p>}
           {thread.state === "stopped" && <p className="muted">Turn stopped. Any changes already made may still be in the project.</p>}
@@ -847,7 +847,12 @@ export function Panel(props: {
   useEffect(() => {
     const nudge = () => setNudged((count) => count + 1);
     window.addEventListener(FILES_CHANGED, nudge);
-    return () => window.removeEventListener(FILES_CHANGED, nudge);
+    // Coming back to the window: the user may have changed files in another app.
+    window.addEventListener("focus", nudge);
+    return () => {
+      window.removeEventListener(FILES_CHANGED, nudge);
+      window.removeEventListener("focus", nudge);
+    };
   }, []);
   const settled = `${props.connected}:${nudged}:${threads.map((t) => `${t.id}:${t.state}`).join()}`;
   const [wide, setWide] = useState(false);
@@ -908,7 +913,7 @@ export function Panel(props: {
             <p>{project.goal || "Add a project goal in Settings."}</p>
           </div>
           <Files project={project} refresh={settled} />
-          <Changes project={project} refresh={settled} />
+          <Changes project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
             <section className="sec">
               <header><b>Recent activity</b></header>
@@ -1003,7 +1008,34 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
 /** Sent when the project's files change outside a turn, so the side panel looks again. */
 const FILES_CHANGED = "arcex:files-changed";
 
-type DiffRow ={ kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
+/** "Save a version": commits the project's changes, out of sight. Says "Saved" for a moment afterwards. */
+function SaveVersion({ projectId, message, fail, className = "btn" }: { projectId: string; message: string; fail(error: unknown): void; className?: string }) {
+  const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
+  return (
+    <button
+      className={className}
+      disabled={state !== "idle"}
+      title="Save everything in this project as a version you can come back to"
+      onClick={() => {
+        setState("saving");
+        call("project.saveVersion", { projectId, message })
+          .then(() => {
+            setState("saved");
+            window.dispatchEvent(new Event(FILES_CHANGED));
+            setTimeout(() => setState("idle"), 2000);
+          })
+          .catch((error) => {
+            setState("idle");
+            fail(error);
+          });
+      }}
+    >
+      {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Save a version"}
+    </button>
+  );
+}
+
+type DiffRow = { kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
 
 /** A unified diff as numbered rows. Headers are dropped; a gap marks unchanged lines left out between sections. */
 function diffRows(text: string): DiffRow[] {
@@ -1056,7 +1088,7 @@ function ChangeStat({ change }: { change: Change }) {
 }
 
 /** What one turn changed, from snapshots taken before and after it. Opens to each file's diff for that turn alone. */
-function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { kind: "result" }> }) {
+function TurnChanges({ thread, item, last, fail }: { thread: Thread; item: Extract<Item, { kind: "result" }>; last: boolean; fail(error: unknown): void }) {
   const changes = item.changes ?? [];
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<string | null>(null);
@@ -1107,6 +1139,7 @@ function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { k
         </button>
         {idle && !allUndone && <button className="link" onClick={() => start({ redo: false })}>Undo</button>}
         {idle && undoneFiles.size > 0 && <button className="link" onClick={() => start({ redo: true })}>Redo</button>}
+        {idle && last && !allUndone && <SaveVersion className="link" projectId={thread.projectId} message={thread.title} fail={fail} />}
       </div>
       {ask && ask.step !== "working" && (
         <div className="undoask">
@@ -1153,7 +1186,7 @@ function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { k
   );
 }
 
-function Changes({ project, refresh }: { project: Project; refresh: string }) {
+function Changes({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
   const [changes, setChanges] = useState<Change[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -1188,11 +1221,12 @@ function Changes({ project, refresh }: { project: Project; refresh: string }) {
   return (
     <section className="sec">
       <header>
-        <b>Uncommitted changes</b>
+        <b>Unsaved changes</b>
         {changes && changes.length > 0 && <span className="stat">+{added} <i>−{removed}</i></span>}
       </header>
+      {changes && changes.length > 0 && <SaveVersion projectId={project.id} message={`Save ${plural(changes.length, "changed file")}`} fail={fail} className="btn savever" />}
       {problem ? <p className="muted">{problem} <button className="link" onClick={() => setAttempt(attempt + 1)}>Retry</button></p>
-        : !changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">No uncommitted changes in this folder.</p> : (
+        : !changes ? <p className="muted">Looking…</p> : changes.length === 0 ? <p className="muted">No changes since the last saved version.</p> : (
         <div className="files">
           {changes.map((change) => (
             <div key={change.path}>
