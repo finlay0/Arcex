@@ -185,6 +185,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .copy { position: absolute; right: -6px; bottom: -32px; opacity: 0; transition: opacity .12s; z-index: 1; }
 .reply:hover .copy, .copy:focus-visible { opacity: 1; }
 .oops { color: var(--stop); }
+.note { color: var(--ink-3); font-size: 13px; }
 .answered { color: var(--ink-3); font-size: 14px; }
 .outcome { align-self: flex-start; display: inline-flex; align-items: center; gap: 9px; height: 34px; padding: 0 14px 0 10px; border-radius: 10px; background: var(--ok-bg); color: var(--ok); font-weight: 500; font-size: 14px; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
@@ -275,6 +276,8 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .mhead input { width: 140px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line-2); font-size: 13px; }
 .mlist { overflow-y: auto; padding: 0 6px 8px; display: grid; gap: 1px; align-content: start; }
 .mlist .muted { padding: 8px 10px; }
+.mlist [role="group"] { display: grid; gap: 1px; }
+.mlist .mgroup { padding: 10px 10px 4px; position: sticky; top: 0; background: var(--raised); z-index: 1; }
 .mrow { display: grid; padding: 8px 12px; border-radius: 10px; text-align: left; min-width: 0; }
 .mrow:hover { background: var(--hover); }
 .mrow[aria-current="true"] { background: var(--active); }

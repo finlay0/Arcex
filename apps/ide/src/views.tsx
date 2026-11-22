@@ -289,6 +289,7 @@ function TurnView({ thread, turn, live, actions }: { thread: Thread; turn: Turn;
         // A question waiting on the user sits above the message box. Here it shows once it's settled.
         if (block.kind === "ask") return live && thread.state === "needs_you" && !block.answer ? null : <AskCard key={block.id} thread={thread} item={block} actions={actions} active={false} />;
         if (block.kind === "error") return <p key={block.id} className="oops">{block.text}</p>;
+        if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
         return (

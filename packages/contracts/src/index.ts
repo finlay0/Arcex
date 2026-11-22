@@ -88,6 +88,8 @@ export type Item =
   /** `body` is what the agent wants approved in full, such as its plan, as markdown. */
   | { id: string; kind: "ask"; title: string; detail: string; body?: string; options: AskOption[]; answer: string | null }
   | { id: string; kind: "error"; text: string }
+  /** Something to know about the turn that isn't a failure, such as an image the model couldn't see. */
+  | { id: string; kind: "note"; text: string }
   /** Closes a turn that changed files. Paths are relative to the project folder. */
   | { id: string; kind: "result"; files: string[] }
   /** Closes every turn: how it ended and how long it took. */

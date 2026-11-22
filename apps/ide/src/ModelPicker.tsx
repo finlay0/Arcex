@@ -11,6 +11,29 @@ const cache = new Map<string, { options: ModelOption[]; current: string | null; 
 /** Hides an agent's own "default" entry, since the picker already offers the agent's default at the top. */
 const real = (options: ModelOption[]) => options.filter((option) => option.value !== "default");
 
+/** Display names for the provider prefixes agents like OpenCode put on model ids ("anthropic/claude-…"). */
+const MAKERS: Record<string, string> = {
+  anthropic: "Anthropic", openai: "OpenAI", google: "Google", "google-vertex": "Google Vertex", xai: "xAI", deepseek: "DeepSeek",
+  mistral: "Mistral", groq: "Groq", openrouter: "OpenRouter", opencode: "OpenCode", "github-copilot": "GitHub Copilot",
+  amazon: "Amazon", "amazon-bedrock": "Amazon Bedrock", azure: "Azure", meta: "Meta", moonshotai: "Moonshot", qwen: "Qwen",
+  alibaba: "Alibaba", zai: "Z.ai", "zhipuai": "Zhipu", minimax: "MiniMax", cerebras: "Cerebras", together: "Together",
+  fireworks: "Fireworks", ollama: "Ollama", lmstudio: "LM Studio", cohere: "Cohere", perplexity: "Perplexity",
+};
+/** "OpenCode/Big Pickle" reads as "Big Pickle": the maker is already the group or the agent. */
+const shortName = (name: string) => name.replace(/^[^/]{1,40}\/\s*(?=\S)/, "");
+const makerOf =(value: string) => /^([\w.-]{1,40})\//.exec(value)?.[1] ?? null;
+
+/** Models in groups by maker when the agent offers more than one maker's models; otherwise one ungrouped list. */
+function byMaker(options: ModelOption[]): [string | null, ModelOption[]][] {
+  const groups = new Map<string, ModelOption[]>();
+  for (const option of options) {
+    const key = makerOf(option.value) ?? "";
+    groups.set(key, [...(groups.get(key) ?? []), option]);
+  }
+  if (groups.size < 2) return [[null, options]];
+  return [...groups].map(([key, group]) => [key ? MAKERS[key.toLowerCase()] ?? key : "Other", group]);
+}
+
 /**
  * Picks the agent and model for a thread. Agents are on the left, the chosen agent's models on the right.
  * When `lockAgent` is set (an existing thread), only that agent's models are offered.
@@ -94,7 +117,7 @@ export function ModelPicker(props: { agents: Agent[]; value: Choice; lockAgent?:
     trigger.current?.focus();
   };
   const needle = filter.trim().toLowerCase();
-  const options = real(state.options).filter((option) => !needle || `${option.name} ${option.description}`.toLowerCase().includes(needle));
+  const options = real(state.options).filter((option) => !needle || `${option.name} ${option.description} ${option.value} ${MAKERS[makerOf(option.value) ?? ""] ?? ""}`.toLowerCase().includes(needle));
   const selected = props.value.agentId === agentId ? props.value.model?.value ?? null : undefined;
 
   return (
@@ -112,7 +135,7 @@ export function ModelPicker(props: { agents: Agent[]; value: Choice; lockAgent?:
         }}
       >
         <b>{props.nameOf(props.value.agentId)}</b>
-        <span>{props.value.model?.name ?? "Default model"}</span>
+        <span>{props.value.model ? shortName(props.value.model.name) : "Default model"}</span>
         <Icon name="down" />
       </button>
       {open && (
@@ -156,11 +179,16 @@ export function ModelPicker(props: { agents: Agent[]; value: Choice; lockAgent?:
                   <button className="link" onClick={props.manage}>Open agent settings</button>
                 </p>
               )}
-              {options.map((option) => (
-                <button key={option.value} className="mrow" aria-current={selected === option.value} onClick={() => pick({ value: option.value, name: option.name })}>
-                  <b>{option.name}</b>
-                  {option.description && <span>{option.description}</span>}
-                </button>
+              {byMaker(options).map(([maker, group]) => (
+                <div key={maker ?? "all"} role="group" aria-label={maker ?? undefined}>
+                  {maker && <div className="label mgroup">{maker}</div>}
+                  {group.map((option) => (
+                    <button key={option.value} className="mrow" aria-current={selected === option.value} onClick={() => pick({ value: option.value, name: option.name })}>
+                      <b>{shortName(option.name)}</b>
+                      {option.description && <span>{option.description}</span>}
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           </div>

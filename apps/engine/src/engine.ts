@@ -48,6 +48,9 @@ function message(value: unknown, attachments: Attachment[]): string {
  * Whether a failure was the agent's plan running out. Returns when it resets as the agent wrote it ("" when it didn't
  * say), or null when this was some other failure.
  */
+/** "OpenCode/Big Pickle" reads as "Big Pickle". */
+const shortModel = (name: string) => name.replace(/^[^/]{1,40}\/\s*(?=\S)/, "");
+
 function usageLimit(text: string): string | null {
   if (!/usage limit|rate limit|quota|out of (credits|usage)|limit reached|hit your (usage )?limit/i.test(text)) return null;
   const at = /(?:try again|resets?|available again)\s+(?:at|in|on)\s+([^.\n"\\]{1,40})/i.exec(text);
@@ -510,6 +513,12 @@ export function createEngine(
       await applyChoices(thread, session, thread.choices);
       turn.signal.throwIfAborted();
       setState(thread, "working");
+      const images = attached.filter((file) => file.image).length;
+      if (images && !session.promptCapabilities?.image) {
+        const model = thread.model ? shortModel(thread.model.name) : nameOf(thread.provider);
+        const one = images === 1;
+        put(thread, { id: randomUUID(), kind: "note", text: `${model} can't see images, so ${one ? "the image was" : "the images were"} sent as ${one ? "a file" : "files"} it may not open. Choose a model that sees images to have ${one ? "it" : "them"} looked at.` });
+      }
       // Files the message mentions with "@" go along as links the agent can open.
       const result = await session.prompt([...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
       if (result.stopReason === "cancelled") outcome = "stopped";
