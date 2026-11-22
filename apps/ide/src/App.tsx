@@ -217,8 +217,22 @@ export function App() {
   terminalOn.current = settings?.terminal ?? false;
   const detailsDefault = useRef(settings?.showDetails ?? true);
   detailsDefault.current = settings?.showDetails ?? true;
+  // Alt+Up and Alt+Down step through threads in sidebar order: projects as listed, pinned first, then newest.
+  const stepThread = useRef((_by: number) => {});
+  stepThread.current = (by: number) => {
+    const order = store.projects.flatMap((p) => live.filter((t) => t.projectId === p.id).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt));
+    if (!order.length) return;
+    const at = order.findIndex((t) => t.id === thread?.id);
+    const next = order[at === -1 ? (by > 0 ? 0 : order.length - 1) : (at + by + order.length) % order.length]!;
+    openThread(next);
+  };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+        if (document.querySelector(".mpop, .menu, .palette")) return;
+        event.preventDefault();
+        return stepThread.current(event.key === "ArrowUp" ? -1 : 1);
+      }
       if (event.key === "Escape" && overlayRef.current && !document.querySelector(".mpop, .menu, .palette")) return backRef.current();
       if (!event.ctrlKey && !event.metaKey) return;
       if (event.key === "b") setSidebar((open) => !open);
@@ -226,6 +240,8 @@ export function App() {
       else if (event.key === "n") screenRef.current({ kind: "thread", threadId: null });
       else if (event.key === ",") screenRef.current({ kind: "settings", section: "general" });
       else if (event.key === "k") setPalette((open) => !open);
+      else if (event.key === "/") screenRef.current({ kind: "settings", section: "shortcuts" });
+      else if (event.key === "l") (document.querySelector(".composer textarea") as HTMLTextAreaElement | null)?.focus();
       else if (event.key === "`" && terminalOn.current) {
         setPanel(true);
         setTab("terminal");
@@ -338,6 +354,8 @@ export function App() {
       settingsAt("general", "General settings", "gear"),
       settingsAt("agents", "Agents and sign-in", "layers"),
       settingsAt("appearance", "Appearance", "sun"),
+      settingsAt("voice", "Voice dictation", "mic"),
+      settingsAt("notifications", "Notifications", "bell"),
       settingsAt("projects", "Projects and instructions for agents", "folder"),
       settingsAt("archived", "Archived threads", "box"),
       settingsAt("shortcuts", "Keyboard shortcuts", "sliders"),

@@ -1,16 +1,18 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { About, Agent, DirectoryAgent, InstructionFile, Project, ProviderStatus, Settings as Prefs, Thread } from "@arcex/contracts";
+import type { About, Agent, DirectoryAgent, InstructionFile, Project, ProviderStatus, Settings as Prefs, SpeechState, Thread } from "@arcex/contracts";
 import { Icon, ago, nameOf, plural } from "./shared.tsx";
-import { call } from "./store.ts";
+import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
 
-export type Section = "profile" | "general" | "appearance" | "agents" | "projects" | "archived" | "shortcuts" | "about";
+export type Section = "profile" | "general" | "appearance" | "agents" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
 const SECTIONS: [Section, string][] = [
   ["profile", "Profile"],
   ["general", "General"],
   ["appearance", "Appearance"],
   ["agents", "Agents"],
+  ["voice", "Voice"],
+  ["notifications", "Notifications"],
   ["projects", "Projects"],
   ["archived", "Archived threads"],
   ["shortcuts", "Shortcuts"],
@@ -229,7 +231,15 @@ export function SettingsView(props: {
                 <Row title="Research library" hint="New agent sessions can search the library at arcex.dev when you ask. Already running sessions keep their current access.">
                   <Switch on={settings.research} onChange={(research) => set({ research })} label="Research library" />
                 </Row>
-                <Row title="Notify me" hint="When a thread finishes or needs your OK while Arcex is in the background.">
+              </div>
+            </>
+          )}
+
+          {props.section === "notifications" && (
+            <>
+              <h2>Notifications</h2>
+              <div className="card">
+                <Row title="Notify me" hint="A desktop notification when a thread finishes, fails or needs your OK while Arcex is in the background.">
                   <Switch
                     on={settings.notify}
                     label="Notify me"
@@ -239,9 +249,16 @@ export function SettingsView(props: {
                     }}
                   />
                 </Row>
+                {settings.notify && "Notification" in window && Notification.permission === "denied" && (
+                  <Row title="Blocked on this computer" hint="Windows or Arcex has notifications turned off. Turn them on in Windows Settings › System › Notifications.">
+                    <span />
+                  </Row>
+                )}
               </div>
             </>
           )}
+
+          {props.section === "voice" && <Voice fail={fail} />}
 
           {props.section === "appearance" && (
             <>
@@ -306,15 +323,32 @@ export function SettingsView(props: {
             <>
               <h2>Shortcuts</h2>
               <div className="card">
-                {[
+                {([
                   ["New thread", "Ctrl N"],
+                  ["Previous or next thread", "Alt ↑ ↓"],
+                  ["Search threads, messages, settings and actions", "Ctrl K"],
+                  ["Find in this thread", "Ctrl F"],
+                  ["Type a message", "Ctrl L"],
                   ["Show or hide the sidebar", "Ctrl B"],
                   ["Show or hide the details panel", "Ctrl J"],
-                  ["Search threads, messages, settings and actions", "Ctrl K"],
+                  ...(settings.terminal ? [["Show the terminal", "Ctrl `"]] : []),
                   ["Settings", "Ctrl ,"],
+                  ["This list", "Ctrl /"],
                   ["Back from Settings or the Toolbox", "Esc"],
+                ] as string[][]).map(([what, keys]) => (
+                  <Row key={what} title={what!}>
+                    <span className="keys">{keys!.split(" ").map((key) => <kbd key={key}>{key}</kbd>)}</span>
+                  </Row>
+                ))}
+              </div>
+              <h3>In the message box</h3>
+              <div className="card">
+                {[
                   ["Send a message", settings.sendWith === "enter" ? "Enter" : "Ctrl Enter"],
                   ["New line in a message", settings.sendWith === "enter" ? "Shift Enter" : "Enter"],
+                  ["Agent commands", "/"],
+                  ["Mention a file", "@"],
+                  ["Earlier messages you sent (in an empty box)", "↑ ↓"],
                 ].map(([what, keys]) => (
                   <Row key={what} title={what!}>
                     <span className="keys">{keys!.split(" ").map((key) => <kbd key={key}>{key}</kbd>)}</span>
@@ -331,7 +365,6 @@ export function SettingsView(props: {
                 <Row title="Arcex" hint="An AI development environment built around what you're building."><span className="mono">{props.about.version}</span></Row>
                 <Row title="Your data" hint="Projects, threads and settings are saved in this folder on your computer."><span className="mono path" title={props.about.dataDir}>{props.about.dataDir}</span></Row>
                 <Row title="New projects" hint="Where Arcex creates a folder when you start from an idea."><span className="mono path" title={props.about.projectsDir}>{props.about.projectsDir}</span></Row>
-                <Row title="Voice dictation" hint="Runs on this computer, so what you say stays here. Speech model: NVIDIA Parakeet TDT-CTC 110M (CC BY 4.0), run with transcribe.cpp (MIT)."><span className="mono">Parakeet 110M</span></Row>
                 <Row title="Usage" hint={`${plural(props.projects.length, "project")} and ${plural(props.threads.length, "thread")} on this computer.`}><span /></Row>
               </div>
             </>
@@ -590,6 +623,47 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
           <button className="btn primary" disabled={!name.trim() || !command.trim()} onClick={add}>
             Add agent
           </button>
+        </Row>
+      </div>
+    </>
+  );
+}
+
+/** Voice dictation runs on this computer. This shows whether its speech model is here and fetches it on request. */
+function Voice({ fail }: { fail(error: unknown): void }) {
+  const live = useStore().speech;
+  const [first, setFirst] = useState<SpeechState | null>(null);
+  useEffect(() => {
+    call("speech.status", {}).then(setFirst).catch(() => {});
+  }, []);
+  // Download progress arrives as events; the first answer covers the time before any.
+  const speech = live ?? first;
+  const megabytes = speech?.size ? `${Math.round(speech.size / 1_000_000)} MB` : "";
+  const status = !speech
+    ? "Checking…"
+    : speech.state === "ready"
+      ? "Ready"
+      : speech.state === "downloading"
+        ? `Fetching the speech model, ${Math.round(speech.progress * 100)}%`
+        : speech.state === "failed"
+          ? `Couldn't set up: ${speech.error ?? "unknown error"}`
+          : `Not set up yet${megabytes ? ` (${megabytes} download)` : ""}`;
+  return (
+    <>
+      <h2>Voice</h2>
+      <div className="card">
+        <Row title="Dictation" hint="Press the mic in the message box and talk. It runs on this computer, so what you say stays here and costs nothing. Enter or a second press puts the words in the box.">
+          <span className="mono">{status}</span>
+        </Row>
+        {speech && (speech.state === "missing" || speech.state === "failed") && (
+          <Row title="Set up now" hint="Fetches the speech model once, so the first press of the mic starts listening straight away.">
+            <button className="btn" onClick={() => void call("speech.prepare", {}).catch(fail)}>
+              {speech.state === "failed" ? "Try again" : "Set up"}
+            </button>
+          </Row>
+        )}
+        <Row title="Speech model" hint="NVIDIA Parakeet TDT-CTC 110M (CC BY 4.0), run with transcribe.cpp (MIT).">
+          <span className="mono">Parakeet 110M</span>
         </Row>
       </div>
     </>

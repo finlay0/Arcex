@@ -152,7 +152,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | S2 | Rename, pin, archive and delete threads | Context menu and inline rename | P1 | done | The thread menu has Rename (inline), Pin to top / Unpin, Archive and Delete. Pinned threads sit at the top of their project with a pin mark. Verified November 22 |
 | S3 | Search threads | Search titles and transcripts | P1 | done | Ctrl+K (or Search in the sidebar) matches thread titles and, through the engine's `thread.search`, what was said in any thread (yours and the agent's messages), with a snippet around the match under "In messages". Verified November 22: "kelp" found a thread by its message and Enter opened it |
 | S4 | Notifications | Desktop notification when a thread finishes or needs you | P1 | done | "Finished" only after a clean finish. A failed or interrupted turn has its own state and its notification reads "Failed: <reason>" from the turn's error line. Needs you reads "Needs your OK to continue" |
-| S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | partial | |
+| S5 | Keyboard shortcuts | New thread, switch thread, focus composer, toggle panes, with a cheat sheet | P1 | done | Ctrl N new thread, Alt ↑/↓ previous or next thread (sidebar order), Ctrl K palette, Ctrl F find, Ctrl L message box, Ctrl B sidebar, Ctrl J panel, Ctrl ` terminal (when on), Ctrl , Settings, Ctrl / the cheat sheet (Settings › Shortcuts, with a message-box list: Enter, /, @, ↑). Verified November 22 |
 | S6 | Command palette | Ctrl+K to jump to any thread, project, setting or action (T3 `CommandPalette`) | P1 | done | `Palette.tsx`: Needs you, Actions (new thread or project, review changes, sidebar, details, browser, toolbox, theme), Threads, Projects (new thread there), Settings sections, then matches in messages. Ranked by start, word start, substring, then letters in order. Arrows, Enter, Esc. Replaces the sidebar's title filter. Verified November 22 |
 | S7 | Thread titles that fit | Titles written from the conversation, renamed as it develops (T3 title regeneration) | P1 | decide | `titleFrom` is a stopgap. A model call spends usage: ask Finlay |
 | S8 | Pin and snooze | Pin projects and threads; snooze a thread until later (T3 `ProjectPinButton`, `Sidebar.snooze`) | P2 | open | |
@@ -190,7 +190,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| X1 | Settings sections | General, Agents, Voice, Notifications, Shortcuts, Projects, Archived, About | P1 | partial | |
+| X1 | Settings sections | General, Agents, Voice, Notifications, Shortcuts, Projects, Archived, About | P1 | done | Profile, General, Appearance, Agents, Voice (dictation status, Set up to fetch the model ahead of time), Notifications (with a line when the system blocks them), Projects, Archived threads, Shortcuts, About. Each is in the palette. Verified November 22 |
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
 | X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | open | See `ade-ux-audit-2026-11-17.md` |
 | X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · S5 thread switching, Ctrl L, Ctrl / cheat sheet; X1 Voice and Notifications sections.
 - 2026-11-22 · S2 pin threads; S4 failure notifications give the reason.
 - 2026-11-22 · P3 opt-in terminal tab in the side panel.
 - 2026-11-22 · C11 find in thread, K8 Up-arrow prompt history, K13 full-size images.
@@ -254,7 +255,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, S5 shortcuts sheet, X1 settings sections, X3 accessibility pass, G3 push and pull requests, then the partial rows (G7, P4, P5).
+4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, X3 accessibility pass, G3 push and pull requests, then the partial rows (G7, P4, P5).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
