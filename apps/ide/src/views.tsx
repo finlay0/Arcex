@@ -8,7 +8,7 @@ import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { highlight, languageOf } from "./highlight.ts";
-import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { AutoText, Icon, Loader, Menu, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -866,6 +866,38 @@ export function Conversation(props: {
 
 /* ───────── Right panel ───────── */
 
+// Editors installed on this computer, read once.
+let editorList: Promise<{ id: string; name: string }[]> | null = null;
+
+/** "Open in VS Code / Cursor / File Explorer" for the project or one of its files. */
+function OpenIn(props: { project: Project; path?: string; fail(error: unknown): void; compact?: boolean }) {
+  const [editors, setEditors] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    let stale = false;
+    editorList ??= call("project.editors", {}).catch(() => {
+      editorList = null;
+      return [];
+    });
+    void editorList.then((list) => !stale && setEditors(list));
+    return () => {
+      stale = true;
+    };
+  }, []);
+  if (!editors.length) return null;
+  const what = props.path ? "this file" : "this project";
+  return (
+    <Menu
+      label={`Open ${what} in another app`}
+      icon="out"
+      text={props.compact ? undefined : "Open in"}
+      items={editors.map((editor) => ({
+        label: editor.name,
+        run: () => void call("project.openIn", { projectId: props.project.id, editor: editor.id, ...(props.path ? { path: props.path } : {}) }).catch(props.fail),
+      }))}
+    />
+  );
+}
+
 export type PanelTab = "details" | "browser";
 
 export function Panel(props: {
@@ -942,11 +974,12 @@ export function Panel(props: {
         <Browser project={project} found={found} fail={fail} />
       ) : (
         <>
-        {viewing && <FileView project={project} path={viewing} refresh={settled} back={() => setViewing(null)} />}
+        {viewing && <FileView project={project} path={viewing} refresh={settled} back={() => setViewing(null)} fail={fail} />}
         <div className="pbody" hidden={!!viewing}>
           <div className="phero" title={project.cwd}>
             <Icon name="folder" />
             <b className="trunc">{project.name}</b>
+            <OpenIn project={project} fail={fail} />
             <span>
               <span className={threads.some((t) => t.state === "needs_you") ? "dot needs" : threads.some(busy) ? "dot working" : "dot ok"} />
               {threads.some((t) => t.state === "needs_you") ? "Needs you" : threads.some(busy) ? `${plural(threads.filter(busy).length, "agent")} working` : "Project active"}
@@ -1052,7 +1085,7 @@ function Files({ project, refresh, view }: { project: Project; refresh: string; 
 }
 
 /** One file, read-only, with line numbers and grey syntax tones. Esc or Back returns to the details. */
-function FileView({ project, path, refresh, back }: { project: Project; path: string; refresh: string; back(): void }) {
+function FileView({ project, path, refresh, back, fail }: { project: Project; path: string; refresh: string; back(): void; fail(error: unknown): void }) {
   type Loaded = Requests["project.readFile"]["result"];
   const [file, setFile] = useState<Loaded | { error: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1079,6 +1112,7 @@ function FileView({ project, path, refresh, back }: { project: Project; path: st
       <div className="fvtop">
         <button className="icon" aria-label="Back to project details" title="Back" onClick={back}><Icon name="back" /></button>
         <span className="fvname trunc" title={path}><b>{name}</b>{path !== name && <span className="muted"> {path.slice(0, -name.length - 1)}</span>}</span>
+        <OpenIn project={project} path={path} fail={fail} compact />
         {lines && (
           <button className="icon" aria-label={copied ? "Copied" : "Copy file contents"} title="Copy" onClick={() => {
             if (file && "text" in file && file.text !== undefined) void navigator.clipboard.writeText(file.text);

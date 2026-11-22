@@ -343,10 +343,10 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .tabs button:hover { color: var(--ink); }
 .tabs button[aria-selected="true"] { background: var(--active); color: var(--ink); }
 .pbody { overflow-y: auto; padding: 8px 18px 22px; display: flex; flex-direction: column; gap: 22px; }
-.phero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 14px; align-items: center; }
+.phero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 14px; align-items: center; }
 .phero > .i { grid-row: span 2; width: 26px; height: 26px; color: var(--ink-2); }
 .phero b { font-size: 17px; font-weight: 500; }
-.phero span { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 14px; }
+.phero > span:last-child { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-size: 14px; }
 .goalcard { padding: 14px 16px; border-radius: 14px; background: var(--hover); border: 1px solid var(--line); display: grid; gap: 4px; }
 .goalcard p { color: var(--ink-2); font-size: 14px; line-height: 21px; }
 .sec { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); min-width: 0; padding-top: 18px; border-top: 1px solid var(--line); }
@@ -605,3 +605,9 @@ button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(-
 .ieditor textarea.textfield { width: 100%; height: auto; min-height: 220px; padding: 10px 12px; font: 13px/20px var(--mono); resize: vertical; }
 .ieditor .btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ieditor .btns .muted { font-size: 13px; margin-left: 4px; }
+
+/* "Open in" another app. */
+.phero > .menuwrap { grid-column: 3; grid-row: 1 / span 2; }
+.btn.ghost.more { width: auto; height: 30px; padding: 0 10px; font-size: 13px; color: var(--ink-2); background: none; }
+.btn.ghost.more:hover { background: var(--hover); color: var(--ink); }
+.phero > .menuwrap, .fvtop > .menuwrap { display: inline-flex; margin: 0; }

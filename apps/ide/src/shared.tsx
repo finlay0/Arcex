@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
 import type { Agent, Thread } from "@arcex/contracts";
 
 declare global {
@@ -95,4 +95,71 @@ export function AutoText(props: TextareaHTMLAttributes<HTMLTextAreaElement> & { 
     el.style.height = `${el.scrollHeight}px`;
   }, [props.value]);
   return <textarea ref={ref} {...props} />;
+}
+
+/** A small menu that opens under its button and closes on any outside click. Risky items ask twice. */
+export function Menu({ label, items, icon = "dots", text }: { label: string; items: { label: string; danger?: boolean; run(): void }[]; icon?: string; /** Shown beside the icon, for a menu that isn't just "more". */ text?: string }) {
+  const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState<string | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return setArmed(null);
+    menu.current?.querySelector("button")?.focus();
+    const close = () => setOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [open]);
+  return (
+    <span className="menuwrap">
+      <button
+        className={text ? "btn ghost more" : "icon more"}
+        ref={trigger}
+        aria-label={label}
+        title={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(!open);
+        }}
+      >
+        <Icon name={icon} />{text}
+      </button>
+      {open && (
+        <span className="menu" role="menu" ref={menu} onBlur={(event) => {
+          if (event.relatedTarget && event.relatedTarget !== trigger.current && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        }} onKeyDown={(event) => {
+          const buttons = [...event.currentTarget.querySelectorAll("button")];
+          const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setOpen(false);
+            trigger.current?.focus();
+          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            buttons[(focused + buttons.length + (event.key === "ArrowDown" ? 1 : -1)) % buttons.length]?.focus();
+          }
+        }}>
+          {items.map((item) => (
+            <button
+              key={item.label}
+              role="menuitem"
+              className={item.danger ? "danger" : undefined}
+              onClick={(event) => {
+                // Choosing an item must not also trigger whatever the menu sits on.
+                event.stopPropagation();
+                if (item.danger && armed !== item.label) return setArmed(item.label);
+                setOpen(false);
+                trigger.current?.focus();
+                item.run();
+              }}
+            >
+              {item.danger && armed === item.label ? "Click again to confirm" : item.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
 }

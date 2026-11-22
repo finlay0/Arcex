@@ -244,6 +244,10 @@ export type Requests = {
    * One project file to read in the side panel, at most 1 MB of it. `text` is missing for binary files and for files
    * too large to show.
    */
+  /** Code editors found on this computer, plus the system's file manager. */
+  "project.editors": { params: Record<string, never>; result: { id: string; name: string }[] };
+  /** Opens the project, or one file in it, in an editor or the file manager. */
+  "project.openIn": { params: { projectId: string; editor: string; path?: string }; result: { ok: true } };
   "project.readFile": { params: { projectId: string; path: string }; result: { path: string; size: number; text?: string; binary?: boolean; tooLarge?: boolean } };
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };

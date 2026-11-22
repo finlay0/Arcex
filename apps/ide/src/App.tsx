@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderStatus, Thread } from "@arcex/contracts";
 import type { Choice } from "./ModelPicker.tsx";
 import { SettingsView, initials, type Section } from "./Settings.tsx";
-import { Icon, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
+import { Icon, Menu, ago, busy, dotClass, nameOf, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
@@ -18,72 +18,6 @@ type Screen =
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 const remembered = (key: string) => localStorage.getItem(key);
 
-/** A small menu that opens under its button and closes on any outside click. Risky items ask twice. */
-function Menu({ label, items }: { label: string; items: { label: string; danger?: boolean; run(): void }[] }) {
-  const [open, setOpen] = useState(false);
-  const [armed, setArmed] = useState<string | null>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return setArmed(null);
-    menu.current?.querySelector("button")?.focus();
-    const close = () => setOpen(false);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, [open]);
-  return (
-    <span className="menuwrap">
-      <button
-        className="icon more"
-        ref={trigger}
-        aria-label={label}
-        title={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          setOpen(!open);
-        }}
-      >
-        <Icon name="dots" />
-      </button>
-      {open && (
-        <span className="menu" role="menu" ref={menu} onBlur={(event) => {
-          if (event.relatedTarget && event.relatedTarget !== trigger.current && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-        }} onKeyDown={(event) => {
-          const buttons = [...event.currentTarget.querySelectorAll("button")];
-          const focused = buttons.indexOf(document.activeElement as HTMLButtonElement);
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            setOpen(false);
-            trigger.current?.focus();
-          } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-            event.preventDefault();
-            buttons[(focused + buttons.length + (event.key === "ArrowDown" ? 1 : -1)) % buttons.length]?.focus();
-          }
-        }}>
-          {items.map((item) => (
-            <button
-              key={item.label}
-              role="menuitem"
-              className={item.danger ? "danger" : undefined}
-              onClick={(event) => {
-                // Choosing an item must not also trigger whatever the menu sits on.
-                event.stopPropagation();
-                if (item.danger && armed !== item.label) return setArmed(item.label);
-                setOpen(false);
-                trigger.current?.focus();
-                item.run();
-              }}
-            >
-              {item.danger && armed === item.label ? "Click again to confirm" : item.label}
-            </button>
-          ))}
-        </span>
-      )}
-    </span>
-  );
-}
 
 /** The Update button of a development build: quiet until there is newer code, then rebuilds and restarts onto it. */
 function UpdateButton({ fail }: { fail: (error: unknown) => void }) {

@@ -4,6 +4,7 @@ import { createAttachments } from "./attachments.ts";
 import { mentionLinks, searchFiles } from "./mentions.ts";
 import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
+import { listEditors, openIn } from "./editors.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -883,6 +884,26 @@ export function createEngine(
         await writeFile(path.join(project.cwd, "CLAUDE.md"), "@AGENTS.md\n", { encoding: "utf8", flag: "wx" }).then(() => created.push("CLAUDE.md")).catch(() => {});
       }
       return { created };
+    },
+
+    "project.editors"() {
+      return listEditors();
+    },
+
+    async "project.openIn"(params) {
+      const project = projectOf(params.projectId);
+      const editor = text(params.editor, "editor", 40);
+      let target = project.cwd;
+      if (params.path !== undefined) {
+        if (typeof params.path !== "string" || params.path.length > 1000) throw new Error("pick a file");
+        // Stay inside the project folder, also through links.
+        const root = await realpath(project.cwd);
+        const file = await realpath(path.resolve(project.cwd, params.path)).catch(() => null);
+        if (!file || (file !== root && !file.startsWith(root + path.sep))) throw new Error("that file is outside the project or gone");
+        target = file;
+      }
+      await openIn(editor, target, target !== project.cwd && statSync(target).isFile());
+      return { ok: true as const };
     },
 
     async "project.readFile"(params) {
