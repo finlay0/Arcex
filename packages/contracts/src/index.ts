@@ -98,6 +98,9 @@ export type PlanEntry = { content: string; status: "pending" | "in_progress" | "
 /** One entry in a project folder. */
 export type FileEntry = { name: string; kind: "folder" | "file" };
 
+/** A project file or folder found by "@" search. `path` is relative, with forward slashes. */
+export type FileMatch = { path: string; kind: "folder" | "file" };
+
 export type Change = { path: string; status: "added" | "changed" | "removed"; added: number; removed: number };
 
 /** One entry in the curated toolbox. No prices: they change too often to be trusted. */
@@ -162,6 +165,8 @@ export type Requests = {
   "project.setPreview": { params: { projectId: string; url: string | null }; result: Project };
   /** Lists one folder of the project. `dir` is relative to the project folder; empty means the top. */
   "project.files": { params: { projectId: string; dir?: string }; result: FileEntry[] };
+  /** Finds project files and folders by a few letters of their path, best first. Empty query lists the top ones. */
+  "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */

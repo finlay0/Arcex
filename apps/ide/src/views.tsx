@@ -4,6 +4,7 @@ import { AgentChoices, ModelPicker, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
+import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { AutoText, Icon, Loader, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
@@ -467,6 +468,7 @@ export function Conversation(props: {
   const notReady = health && (!health.installed || health.signedIn === false);
   const queueFull = working && (thread?.queued?.length ?? 0) >= 10;
   const slash = useSlashMenu(agentId, draft, setDraft);
+  const mention = useMentionMenu(project?.id ?? null, draft, setDraft);
   const files = useAttachments(draftKey ?? "", actions.fail);
   const enter = onEnter(() => void send());
   const canSend = Boolean(target && props.connected && !notReady && !queueFull && !sending && !files.uploading && (draft.trim() || files.list.length) && (!working || thread?.state !== "stopping"));
@@ -494,6 +496,7 @@ export function Conversation(props: {
   const composer = (
     <div className={files.dragging ? "composer dropping" : "composer"} {...files.dropProps}>
       {slash.menu}
+      {mention.menu}
       {files.chips}
       <AutoText
         autoFocus
@@ -502,8 +505,14 @@ export function Conversation(props: {
         aria-label={thread ? `Reply to ${nameOf(thread.provider)}` : "First message"}
         maxLength={20000}
         placeholder={thread ? `Reply to ${nameOf(thread.provider)}` : "Describe what you want done"}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => slash.onKeyDown(event) || enter(event)}
+        onChange={(event) => {
+          mention.onSelect(event);
+          setDraft(event.target.value);
+        }}
+        onKeyDown={(event) => slash.onKeyDown(event) || mention.onKeyDown(event) || enter(event)}
+        onSelect={mention.onSelect}
+        onKeyUp={mention.onSelect}
+        onClick={mention.onSelect}
         onPaste={files.onPaste}
       />
       <div className="tools">

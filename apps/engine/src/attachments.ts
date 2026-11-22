@@ -74,7 +74,7 @@ export function createAttachments(dataDir: string) {
           const bytes = readFileSync(file);
           if (!bytes.includes(0)) {
             const body = bytes.toString("utf8");
-            if (!body.includes("�")) {
+            if (!body.includes("\uFFFD")) {
               blocks.push({ type: "resource", resource: { uri, mimeType: attachment.mime, text: body } });
               continue;
             }

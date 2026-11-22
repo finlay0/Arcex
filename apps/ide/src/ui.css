@@ -471,3 +471,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .queue .qfiles { flex: none; display: inline-flex; align-items: center; gap: 3px; color: var(--ink-3); font-size: 12px; }
 .queue .qfiles .i { width: 12px; height: 12px; }
 @media (prefers-reduced-motion: reduce) { .attached li > .qbtn { transition: none; } }
+
+/* "@" file picker (K3) */
+.slash.files li { align-items: center; gap: 8px; }
+.slash.files li > .i { flex: none; width: 14px; height: 14px; color: var(--ink-3); }

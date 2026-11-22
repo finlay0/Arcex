@@ -1,6 +1,7 @@
 // Projects, threads and their timelines. Clients only see what this module emits.
 import { createSpeech } from "./speech.ts";
 import { createAttachments } from "./attachments.ts";
+import { mentionLinks, searchFiles } from "./mentions.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
@@ -448,7 +449,8 @@ export function createEngine(
       await applyChoices(thread, session, thread.choices);
       turn.signal.throwIfAborted();
       setState(thread, "working");
-      const result = await session.prompt(files.blocks(prompt, attached, session.promptCapabilities));
+      // Files the message mentions with "@" go along as links the agent can open.
+      const result = await session.prompt([...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
       if (result.stopReason === "cancelled") outcome = "stopped";
       if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
         const reason = result.stopReason === "refusal" ? "declined the request" : "reached a turn limit";
@@ -641,6 +643,12 @@ export function createEngine(
         .map((entry) => ({ name: entry.name, kind: entry.isDirectory() ? ("folder" as const) : ("file" as const) }))
         .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1))
         .slice(0, 300);
+    },
+
+    "project.search"(params) {
+      const project = projectOf(params.projectId);
+      const query = typeof params.query === "string" ? params.query.slice(0, 200) : "";
+      return searchFiles(project.cwd, query);
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
