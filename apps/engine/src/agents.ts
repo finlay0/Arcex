@@ -19,11 +19,12 @@ const PLAN_NOTE =
  * Agents Arcex knows how to start. Every one speaks the Agent Client Protocol and runs as its maker's own tool,
  * signed in by the user. `adapter` agents ship with Arcex; `command` agents must be installed on the computer.
  */
-export const BUILTIN: Record<string, { name: string; adapter?: { pkg: string; bin: string }; command?: string; signIn: string; providers?: string }> = {
-  claude: { name: "Claude", adapter: { pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp" }, signIn: "claude auth login" },
-  codex: { name: "Codex", adapter: { pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp" }, signIn: "codex login" },
-  opencode: { name: "OpenCode", command: "opencode acp", signIn: "opencode auth login", providers: "opencode auth login" },
-  gemini: { name: "Gemini", command: "gemini --experimental-acp", signIn: "gemini" },
+/** `release` is the maker's npm package (to see whether a newer version is out) and the maker's own update command. */
+export const BUILTIN: Record<string, { name: string; adapter?: { pkg: string; bin: string }; command?: string; signIn: string; providers?: string; release?: { npm: string; update: string } }> = {
+  claude: { name: "Claude", adapter: { pkg: "@agentclientprotocol/claude-agent-acp", bin: "claude-agent-acp" }, signIn: "claude auth login", release: { npm: "@anthropic-ai/claude-code", update: "claude update" } },
+  codex: { name: "Codex", adapter: { pkg: "@agentclientprotocol/codex-acp", bin: "codex-acp" }, signIn: "codex login", release: { npm: "@openai/codex", update: "npm install -g @openai/codex@latest" } },
+  opencode: { name: "OpenCode", command: "opencode acp", signIn: "opencode auth login", providers: "opencode auth login", release: { npm: "opencode-ai", update: "opencode upgrade" } },
+  gemini: { name: "Gemini", command: "gemini --experimental-acp", signIn: "gemini", release: { npm: "@google/gemini-cli", update: "npm install -g @google/gemini-cli@latest" } },
 };
 
 export function agentList(settings: Settings): Agent[] {

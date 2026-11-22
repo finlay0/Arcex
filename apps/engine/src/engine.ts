@@ -796,8 +796,8 @@ export function createEngine(
       const agentId = text(params.agentId, "agent", 80);
       const builtin = BUILTIN[agentId];
       // Only Arcex's own fixed commands for built-in agents, never text from the request.
-      const command = params.purpose === "providers" ? builtin?.providers : params.purpose === "signIn" ? builtin?.signIn : undefined;
-      if (!command) throw new Error("that agent has no sign-in to open");
+      const command = params.purpose === "providers" ? builtin?.providers : params.purpose === "signIn" ? builtin?.signIn : params.purpose === "update" ? builtin?.release?.update : undefined;
+      if (!command) throw new Error("that agent has nothing to open for that");
       openTerminal(command);
       // New accounts bring new models, so ask the agent again next time.
       modelCache.delete(agentId);

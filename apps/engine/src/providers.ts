@@ -26,6 +26,28 @@ const CHECKS: Record<string, { version: string; auth?: string; signedIn?(output:
   // OpenCode and Gemini have no status command: the probe asks the agent itself.
 };
 
+// The newest published version of each maker's tool, read from the public npm registry at most every six hours.
+// Nothing about the user is sent: it is a plain request for the package's latest version.
+const releases = new Map<string, { at: number; version: Promise<string | null> }>();
+function latestRelease(pkg: string): Promise<string | null> {
+  const cached = releases.get(pkg);
+  if (cached && Date.now() - cached.at < 6 * 60 * 60 * 1000) return cached.version;
+  const version = fetch(`https://registry.npmjs.org/${pkg.replace("/", "%2F")}/latest`, { signal: AbortSignal.timeout(5000), headers: { accept: "application/json" } })
+    .then((response) => (response.ok ? (response.json() as Promise<{ version?: unknown }>) : null))
+    .then((body) => (body && typeof body.version === "string" && /^\d+\.\d+\.\d+$/.test(body.version) ? body.version : null))
+    .catch(() => null);
+  releases.set(pkg, { at: Date.now(), version });
+  return version;
+}
+
+/** Whether version `a` is older than `b`, both plain x.y.z. */
+function older(a: string, b: string): boolean {
+  const left = a.split(".").map(Number);
+  const right = b.split(".").map(Number);
+  for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) < (right[index] ?? 0);
+  return false;
+}
+
 function run(command: string): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
     exec(command, { timeout: 10_000, windowsHide: true }, (error, stdout, stderr) =>
@@ -46,17 +68,20 @@ export async function providerStatus(settings: Settings, probe?: Probe): Promise
       }
       const version = await run(check.version);
       if (!version.ok) return { id: agent.id, name: agent.name, installed: false, signedIn: null, version: null, signInCommand };
-      const auth = check.auth ? await run(check.auth) : null;
+      const release = BUILTIN[agent.id]?.release;
+      const [auth, latest] = await Promise.all([check.auth ? run(check.auth) : null, release ? latestRelease(release.npm) : null]);
       const asked = !check.auth && probe ? await probe(agent.id) : null;
+      const current = version.output.match(/\d+\.\d+\.\d+/)?.[0] ?? null;
       return {
         id: agent.id,
         name: agent.name,
         installed: true,
         signedIn: auth && check.signedIn ? check.signedIn(auth.output, auth.ok) : asked?.signedIn ?? null,
         signInMethods: asked?.methods ?? [],
-        version: version.output.match(/\d+\.\d+\.\d+/)?.[0] ?? null,
+        version: current,
         signInCommand,
         ...(BUILTIN[agent.id]?.providers ? { providersCommand: BUILTIN[agent.id]!.providers } : {}),
+        ...(release && current && latest && older(current, latest) ? { update: { latest, command: release.update } } : {}),
       };
     }),
   );
@@ -67,7 +92,7 @@ export async function providerStatus(settings: Settings, probe?: Probe): Promise
  * (OpenCode's provider picker, Claude's and Codex's logins). The user finishes there; the maker's tool keeps the result.
  */
 export function openTerminal(command: string): void {
-  if (!/^[\w .-]{1,80}$/.test(command)) throw new Error("that sign-in command can't be opened");
+  if (!/^[\w .@/-]{1,80}$/.test(command)) throw new Error("that command can't be opened");
   if (process.platform === "win32") {
     spawn("cmd.exe", ["/d", "/c", `start "Arcex sign-in" cmd.exe /k ${command}`], { detached: true, stdio: "ignore", windowsVerbatimArguments: true }).unref();
   } else if (process.platform === "darwin") {

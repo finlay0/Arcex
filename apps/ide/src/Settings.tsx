@@ -521,6 +521,21 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
                 </button>
               </Row>
             )}
+            {state && state.installed && state.update && (
+              <Row title={`Update to ${state.update.latest}`} hint={`You have ${state.version ?? "an older version"}. Arcex opens a terminal with ${agent.name}'s own update ready.`}>
+                <button className="btn" onClick={() => void call("agents.openTerminal", { agentId: agent.id, purpose: "update" }).catch(fail)}>
+                  Update {agent.name}
+                </button>
+                <button
+                  className="btn mono"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(state.update!.command).then(() => setCopied(`update:${agent.id}`)).catch(fail);
+                  }}
+                >
+                  {copied === `update:${agent.id}` ? "Copied" : state.update.command}
+                </button>
+              </Row>
+            )}
             {state && state.installed && state.providersCommand && (
               <Row
                 title="Other model makers"

@@ -659,3 +659,5 @@ button.ctxmeter:hover, button.ctxmeter[aria-expanded="true"] { background: var(-
 .resizer:focus-visible { outline: none; }
 body.resizing { cursor: col-resize; user-select: none; }
 body.resizing iframe { pointer-events: none; }
+/* A long command stays inside its card. */
+.btn.mono { max-width: 100%; height: auto; min-height: 36px; padding-top: 6px; padding-bottom: 6px; white-space: normal; overflow-wrap: anywhere; text-align: left; }

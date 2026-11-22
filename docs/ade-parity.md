@@ -171,7 +171,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | H6 | Skills and hooks manager | See, turn on or off and add skills and hooks per project (Codex `skills_toggle_view`, `hooks_browser`) | P1 | open | |
 | H7 | Agent memory | View and edit what the agent remembers across sessions (Codex `memories_settings_view`, Claude memory) | P2 | open | |
 | H8 | Extra folders | Let a thread read and write a second folder (Codex `additional_dirs`, Claude added directories) | P2 | open | |
-| H9 | Agent CLI updates | Notice when Claude or Codex has an update and offer it (T3 `ProviderUpdatesAction`) | P1 | open | |
+| H9 | Agent CLI updates | Notice when Claude or Codex has an update and offer it (T3 `ProviderUpdatesAction`) | P1 | done | Settings › Agents compares each built-in agent's installed version with the maker's latest npm release (public registry, cached six hours, nothing about the user sent) and shows "Update to x.y.z" with "Update <agent>" (opens a terminal running the maker's own command: `claude update`, `opencode upgrade`, or npm for Codex and Gemini) and the command to copy. Verified November 22: all four showed updates. Not pressed in testing (opens a window). Note: Claude and Codex threads run through adapters bundled with Arcex, so their CLI updates matter mostly for sign-in; Arcex's own dependency updates move the bundled versions |
 | H10 | Scheduled and recurring runs | Run a prompt on a schedule (Claude routines and `/loop`, T3 `ThreadAutomationsPanel`) | P2 | decide | Spends usage unattended. Ask Finlay |
 
 ### Agents and model makers
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · H9 agent updates in Settings › Agents.
 - 2026-11-22 · P4 drag to resize the sidebar and the side panel.
 - 2026-11-22 · C8 file paths in replies open the file at that line.
 - 2026-11-22 · C8 syntax tones in reply code blocks.
