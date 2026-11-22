@@ -814,3 +814,11 @@ textarea.textfield.cpairs { height: auto; min-height: 64px; padding: 8px 12px; r
 .nextstep { border: 1px solid var(--line-2); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--ink-2); background: var(--raised); text-align: left; }
 .nextstep:hover { color: var(--ink); background: var(--hover); }
 .wrapby { color: var(--ink-4); font-size: 12px; cursor: help; }
+/* The feedback dialog. */
+.palette.feedback { padding: 20px; gap: 12px; overflow: auto; }
+.palette.feedback h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.palette.feedback textarea.textfield { width: 100%; height: auto; min-height: 110px; padding: 10px 12px; resize: vertical; font: inherit; font-size: 14px; }
+.fbattach { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.fbpreview summary { cursor: pointer; color: var(--ink-3); font-size: 13px; }
+.fbpreview pre { margin: 8px 0 0; max-height: 200px; overflow: auto; padding: 10px; border-radius: 10px; background: var(--chrome); font: 12px/18px var(--mono); white-space: pre-wrap; color: var(--ink-2); }
+.palette.feedback .changeacts { justify-content: flex-end; }

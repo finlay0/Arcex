@@ -3,6 +3,7 @@ import type { About, Agent, AgentMemory, Connector, DirectoryAgent, HookEntry, M
 import { Icon, ago, limitText, nameOf, plural } from "./shared.tsx";
 import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
+import { OPEN_FEEDBACK } from "./Feedback.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
 
 export type Section = "profile" | "general" | "appearance" | "agents" | "connectors" | "skills" | "memory" | "voice" | "notifications" | "projects" | "archived" | "shortcuts" | "about";
@@ -383,6 +384,9 @@ export function SettingsView(props: {
                 <Row title="Your data" hint="Projects, threads and settings are saved in this folder on your computer."><span className="mono path" title={props.about.dataDir}>{props.about.dataDir}</span></Row>
                 <Row title="New projects" hint="Where Arcex creates a folder when you start from an idea."><span className="mono path" title={props.about.projectsDir}>{props.about.projectsDir}</span></Row>
                 <Row title="Usage" hint={`${plural(props.projects.length, "project")} and ${plural(props.threads.length, "thread")} on this computer.`}><span /></Row>
+                <Row title="Send feedback" hint="Report a problem or ask for something. It opens a GitHub issue you check before submitting.">
+                  <button className="btn" onClick={() => window.dispatchEvent(new CustomEvent(OPEN_FEEDBACK, { detail: null }))}>Send feedback</button>
+                </Row>
               </div>
             </>
           )}

@@ -8,6 +8,7 @@ import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { OPEN_FILE } from "./md.tsx";
+import { Feedback, OPEN_FEEDBACK } from "./Feedback.tsx";
 import { Conversation, NewProject, OPEN_BESIDE, OPEN_PREVIEW, Panel, REVIEW_PROMPT, addThreadFolder, type PanelTab } from "./views.tsx";
 
 /** What the main column is showing. */
@@ -99,6 +100,13 @@ export function App() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
+  // The feedback dialog, about a thread or about Arcex in general (null).
+  const [feedback, setFeedback] = useState<{ threadId: string | null } | null>(null);
+  useEffect(() => {
+    const open = (event: Event) => setFeedback({ threadId: (event as CustomEvent<string | null>).detail ?? null });
+    window.addEventListener(OPEN_FEEDBACK, open);
+    return () => window.removeEventListener(OPEN_FEEDBACK, open);
+  }, []);
   // Pinned projects and snoozed threads are how this computer shows the sidebar, so they live here, not in the engine.
   const [pinnedProjects, setPinnedProjects] = useState<string[]>(() => {
     try {
@@ -388,6 +396,7 @@ export function App() {
           { label: "Snooze until tomorrow", run: () => snooze(t.id, tomorrowMorning()) },
         ]),
     ...(t.folders.length < 5 ? [{ label: "Add a folder…", run: () => void addThreadFolder(t, fail) }] : []),
+    { label: "Send feedback about this thread…", run: () => setFeedback({ threadId: t.id }) },
     { label: t.pinned ? "Unpin" : "Pin to top", run: () => void call("thread.update", { threadId: t.id, pinned: !t.pinned }).catch(fail) },
     { label: "Archive", run: () => void call("thread.update", { threadId: t.id, archived: true }).catch(fail) },
     { label: "Delete", danger: true, run: () => void call("thread.remove", { threadId: t.id }).catch(fail) },
@@ -419,6 +428,7 @@ export function App() {
         ...(settings?.terminal ? [{ id: "terminal", group: "Actions", label: "Show the terminal", icon: "code", keys: "Ctrl `", run: () => { setPanel(true); setTab("terminal"); } }] : []),
       ] : []),
       { id: "toolbox", group: "Actions", label: "Open the toolbox", icon: "box", run: () => setScreen({ kind: "toolbox" }) },
+      { id: "feedback", group: "Actions", label: thread ? "Send feedback about this thread" : "Send feedback", icon: "chat", run: () => setFeedback({ threadId: thread?.id ?? null }) },
       ...(["dark", "light", "system"] as const).filter((value) => value !== settings?.theme).map((value) => ({
         id: `theme:${value}`, group: "Actions", label: value === "system" ? "Match the system theme" : `Switch to ${value} theme`, icon: value === "light" ? "sun" : "moon",
         run: () => void call("settings.set", { theme: value }).catch(fail),
@@ -792,6 +802,7 @@ export function App() {
           close={() => setPalette(false)}
         />
       )}
+      {feedback && <Feedback threadId={feedback.threadId} close={() => setFeedback(null)} />}
       {toast && <div className="toast" role="alert">{toast}</div>}
     </div>
   );
