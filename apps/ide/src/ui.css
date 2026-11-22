@@ -712,3 +712,14 @@ body.resizing iframe { pointer-events: none; }
 .panehead { display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13.5px; }
 .panehead .trunc { flex: 1; }
 .quotebtn { position: fixed; z-index: 60; transform: translateX(-50%); box-shadow: var(--shadow); background: var(--raised-2); }
+/* Drafts put aside. */
+.stash { position: relative; display: inline-flex; align-items: center; gap: 2px; }
+.stashcount { height: 28px; padding: 0 8px; border-radius: 8px; color: var(--ink-3); font-size: 12.5px; }
+.stashcount:hover, .stashcount[aria-expanded="true"] { background: var(--hover); color: var(--ink); }
+.stashpop { position: absolute; left: 0; bottom: 38px; z-index: 40; width: 340px; max-width: 80vw; max-height: 320px; overflow-y: auto; padding: 6px; background: var(--raised); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: var(--shadow), 0 30px 70px -20px rgba(0, 0, 0, .7); display: grid; gap: 2px; animation: arrive .14s ease-out; }
+.stashpop .label { padding: 4px 8px 6px; font-size: 12px; color: var(--ink-3); }
+.stashrow { display: flex; align-items: center; gap: 2px; }
+.stashtext { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 8px; border-radius: 8px; color: var(--ink-2); text-align: left; font-size: 13.5px; }
+.stashtext:hover { background: var(--hover); color: var(--ink); }
+.stashtext .trunc { flex: 1; }
+.stashtext .when { color: var(--ink-4); font-size: 12px; }

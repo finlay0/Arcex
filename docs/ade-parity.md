@@ -105,7 +105,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | done | Up in an empty message box brings back this thread's earlier messages, newest first; Down steps forward and ends at an empty box. Typing stops the stepping. Verified November 22 |
 | K9 | Context and usage meter | Context % used, plan usage limits | P1 | partial | Context: a thin grey ring by the message box fills from the agent's ACP `usage_update` (Claude and Codex both send it); hover gives "3% of the agent's memory for this thread used (30k of 1M tokens)", the percentage shows from 50% and the ring brightens from 80%. Verified November 21 with Claude Haiku. Still to do: plan usage limits (X5), which ACP doesn't report |
 | K10 | Stop and steer | Stop. Sending while working steers or queues | P0 | done | While a turn runs, agents that advertise the ACP `_session/steering` extension (Claude and Codex adapters both do) take the message into that turn: Enter sends it now and it shows in the thread where it went in; Tab queues it for after the turn instead. If no turn can take it, it queues. Other agents queue as before (K5). Verified November 22 with Claude Haiku (a 1-to-1500 count steered to stop and say STEERED in the same turn). Codex steering not run yet |
-| K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | open | |
+| K11 | Stash a draft | Put the current draft aside and bring it back later (T3 `ComposerStash`) | P2 | done | A box button in the message box puts the draft aside; "N aside" lists them (newest first, up to 20, kept on this computer, shared by every message box). Picking one puts it back and sets aside whatever was in the box; each can be deleted. Verified November 22 |
 | K12 | Suggested next prompts | One-click follow-ups after a turn (T3 `usePromptSuggestion`, Claude next-step buttons) | P1 | decide | Generating them spends usage. Ask Finlay (background intelligence rule) |
 | K13 | Expand an attached image | Click a thumbnail to see it full size (T3 `ExpandedImageDialog`) | P2 | done | Clicking a sent image opens it full size over the app; a click or Esc closes it. Verified November 22 with a pasted image (Claude Haiku answered "Orange") |
 | K14 | Send to several models | Run one prompt on two agents or models side by side (T3 `useMultipleModelSend`) | P2 | open | |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · K11 put drafts aside.
 - 2026-11-22 · C16 quote selected reply text.
 - 2026-11-22 · P4 split view of two threads.
 - 2026-11-22 · X5 Claude plan limits in Settings › Agents and a notice near the limit.
