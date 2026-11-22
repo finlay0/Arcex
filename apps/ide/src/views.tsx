@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
-import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, PublishState, Requests, Thread } from "@arcex/contracts";
+import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, PublishState, PullRequestEntry, Requests, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
@@ -999,6 +999,8 @@ export function Panel(props: {
   terminal: boolean;
   /** The thread on screen, if one is. */
   thread: Thread | null;
+  /** Goes to a new thread in this project with `text` in its message box. */
+  startDraft(text: string): void;
   fail(error: unknown): void;
   close(): void;
 }) {
@@ -1109,7 +1111,7 @@ export function Panel(props: {
           <Files project={project} refresh={settled} view={(file) => { setViewLine(null); setViewing(file); }} />
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
-          <Publish project={project} refresh={settled} fail={fail} />
+          <Publish project={project} refresh={settled} fail={fail} startDraft={props.startDraft} />
           {props.thread && <Folders thread={props.thread} fail={fail} />}
           {recent.length > 0 && (
             <section className="sec">
@@ -1344,9 +1346,35 @@ function SaveVersion({ projectId, message, fail, className = "btn" }: { projectI
  * Push and pull requests, shown only when the project already has a remote (people who use GitHub). Git and the
  * GitHub CLI use the user's own sign-in.
  */
-function Publish({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
+function Publish({ project, refresh, fail, startDraft }: { project: Project; refresh: string; fail(error: unknown): void; startDraft(text: string): void }) {
   const [state, setState] = useState<PublishState | null>(null);
   const [doing, setDoing] = useState<"push" | "pr" | null>(null);
+  const [picking, setPicking] = useState<PullRequestEntry[] | "loading" | null>(null);
+  const [switching, setSwitching] = useState<number | null>(null);
+  const pickPr = () => {
+    if (picking) return setPicking(null);
+    setPicking("loading");
+    call("project.pullRequests", { projectId: project.id })
+      .then(setPicking)
+      .catch((error) => { setPicking(null); fail(error); });
+  };
+  const startOn = (number: number) => {
+    setSwitching(number);
+    call("project.checkoutPr", { projectId: project.id, number })
+      .then((pr) => {
+        setPicking(null);
+        window.dispatchEvent(new Event(FILES_CHANGED));
+        // The user writes what they want below; nothing goes to an agent until they send it.
+        const parts = [
+          `This project is now on pull request #${pr.number}, "${pr.title}"${pr.author ? ` by ${pr.author}` : ""} (branch ${pr.branch}, into ${pr.base}).`,
+          pr.body.trim() ? `Its description:\n${pr.body.trim()}` : "",
+          `Run \`gh pr diff ${pr.number}\` to see its changes.`,
+        ];
+        startDraft(`${parts.filter(Boolean).join("\n\n")}\n\n`);
+      })
+      .catch(fail)
+      .finally(() => setSwitching(null));
+  };
   useEffect(() => {
     let current = true;
     call("project.publishState", { projectId: project.id })
@@ -1392,6 +1420,22 @@ function Publish({ project, refresh, fail }: { project: Project; refresh: string
           <button className="btn small" disabled={doing !== null} onClick={() => act("pr")}>{doing === "pr" ? "Opening…" : "Create pull request"}</button>
         </div>
       )}
+      {state.gh && state.github && (
+        <div className="vrow">
+          <span className="trunc muted">Start from a pull request</span>
+          <button className="link" aria-expanded={!!picking} onClick={pickPr}>{picking ? "Close" : "Choose"}</button>
+        </div>
+      )}
+      {picking === "loading" && <p className="folderhint">Loading pull requests…</p>}
+      {Array.isArray(picking) && picking.length === 0 && <p className="folderhint">No open pull requests.</p>}
+      {Array.isArray(picking) &&
+        picking.map((entry) => (
+          <button key={entry.number} className="act" disabled={switching !== null} title={`${entry.title} · ${entry.branch}`} onClick={() => startOn(entry.number)}>
+            <span className="mono">#{entry.number}</span>
+            <span className="trunc">{entry.title}{entry.draft ? " (draft)" : ""}</span>
+            <span className="when">{switching === entry.number ? "Switching…" : entry.author}</span>
+          </button>
+        ))}
     </section>
   );
 }

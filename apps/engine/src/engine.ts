@@ -8,7 +8,7 @@ import { listEditors, openIn } from "./editors.ts";
 import { createProcesses } from "./processes.ts";
 import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleSkill } from "./skills.ts";
-import { branchInfo, createPullRequest, publishState, push } from "./github.ts";
+import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -936,6 +936,12 @@ export function createEngine(
       const project = projectOf(params.projectId);
       if ([...threads.values()].some((thread) => thread.projectId === project.id && busyState(thread))) throw new Error("wait for the agents in this project to finish first");
       return createPullRequest(project.cwd);
+    },
+    "project.pullRequests": (params) => listPullRequests(projectOf(params.projectId).cwd),
+    async "project.checkoutPr"(params) {
+      const project = projectOf(params.projectId);
+      if ([...threads.values()].some((thread) => thread.projectId === project.id && busyState(thread))) throw new Error("wait for the agents in this project to finish first");
+      return checkoutPullRequest(project.cwd, Number(params.number));
     },
 
     async "project.skills"(params) {

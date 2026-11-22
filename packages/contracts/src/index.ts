@@ -38,6 +38,7 @@ export type UsageLimit = { status: "ok" | "warning" | "reached"; window: "five_h
  * Where the project stands with its remote, for people who use GitHub. `remote` is null when there is none, and the
  * app then shows nothing. `ahead` counts saved versions not pushed yet. `gh` means the GitHub CLI is installed.
  */
+export type PullRequestEntry = { number: number; title: string; branch: string; author: string; updatedAt: number; draft: boolean };
 export type PublishState = {
   remote: string | null;
   branch: string | null;
@@ -320,6 +321,10 @@ export type Requests = {
   "project.push": { params: { projectId: string }; result: PublishState };
   /** Opens a pull request for the current branch with the GitHub CLI. */
   "project.createPr": { params: { projectId: string }; result: PublishState };
+  /** The repository's open pull requests, from the GitHub CLI. */
+  "project.pullRequests": { params: { projectId: string }; result: PullRequestEntry[] };
+  /** Switches the project to a pull request's branch, returning its details for a new thread. */
+  "project.checkoutPr": { params: { projectId: string; number: number }; result: { number: number; title: string; body: string; branch: string; base: string; author: string; url: string } };
   "memory.personal": { params: Record<string, never>; result: AgentMemory[] };
   "memory.savePersonal": { params: { agent: string; text: string }; result: { ok: true } };
   /** Notes Claude saved for itself about the project, read only. */

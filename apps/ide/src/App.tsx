@@ -749,7 +749,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={(prompt) => void startThread(prompt ?? REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} thread={thread} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={(prompt) => void startThread(prompt ?? REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} thread={thread} startDraft={(text) => { setSeed(text); setScreen({ kind: "thread", threadId: null }); }} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>

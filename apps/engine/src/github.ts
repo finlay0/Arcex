@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import type { PublishState } from "@arcex/contracts";
+import type { PublishState, PullRequestEntry } from "@arcex/contracts";
 
 /**
  * Pushing and pull requests, for people whose project already has a remote. Git and the GitHub CLI use the user's own
@@ -87,6 +87,54 @@ export async function createPullRequest(cwd: string): Promise<PublishState> {
     throw new Error(result.err.split(/\r?\n/).slice(-2).join(" ").slice(0, 300) || "the GitHub CLI couldn't open the pull request");
   }
   return publishState(cwd);
+}
+
+/** Open pull requests on the project's GitHub repository, newest first. */
+export async function listPullRequests(cwd: string): Promise<PullRequestEntry[]> {
+  const result = await run("gh", cwd, ["pr", "list", "--state", "open", "--limit", "30", "--json", "number,title,headRefName,author,updatedAt,isDraft"]);
+  if (result.missing) throw new Error("install the GitHub CLI (gh) and sign in with it to see pull requests");
+  if (!result.ok) {
+    if (/auth login|not logged/i.test(result.err)) throw new Error("the GitHub CLI isn't signed in. Run gh auth login in a terminal, then try again.");
+    throw new Error(result.err.split(/\r?\n/).slice(-1)[0]?.slice(0, 300) || "the GitHub CLI couldn't list pull requests");
+  }
+  try {
+    const rows = JSON.parse(result.out) as { number: number; title: string; headRefName: string; author?: { login?: string }; updatedAt: string; isDraft?: boolean }[];
+    return rows.map((row) => ({
+      number: Number(row.number),
+      title: String(row.title).slice(0, 200),
+      branch: String(row.headRefName).slice(0, 200),
+      author: String(row.author?.login ?? "").slice(0, 100),
+      updatedAt: Date.parse(row.updatedAt) || 0,
+      draft: row.isDraft === true,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Switches the project to a pull request's branch and returns what a thread needs to start on it. Refuses while files
+ * the project tracks have unsaved changes, so switching never mixes work.
+ */
+export async function checkoutPullRequest(cwd: string, number: number): Promise<{ number: number; title: string; body: string; branch: string; base: string; author: string; url: string }> {
+  if (!Number.isInteger(number) || number < 1 || number > 10_000_000) throw new Error("that isn't a pull request number");
+  const dirty = await run("git", cwd, ["status", "--porcelain", "--untracked-files=no"]);
+  if (dirty.out.trim()) throw new Error("save or undo the unsaved changes first. Switching to a pull request changes the project's files");
+  const view = await run("gh", cwd, ["pr", "view", String(number), "--json", "number,title,body,headRefName,baseRefName,author,url"]);
+  if (!view.ok) throw new Error(view.err.split(/\r?\n/).slice(-1)[0]?.slice(0, 300) || "the GitHub CLI couldn't read that pull request");
+  const data = JSON.parse(view.out) as { number: number; title: string; body: string; headRefName: string; baseRefName: string; author?: { login?: string }; url: string };
+  const checkout = await run("gh", cwd, ["pr", "checkout", String(number)], 120_000);
+  if (!checkout.ok && /couldn't find remote ref/i.test(checkout.err)) throw new Error("that pull request's branch is no longer on GitHub, so there's nothing to switch to");
+  if (!checkout.ok) throw new Error(checkout.err.split(/\r?\n/).slice(-2).join(" ").slice(0, 300) || "the GitHub CLI couldn't switch to that pull request");
+  return {
+    number: data.number,
+    title: String(data.title).slice(0, 200),
+    body: String(data.body ?? "").slice(0, 6_000),
+    branch: String(data.headRefName).slice(0, 200),
+    base: String(data.baseRefName).slice(0, 200),
+    author: String(data.author?.login ?? "").slice(0, 100),
+    url: /^https:\/\/github\.com\//.test(data.url) ? data.url : "",
+  };
 }
 
 /** The branch the project is on and the branch it grew from (the remote's default, else a local main or master). */
