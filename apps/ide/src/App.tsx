@@ -141,7 +141,23 @@ export function App() {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
-  const [choice, setChoice] = useState<Choice | null>(null);
+  // The last agent, model and options picked for a new thread, kept across restarts like the other apps do.
+  const [choice, setChoiceState] = useState<Choice | null>(() => {
+    try {
+      const saved = JSON.parse(remembered("arcex:choice") ?? "null") as Choice | null;
+      return saved && typeof saved.agentId === "string" ? saved : null;
+    } catch {
+      return null;
+    }
+  });
+  const setChoice = (next: Choice) => {
+    setChoiceState(next);
+    try {
+      localStorage.setItem("arcex:choice", JSON.stringify(next));
+    } catch {
+      // Not saved; the pick still applies until the app closes.
+    }
+  };
   // Text placed in the new-thread box by another screen, such as the toolbox.
   const [seed, setSeed] = useState("");
   const [unassignedDraft, setUnassignedDraft] = useState("");

@@ -178,7 +178,8 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
   signal.throwIfAborted();
   const launch = launchOf(options.agentId, options.settings);
   // Claude Code leaves its task list tools off in SDK sessions unless asked. Arcex shows that list as the plan.
-  const env = { ...process.env, ...launch.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true" };
+  // Current Claude models leave their thinking out of the stream unless asked for a summary of it.
+  const env = { ...process.env, ...launch.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true", CLAUDE_CODE_THINKING_DISPLAY: process.env.CLAUDE_CODE_THINKING_DISPLAY ?? "summarized" };
   const child: ChildProcess = spawn(launch.command, launch.args, { cwd: options.cwd, env, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
   const terminate = () => {
     child.stdin?.destroy();
