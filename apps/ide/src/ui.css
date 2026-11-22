@@ -740,3 +740,14 @@ body.resizing iframe { pointer-events: none; }
 .memnote summary::-webkit-details-marker { display: none; }
 .memnote summary .trunc { flex: 1; }
 .memnote pre { margin: 0 0 12px; padding: 10px 12px; max-height: 320px; overflow: auto; border-radius: 10px; background: var(--chrome); color: var(--ink-2); font: 12.5px/19px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Rich replies: diagrams, HTML previews, math. */
+.richwrap { display: grid; gap: 4px; min-width: 0; }
+.richtoggle { justify-self: start; font-size: 13px; }
+.diagram, .htmlpreview { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--raised); margin: 8px 0; }
+.diagrambody { display: block; width: 100%; padding: 16px; cursor: zoom-in; overflow-x: auto; text-align: center; }
+.diagrambody svg { max-width: 100%; height: auto; }
+.diagrambox .diagrambig { width: min(1200px, 100%); max-height: calc(100vh - 110px); overflow: auto; padding: 24px; border-radius: 12px; background: var(--raised); cursor: default; }
+.diagrambox .diagrambig svg { width: 100%; height: auto; max-width: none !important; }
+.htmlpreview iframe { display: block; width: 100%; height: 360px; border: 0; background: #fff; resize: vertical; }
+.md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.md .katex { font-size: 1.08em; }

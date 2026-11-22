@@ -2,6 +2,10 @@ import { memo, useMemo, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+import { Diagram, HtmlPreview } from "./rich.tsx";
 import { highlight, languageOf } from "./highlight.ts";
 import { Icon } from "./shared.tsx";
 
@@ -90,7 +94,11 @@ const components: Components = {
   pre: ({ children }) => {
     const code = Array.isArray(children) ? children[0] : children;
     const className = code && typeof code === "object" && "props" in code ? String((code.props as { className?: string }).className ?? "") : "";
-    return <CodeBlock language={/language-([\w+#.-]+)/.exec(className)?.[1] ?? null}>{children}</CodeBlock>;
+    const language = /language-([\w+#.-]+)/.exec(className)?.[1] ?? null;
+    const block = <CodeBlock language={language}>{children}</CodeBlock>;
+    if (language === "mermaid") return <Diagram source={textOf(children).replace(/\n$/, "")} fallback={block} />;
+    if (language === "html") return <HtmlPreview source={textOf(children)} code={block} />;
+    return block;
   },
   a: ({ href, children }) => {
     if (href && /^https?:\/\//i.test(href)) return <a href={href} title={href} onClick={(event) => { event.preventDefault(); openLink(href); }}>{children}</a>;
@@ -115,13 +123,15 @@ const components: Components = {
   input: ({ checked }) => <input type="checkbox" checked={!!checked} readOnly disabled />,
 };
 
-const plugins = [remarkGfm, remarkBreaks];
+// Math only between double dollar signs, so prices such as "$5 or $10" stay plain text.
+const plugins = [remarkGfm, remarkBreaks, [remarkMath, { singleDollarTextMath: false }]] as NonNullable<Parameters<typeof Markdown>[0]["remarkPlugins"]>;
+const rehype = [[rehypeKatex, { throwOnError: false, strict: "ignore", trust: false, maxSize: 50, maxExpand: 500 }]] as NonNullable<Parameters<typeof Markdown>[0]["rehypePlugins"]>;
 
 /** Agent replies and user messages as GitHub-flavoured Markdown. Raw HTML in the text is shown as text, never run. */
 export const Md = memo(function Md({ text }: { text: string }) {
   return (
     <div className="md">
-      <Markdown remarkPlugins={plugins} components={components}>{text}</Markdown>
+      <Markdown remarkPlugins={plugins} rehypePlugins={rehype} components={components}>{text}</Markdown>
     </div>
   );
 });
