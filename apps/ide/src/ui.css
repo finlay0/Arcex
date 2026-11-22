@@ -196,10 +196,14 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .outcome .i { stroke-width: 2.2; width: 15px; height: 15px; }
 .outcome span { color: var(--ink-2); font-weight: 400; }
 .turnchanges { display: grid; gap: 6px; align-self: stretch; }
-.turnchanges > .outcome { justify-self: start; cursor: pointer; }
-.turnchanges > .outcome .stat { font-size: 12.5px; }
-.turnchanges > .outcome .i.chev { color: var(--ink-3); width: 13px; height: 13px; transition: transform .12s; }
-.turnchanges > .outcome[aria-expanded="true"] .i.chev { transform: rotate(90deg); }
+.tcrow { display: flex; align-items: center; gap: 12px; }
+.tcrow > .outcome { cursor: pointer; }
+.outcome.undone { background: var(--raised-2); color: var(--ink-2); }
+.undoask { border: 1px solid var(--line-2); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; max-width: 560px; }
+.undoask .btns { display: flex; gap: 8px; }
+.tcrow > .outcome .stat { font-size: 12.5px; }
+.tcrow > .outcome .i.chev { color: var(--ink-3); width: 13px; height: 13px; transition: transform .12s; }
+.tcrow > .outcome[aria-expanded="true"] .i.chev { transform: rotate(90deg); }
 .turnchanges > .files { margin: 0; border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
 .loader { flex: none; width: 14px; height: 14px; color: var(--ink); overflow: visible; --beat: 1.6s; }
 .loader g { transform-origin: 50px 50px; animation: turn 3.2s cubic-bezier(.55, .15, .45, .85) infinite; }

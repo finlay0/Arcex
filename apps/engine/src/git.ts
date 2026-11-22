@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { copyFileSync, existsSync } from "node:fs";
-import { lstat, open } from "node:fs/promises";
+import { lstat, open, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Change } from "@arcex/contracts";
 
@@ -154,4 +154,52 @@ export async function turnChanges(cwd: string, before: string, after: string): P
 export async function turnDiff(cwd: string, before: string, after: string, file: string): Promise<string> {
   if (!(await turnChanges(cwd, before, after)).some((change) => change.path === file)) throw new Error("that file didn't change in this turn");
   return (await git(cwd, ["diff", "--no-renames", "--relative", before, after, "--", file])).slice(0, MAX_DIFF);
+}
+
+/** The object a path has in a snapshot, or null when the path isn't in it. */
+async function blobIn(cwd: string, tree: string, file: string): Promise<string | null> {
+  const listed = await git(cwd, ["ls-tree", "-z", tree, "--", `./${file}`]).catch(() => "");
+  return /^\d+ blob ([0-9a-f]{40,64})\t/.exec(listed)?.[1] ?? null;
+}
+
+/** The object the file in the folder would have now, or null when it's gone. */
+async function blobNow(cwd: string, file: string): Promise<string | null> {
+  const stats = await lstat(path.join(cwd, file)).catch(() => null);
+  if (!stats) return null;
+  if (!stats.isFile()) return "not-a-file";
+  return (await git(cwd, ["hash-object", "--", file])).trim();
+}
+
+/**
+ * Puts the files a turn changed back the way they were before it. Only those files are touched. Files changed again
+ * since the turn are listed and left alone unless `force` is set, so later work isn't lost by accident. Uses a scratch
+ * index, so the user's staging area is untouched.
+ */
+export async function undoTurn(cwd: string, before: string, after: string, files: string[], scratchIndex: string, force: boolean): Promise<{ undone: string[]; changedSince: string[] }> {
+  if (!TREE.test(before) || !TREE.test(after)) throw new Error("invalid snapshot");
+  const turn = new Set((await turnChanges(cwd, before, after)).map((change) => change.path));
+  const targets = files.filter((file) => turn.has(file));
+  const changedSince: string[] = [];
+  for (const file of targets) {
+    if ((await blobNow(cwd, file)) !== (await blobIn(cwd, after, file))) changedSince.push(file);
+  }
+  if (changedSince.length && !force) return { undone: [], changedSince };
+  const env = { GIT_INDEX_FILE: scratchIndex };
+  await gitWith(cwd, ["read-tree", before], env);
+  const undone: string[] = [];
+  try {
+    for (const file of targets) {
+      if (await blobIn(cwd, before, file)) {
+        await gitWith(cwd, ["checkout-index", "-f", "--", file], env);
+      } else {
+        // The turn created this file, so undoing removes it.
+        const absolute = path.join(cwd, file);
+        if ((await lstat(absolute).catch(() => null))?.isFile()) await rm(absolute);
+      }
+      undone.push(file);
+    }
+  } finally {
+    await rm(scratchIndex, { force: true });
+  }
+  return { undone, changedSince };
 }

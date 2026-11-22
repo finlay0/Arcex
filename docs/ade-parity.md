@@ -80,7 +80,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C7 | Command output in rows | The command and its output, folded | P1 | done | Last 4 KB of output under "Show the output" |
 | C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` now uses `react-markdown` with GFM and line breaks: tables, task lists, headings, quotes, code blocks with a language label and Copy, web links that open in the browser. Raw HTML stays text and remote images are not loaded. Verified with Claude (`/context` tables, code, link, checklist). Still to do: syntax highlighting, file paths that open the file (needs P2) |
 | C9 | Copy message, retry, edit and resend | Hover actions on messages. Retry a failed turn | P0 | done | Hovering your message shows Copy and "Edit and send again" (text and attached files go back in the message box). A failed, stopped or interrupted turn shows "Try again" (resends the same message and files) and "Edit message". Verified November 21 with Codex and OpenCode. Rewinding the agent's own history isn't possible over ACP, so an edit is sent as a new message |
-| C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | open | Needs per-turn snapshots (a git stash or shadow-ref design) |
+| C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | partial | Code: per-turn snapshots and undo exist (G1, G5). Conversation: ACP can't rewind an agent's history, so a rewind would need a new session started from a summary |
 | C11 | Find in thread (Ctrl+F) | Find bar with next and previous | P2 | open | |
 | C12 | Turn outcome and elapsed time | "Worked for 2m 14s", failed or stopped badge | P1 | done | An `end` item closes every turn: "Worked for 1m 5s" or "Stopped after 25s" |
 | C13 | Subagents | Rows for subagents working, with their progress | P2 | open | |
@@ -128,7 +128,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | G2 | Inline review comments | Comment on a diff line and send it to the agent | P1 | open | |
 | G3 | Commit, push and PR from the app | Buttons with a generated message, PR status and CI | P1 | open | Hidden by default for vibe coders. Show a "Save a version" button |
 | G4 | Worktree per thread | Isolated working copies so parallel threads don't collide | P1 | decide | Ask Finlay. It's a big model change for vibe coders |
-| G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | open | Pairs with C10 |
+| G5 | Revert / undo a turn's changes | Undo a file or a whole turn | P1 | partial | "Undo" beside a turn's "Changed N files" puts only that turn's files back the way they were before it (from the G1 snapshots, through a scratch index, so staging is untouched), after a confirm. Files changed again since are named and need "Undo anyway". The turn then reads "Undid N files", and the agent is told with the next message. Verified November 21: both paths, the file restored and then removed. The note to the agent is untested. Still missing: undoing a single file, and redo |
 | G6 | Open in editor | Open the project or a file in VS Code, Cursor or Explorer | P1 | open | Desktop `shell.openPath` |
 | G7 | Review mode | Ask the agent to review uncommitted changes or a branch and list findings (Codex `/review`, Claude code review) | P1 | open | |
 | G8 | Start from a pull request | Open a thread on a PR, with its description and diff as context (T3 `PullRequestThreadDialog`) | P2 | open | Hidden by default |
@@ -207,6 +207,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · C9 copy, edit and resend, try again.
 - 2026-11-21 · G1 numbered diff viewer and line counts for new files.
 - 2026-11-21 · G1 per-turn changes from before/after snapshots, opened from the conversation.
+- 2026-11-21 · G5 undo a turn's changes, with a warning when files changed again since.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -226,11 +227,11 @@ Newest first. One line per shipped change, with its commit.
 Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
-2. Undo a turn from its snapshot (restore the folder to before it), then G1 whole-branch view.
+2. G1 whole-branch view; G5 undo one file and redo.
 3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
 5. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-6. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+6. Then the P1 items: C10 conversation rewind, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

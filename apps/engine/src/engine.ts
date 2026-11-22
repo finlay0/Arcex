@@ -35,6 +35,8 @@ type Live = {
   plan: Extract<Item, { kind: "plan" }> | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
+  /** Told to the agent with the next message, after the user undoes a turn. */
+  undoNote?: string;
 };
 
 
@@ -526,7 +528,9 @@ export function createEngine(
         put(thread, { id: randomUUID(), kind: "note", text: `${model} can't see images, so ${one ? "the image was" : "the images were"} sent as ${one ? "a file" : "files"} it may not open. Choose a model that sees images to have ${one ? "it" : "them"} looked at.` });
       }
       // Files the message mentions with "@" go along as links the agent can open.
-      const result = await session.prompt([...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
+      const undoNote = live.undoNote;
+      live.undoNote = undefined;
+      const result = await session.prompt([...(undoNote ? [{ type: "text" as const, text: undoNote }] : []), ...files.blocks(prompt, attached, session.promptCapabilities), ...mentionLinks(project.cwd, prompt, session.promptCapabilities)]);
       if (result.stopReason === "cancelled") outcome = "stopped";
       if (result.stopReason === "refusal" || result.stopReason === "max_tokens" || result.stopReason === "max_turn_requests") {
         const reason = result.stopReason === "refusal" ? "declined the request" : "reached a turn limit";
@@ -790,6 +794,23 @@ export function createEngine(
     },
 
     "project.changes": (params) => git.changes(projectOf(params.projectId).cwd),
+    async "thread.undoTurn"(params) {
+      const thread = threadOf(params.threadId);
+      if (busyState(thread)) throw new Error("wait for this thread to finish before undoing a turn");
+      const item = db.items(thread.id).find((entry) => entry.id === params.itemId);
+      if (item?.kind !== "result" || !item.snapshots) throw new Error("that turn has no snapshot to undo from");
+      if (item.undone) throw new Error("that turn is already undone");
+      const project = projectOf(thread.projectId);
+      const scratch = path.join(snapshotsDir, `${thread.id}.undo.index`);
+      const result = await git.undoTurn(project.cwd, item.snapshots.before, item.snapshots.after, item.files, scratch, params.force === true);
+      if (!result.undone.length) return result;
+      if (!threads.has(thread.id)) throw new Error("thread not found");
+      put(thread, { ...item, undone: true });
+      put(thread, { id: randomUUID(), kind: "note", text: `Undid this turn's changes to ${result.undone.length === 1 ? result.undone[0] : `${result.undone.length} files`}.` });
+      // The agent doesn't see the folder change, so the next message tells it.
+      liveOf(thread.id).undoNote = `(Note from Arcex: the user undid your changes to ${result.undone.join(", ").slice(0, 2000)}. Those files are back the way they were before that turn.)`;
+      return result;
+    },
     async "thread.turnDiff"(params) {
       const thread = threadOf(params.threadId);
       if (typeof params.path !== "string" || !params.path || params.path.length > 1000) throw new Error("invalid file path");

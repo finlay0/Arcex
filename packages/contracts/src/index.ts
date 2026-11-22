@@ -98,6 +98,8 @@ export type Item =
       /** What this turn changed, from snapshots of the folder taken before and after it. Absent for Git-less folders. */
       changes?: Change[];
       snapshots?: { before: string; after: string };
+      /** Set once the user has undone this turn's changes. */
+      undone?: boolean;
     }
   /** Closes every turn: how it ended and how long it took. */
   | { id: string; kind: "end"; outcome: "done" | "stopped" | "failed" | "interrupted"; seconds: number };
@@ -216,6 +218,11 @@ export type Requests = {
   "project.diff": { params: { projectId: string; path: string }; result: { text: string } };
   /** One file's diff within one turn, from that turn's result. */
   "thread.turnDiff": { params: { threadId: string; itemId: string; path: string }; result: { text: string } };
+  /**
+   * Puts the files one turn changed back the way they were before it. Files changed again since are listed in
+   * `changedSince` and nothing is undone, unless `force` is set.
+   */
+  "thread.undoTurn": { params: { threadId: string; itemId: string; force?: boolean }; result: { undone: string[]; changedSince: string[] } };
   /** Stores one attached file before it is sent. `data` is base64, at most 10 MB decoded. */
   "attachment.add": { params: { name: string; mime: string; data: string }; result: Attachment };
   /** `attachments` are ids from attachment.add. Text may be empty when there are attachments. */

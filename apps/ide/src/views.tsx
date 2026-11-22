@@ -725,7 +725,14 @@ export function Panel(props: {
 }) {
   const { project, threads, fail } = props;
   const recent = [...threads].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5);
-  const settled = `${props.connected}:${threads.map((t) => `${t.id}:${t.state}`).join()}`;
+  // Files also change outside a turn, when the user undoes one.
+  const [nudged, setNudged] = useState(0);
+  useEffect(() => {
+    const nudge = () => setNudged((count) => count + 1);
+    window.addEventListener(FILES_CHANGED, nudge);
+    return () => window.removeEventListener(FILES_CHANGED, nudge);
+  }, []);
+  const settled = `${props.connected}:${nudged}:${threads.map((t) => `${t.id}:${t.state}`).join()}`;
   const [wide, setWide] = useState(false);
   const tabsId = useId();
   // Addresses the agents mentioned while working, newest first, offered as one-click previews.
@@ -876,7 +883,10 @@ function Files({ project, refresh }: { project: Project; refresh: string }) {
   );
 }
 
-type DiffRow = { kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
+/** Sent when the project's files change outside a turn, so the side panel looks again. */
+const FILES_CHANGED = "arcex:files-changed";
+
+type DiffRow ={ kind: "add" | "del" | "ctx"; old: number; new: number; text: string } | { kind: "gap" };
 
 /** A unified diff as numbered rows. Headers are dropped; a gap marks unchanged lines left out between sections. */
 function diffRows(text: string): DiffRow[] {
@@ -946,13 +956,48 @@ function TurnChanges({ thread, item }: { thread: Thread; item: Extract<Item, { k
   }, [thread.id, item.id, file, attempt]);
   const added = changes.reduce((sum, change) => sum + change.added, 0);
   const removed = changes.reduce((sum, change) => sum + change.removed, 0);
+  // Undo asks first. If files changed again after this turn, it says which and asks again before overwriting them.
+  const [undo, setUndo] = useState<{ step: "confirm" } | { step: "working" } | { step: "changedSince"; files: string[] } | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
+  const runUndo = (force: boolean) => {
+    setUndo({ step: "working" });
+    setUndoError(null);
+    call("thread.undoTurn", { threadId: thread.id, itemId: item.id, force })
+      .then((result) => {
+        setUndo(result.undone.length ? null : { step: "changedSince", files: result.changedSince });
+        if (result.undone.length) window.dispatchEvent(new Event(FILES_CHANGED));
+      })
+      .catch((error: Error) => {
+        setUndo(null);
+        setUndoError(error.message);
+      });
+  };
+  const canUndo = !item.undone && !busy(thread);
   return (
     <div className="turnchanges">
-      <button className="outcome" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Icon name="check" /> Changed {plural(changes.length, "file")}
-        <span className="stat">+{added} <i>−{removed}</i></span>
-        <Icon name="chev" />
-      </button>
+      <div className="tcrow">
+        <button className={item.undone ? "outcome undone" : "outcome"} aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Icon name={item.undone ? "reload" : "check"} /> {item.undone ? "Undid" : "Changed"} {plural(changes.length, "file")}
+          <span className="stat">+{added} <i>−{removed}</i></span>
+          <Icon name="chev" />
+        </button>
+        {canUndo && !undo && <button className="link" onClick={() => setUndo({ step: "confirm" })}>Undo</button>}
+      </div>
+      {undo && undo.step !== "working" && (
+        <div className="undoask">
+          <p>
+            {undo.step === "confirm"
+              ? `Put ${changes.length === 1 ? changes[0]!.path : plural(changes.length, "file")} back the way ${changes.length === 1 ? "it was" : "they were"} before this turn?`
+              : `${undo.files.length === 1 ? undo.files[0] : plural(undo.files.length, "file")} changed again after this turn. Undoing puts ${undo.files.length === 1 ? "it" : "them"} back too, and those later changes are lost.`}
+          </p>
+          <div className="btns">
+            <button className="btn primary" onClick={() => runUndo(undo.step === "changedSince")}>{undo.step === "confirm" ? "Undo changes" : "Undo anyway"}</button>
+            <button className="btn" onClick={() => setUndo(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {undo?.step === "working" && <p className="note">Undoing…</p>}
+      {undoError && <p className="oops">Couldn't undo: {undoError}</p>}
       {open && (
         <div className="files">
           {changes.map((change) => (
