@@ -5,6 +5,7 @@ import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
 import { RunOutput, Scripts } from "./Scripts.tsx";
+import { FindBar } from "./Find.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
@@ -635,6 +636,41 @@ export function Conversation(props: {
   const [sending, setSending] = useState(false);
   const pendingSend = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
+  const flow = useRef<HTMLDivElement>(null);
+  // Ctrl+F finds text in this thread.
+  const [finding, setFinding] = useState(false);
+  useEffect(() => {
+    if (!thread) return;
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "f" && !document.querySelector(".palette")) {
+        event.preventDefault();
+        setFinding(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [thread?.id]);
+  // Up arrow in an empty box brings back earlier messages from this thread, newest first; Down goes forward again.
+  const sent = useMemo(() => props.items.flatMap((item) => (item.kind === "user" && item.text.trim() ? [item.text] : [])).reverse(), [props.items]);
+  const recalled = useRef(-1);
+  const recall = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return false;
+    if (event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || !sent.length) return false;
+    const box = event.currentTarget;
+    const browsing = recalled.current >= 0 && draft === sent[recalled.current];
+    if (event.key === "ArrowUp") {
+      // Only from an empty box, or while already stepping back, and not from inside a long recalled message.
+      if (!(draft === "" || browsing) || (browsing && box.value.slice(0, box.selectionStart).includes("\n"))) return false;
+      if (recalled.current >= sent.length - 1 && browsing) return true;
+      recalled.current = browsing ? recalled.current + 1 : 0;
+    } else {
+      if (!browsing) return false;
+      recalled.current -= 1;
+    }
+    event.preventDefault();
+    setDraft(recalled.current >= 0 ? sent[recalled.current]! : "");
+    return true;
+  };
   const working = !!thread && busy(thread);
 
   // Follow new output unless the user has scrolled up to read something.
@@ -689,7 +725,7 @@ export function Conversation(props: {
           mention.onSelect(event);
           setDraft(event.target.value);
         }}
-        onKeyDown={(event) => slash.onKeyDown(event) || mention.onKeyDown(event) || enter(event)}
+        onKeyDown={(event) => slash.onKeyDown(event) || mention.onKeyDown(event) || recall(event) || enter(event)}
         onSelect={mention.onSelect}
         onKeyUp={mention.onSelect}
         onClick={mention.onSelect}
@@ -786,6 +822,7 @@ export function Conversation(props: {
     : undefined;
   return (
     <div className="convo">
+      {finding && <FindBar root={flow} watch={props.items} close={() => setFinding(false)} />}
       <div
         className="scroll"
         ref={scroller}
@@ -794,7 +831,7 @@ export function Conversation(props: {
           setAway(el.scrollHeight - el.scrollTop - el.clientHeight > 160);
         }}
       >
-        <div className="flow">
+        <div className="flow" ref={flow}>
           {list.map((turn, index) => (
             <TurnView key={turn.id} thread={thread} turn={turn} live={working && index === list.length - 1} last={index === list.length - 1} preview={!!project?.previewUrl} actions={actions} edit={editTurn} />
           ))}

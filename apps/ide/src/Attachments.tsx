@@ -113,8 +113,32 @@ export function useAttachments(key: string, fail: (error: unknown) => void) {
 
 /** A thumbnail for an image, or the file's name and size. */
 export function AttachmentChip({ attachment }: { attachment: Attachment }) {
+  const [big, setBig] = useState(false);
   return attachment.image ? (
-    <img className="thumb" src={thumbOf(attachment)} alt={attachment.name} title={attachment.name} />
+    <>
+      <button type="button" className="thumbbtn" aria-label={`View ${attachment.name} full size`} onClick={() => setBig(true)}>
+        <img className="thumb" src={thumbOf(attachment)} alt={attachment.name} title={attachment.name} />
+      </button>
+      {big && (
+        <div
+          className="lightbox"
+          role="dialog"
+          aria-label={attachment.name}
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+          onClick={() => setBig(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setBig(false);
+            }
+          }}
+        >
+          <img src={thumbOf(attachment)} alt={attachment.name} />
+          <span>{attachment.name} · click or press Esc to close</span>
+        </div>
+      )}
+    </>
   ) : (
     <span className="fchip" title={attachment.name}>
       <Icon name="file" />
