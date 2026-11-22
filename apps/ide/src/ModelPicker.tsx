@@ -286,7 +286,7 @@ export function AgentChoices(props: { agentId: string; value: Record<string, str
   const mode = choices.find((choice) => choice.category === "mode");
   const effort = choices.find((choice) => choice.category === "thought_level");
   // A mode with a plan value becomes a plan-first switch: on is "plan", off is full access (the engine enforces it).
-  const fullValue = mode?.values.find((entry) => /bypass|full/i.test(entry.value))?.value ?? mode?.values.at(-1)?.value;
+  const fullValue = mode?.values.find((entry) => /bypass|full|yolo/i.test(entry.value))?.value ?? mode?.values.at(-1)?.value;
   const planMode: AgentChoice | null = mode && fullValue && mode.values.some((entry) => entry.value === "plan")
     ? { ...mode, category: "collaboration_mode", values: mode.values.filter((entry) => entry.value === "plan" || entry.value === fullValue), current: mode.current === "plan" ? "plan" : fullValue }
     : null;

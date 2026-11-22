@@ -77,7 +77,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C5 | Thinking shown folded | "Thought for 12s ›" with the reasoning inside | P0 | partial | Engine `think` item (from ACP `agent_thought_chunk`) and the folded row are shipped. Never seen live: Claude Haiku sent no thought chunks even at High effort. Find out whether the Claude adapter or SDK needs a setting to stream thinking summaries, then verify with Sonnet or Opus |
 | C6 | Edit rows with line counts | "Edited views.tsx +96 −12 ›", opening to the diff | P0 | done | Line counts from ACP `diff` content, a "Show the change" patch view, +N −M on the group row |
 | C7 | Command output in rows | The command and its output, folded | P1 | done | Last 4 KB of output under "Show the output" |
-| C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` is minimal. Seen November 21: `/context` returns a markdown table that shows as raw pipes. Tables first |
+| C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` now uses `react-markdown` with GFM and line breaks: tables, task lists, headings, quotes, code blocks with a language label and Copy, web links that open in the browser. Raw HTML stays text and remote images are not loaded. Verified with Claude (`/context` tables, code, link, checklist). Still to do: syntax highlighting, file paths that open the file (needs P2) |
 | C9 | Copy message, retry, edit and resend | Hover actions on messages. Retry a failed turn | P0 | partial | Copy exists. Retry and edit-resend are missing |
 | C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | open | Needs per-turn snapshots (a git stash or shadow-ref design) |
 | C11 | Find in thread (Ctrl+F) | Find bar with next and previous | P2 | open | |
@@ -173,6 +173,18 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | H9 | Agent CLI updates | Notice when Claude or Codex has an update and offer it (T3 `ProviderUpdatesAction`) | P1 | open | |
 | H10 | Scheduled and recurring runs | Run a prompt on a schedule (Claude routines and `/loop`, T3 `ThreadAutomationsPanel`) | P2 | decide | Spends usage unattended. Ask Finlay |
 
+### Agents and model makers
+
+Finlay, November 21, 2026: Arcex must work with every major model maker, not only Claude and Codex. Each one still runs as its maker's own CLI (or an open agent like OpenCode) with the user's own sign-in.
+
+| ID | Feature | Behaviour | Pri | Status | Notes |
+| --- | --- | --- | --- | --- | --- |
+| M1 | Gemini (Google) | Gemini CLI as a built-in agent: models, sign-in status, full access ("yolo"), attachments, mentions | P0 | partial | Listed as `gemini --experimental-acp`. Sign-in shows as unknown and nothing has been run through it. `yolo` is already treated as full access |
+| M2 | OpenCode for everyone else | One open agent that reaches OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Groq, OpenRouter and local models | P0 | partial | Listed as `opencode acp`. Not run yet. Check its model list, how it reports sign-in per provider, and its permission mode |
+| M3 | More makers' own agents | Built-ins for other ACP agents, such as Qwen Code (Alibaba), GitHub Copilot CLI, Cursor's agent, Goose and Kimi (Moonshot) | P1 | open | Research which speak ACP today and how each signs in. Add each with an install and sign-in command |
+| M4 | Agent setup that just works | For every agent: installed or not, signed in or not, the one command to install or sign in, and a retry | P0 | partial | Claude and Codex report sign-in. Gemini and OpenCode report "unknown" |
+| M5 | Models grouped by maker | The model picker groups by maker (OpenCode exposes many) with search | P1 | open | Filter exists. Grouping does not |
+
 ### Settings and polish
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
@@ -181,12 +193,13 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
 | X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | open | See `ade-ux-audit-2026-11-17.md` |
 | X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
-| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | open | Pairs with K9. Seen November 21: a Codex usage limit shows the agent's text plus "Codex couldn't finish: Internal error". Show one plain banner with the reset time instead |
+| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | partial | A usage limit now ends the turn with one plain line, "Codex has reached its usage limit until 10:32 PM. Try again then, or switch…", instead of "Internal error" (verified with Codex). Still to do: limits shown before they are hit (with K9) |
 
 ## Work log
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
 - 2026-11-21 · K3 @-mention project files: fuzzy picker in the message box; mentioned text files go to the agent in full.
@@ -204,7 +217,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. C8 markdown tables (seen raw in `/context`), then X5 a plain usage-limit banner, since both showed up in testing.
+1. Every major model maker (Finlay, November 21): M4 setup and sign-in status for Gemini and OpenCode, then run M1 Gemini and M2 OpenCode end to end, then M3 research and M5 grouping.
 2. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
 3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.

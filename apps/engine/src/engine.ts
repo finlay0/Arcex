@@ -43,8 +43,18 @@ function message(value: unknown, attachments: Attachment[]): string {
   return text(value, "message", 20_000);
 }
 
-/** Mode values that mean the agent acts without asking: Claude "bypassPermissions", Codex "agent-full-access". */
-const FULL_ACCESS = /bypass|full/i;
+/**
+ * Whether a failure was the agent's plan running out. Returns when it resets as the agent wrote it ("" when it didn't
+ * say), or null when this was some other failure.
+ */
+function usageLimit(text: string): string | null {
+  if (!/usage limit|rate limit|quota|out of (credits|usage)|limit reached|hit your (usage )?limit/i.test(text)) return null;
+  const at = /(?:try again|resets?|available again)\s+(?:at|in|on)\s+([^.\n"\\]{1,40})/i.exec(text);
+  return at ? at[1]!.trim() : "";
+}
+
+/** Mode values that mean the agent acts without asking: Claude "bypassPermissions", Codex "agent-full-access", Gemini "yolo". */
+const FULL_ACCESS = /bypass|full|yolo/i;
 
 /**
  * The choices on an approval card. For a plan, only going ahead in full access or keeping on planning are offered,
@@ -497,7 +507,14 @@ export function createEngine(
       else {
         outcome = "failed";
         const message = error instanceof Error ? error.message : String(error);
-        const friendly = /auth|sign.in required/i.test(message)
+        // A usage limit often arrives as a bare "Internal error", with the real reason in the error's data or in what
+        // the agent just said. Look at all of it.
+        const data = error && typeof error === "object" && "data" in error ? JSON.stringify((error as { data: unknown }).data ?? "") : "";
+        const said = `${message} ${data} ${live.say?.text ?? ""}`;
+        const limit = usageLimit(said);
+        const friendly = limit !== null
+          ? `${nameOf(thread.provider)} has reached its usage limit${limit ? ` until ${limit}` : ""}. Try again then, or switch to another agent or model for this thread.`
+          : /auth|sign.in required/i.test(message)
           ? `${nameOf(thread.provider)} needs you to sign in. Open Agents to set it up, then retry your message.`
           : `${nameOf(thread.provider)} couldn't finish: ${message.slice(0, 400)}`;
         put(thread, { id: randomUUID(), kind: "error", text: friendly });

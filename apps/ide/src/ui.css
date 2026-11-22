@@ -475,3 +475,34 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 /* "@" file picker (K3) */
 .slash.files li { align-items: center; gap: 8px; }
 .slash.files li > .i { flex: none; width: 14px; height: 14px; color: var(--ink-3); }
+
+/* Markdown (C8) */
+.md > * { margin: 0; }
+.md p, .md li { margin: 0; }
+.md li > p { margin: 0; }
+.md ul ul, .md ol ol, .md ul ol, .md ol ul { margin-top: 4px; }
+.md .h { font-weight: 600; margin-top: 6px; }
+.md .h1 { font-size: 20px; line-height: 28px; }
+.md .h2 { font-size: 18px; line-height: 26px; }
+.md .h3 { font-size: 16.5px; }
+.md a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-4); text-underline-offset: 3px; cursor: pointer; }
+.md a:hover { text-decoration-color: var(--ink-2); }
+.md blockquote { margin: 0; padding-left: 14px; border-left: 2px solid var(--line-2); color: var(--ink-2); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.md .mdimg { color: var(--ink-3); font-style: italic; }
+.md .codeblock { border: 1px solid var(--line); border-radius: 12px; background: var(--raised); overflow: hidden; }
+.md .codeblock pre { border: 0; border-radius: 0; background: none; padding: 12px 16px 14px; }
+.md .codeblock pre code { padding: 0; border: 0; background: none; font: inherit; }
+.md .codehead { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 6px 0 14px; border-bottom: 1px solid var(--line); font: 12px/1 var(--mono); color: var(--ink-3); }
+.md .codehead button { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--ink-3); font: 12px/1 inherit; font-family: inherit; cursor: pointer; }
+.md .codehead button:hover { background: var(--hover); color: var(--ink); }
+.md .codehead .i { width: 13px; height: 13px; }
+.md .mdtable { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+.md table { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 21px; }
+.md th, .md td { padding: 7px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.md th { font-weight: 600; color: var(--ink-2); background: var(--raised); white-space: nowrap; }
+.md tr:last-child td { border-bottom: 0; }
+.md td + td, .md th + th { border-left: 1px solid var(--line); }
+.md .contains-task-list { padding-left: 0; }
+.md .task-list-item { list-style: none; display: flex; align-items: baseline; gap: 8px; }
+.md .task-list-item input[type="checkbox"] { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--ink-2); transform: translateY(2px); }
