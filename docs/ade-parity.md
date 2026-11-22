@@ -11,6 +11,7 @@ Rules that still apply (from AGENTS.md and Finlay's standing decisions):
 - **Match behaviour and features, keep Arcex's own look.** Arcex keeps its dark monochrome look: near-black surfaces, white ink, one green status colour, silver curved light art on empty screens only, and no blue or glow. Do not fork T3 Code or copy its UI or code. Read it to learn how things work underneath.
 - **Vibe coders are the audience.** Terminal, git and raw CLI output stay hidden by default and are opt-in views. Where Claude or Codex shows developer detail up front, Arcex folds it one click away.
 - **Credentials stay with the vendors.** Agents run as their vendor's own CLI with the user's own sign-in. Never read, store or proxy credentials.
+- **Agents always run with full access** (Finlay, November 21, 2026). No approval modes and no mode picker: Claude runs in "Bypass permissions" and Codex in "Full access" on every model. The engine enforces it at each turn start and when an agent changes mode itself (`modeFor` and `followChoices` in `engine.ts`). The only other mode kept is planning first, offered as a "Plan first" switch. Do not build Manual, Read-only or Accept-edits paths.
 - **Intelligence must just work.** No hidden spending of the user's agent usage, no manual model installs, nothing heavy on the machine. Ask Finlay before building background intelligence.
 - **Never open visible windows on Finlay's PC during testing.** Test in the in-app browser pane with the `ade-engine` launch config (isolated data dir). Hidden Electron windows need `show: false`.
 - Keep the ADE folders self-contained, with no imports from the platform `src/`. Work on `main` and push. Commits end with the Co-Authored-By line.
@@ -19,7 +20,7 @@ Rules that still apply (from AGENTS.md and Finlay's standing decisions):
 
 | Reference | Where | What to take from it |
 | --- | --- | --- |
-| Claude desktop app, Code tab | The app this work is done in. Its features are listed below from direct use. Finlay has asked that screen recordings stay private, so never commit or share them. | Conversation flow, tool rows, task list, wrap-up box, permission modes, plan mode, panes (diff, files, terminal, browser, tasks), sessions sidebar, git and PR flow |
+| Claude desktop app, Code tab | The app this work is done in. Its features are listed below from direct use. Finlay has asked that screen recordings stay private, so never commit or share them. UI and UX count toward parity as much as features: compare against live screenshots of this app taken with computer use (kept private, same rule). | Conversation flow, tool rows, task list, wrap-up box, permission modes, plan mode, panes (diff, files, terminal, browser, tasks), sessions sidebar, git and PR flow |
 | Codex app | Closed source. The Codex CLI and TUI are Apache-2.0: `git clone --depth 1 --filter=blob:none --sparse https://github.com/openai/codex` then `git -c core.longpaths=true sparse-checkout set codex-rs/tui/src codex-rs/core`. | Approval modes, question cards, voice strip, status line, slash commands, review mode, AGENTS.md handling, prompts |
 | T3 Code | MIT. `git -c core.longpaths=true clone --depth 1 https://github.com/pingdotgg/t3code`. Clone into a scratch folder, never into this repo. | How a full ADE is wired: `apps/web/src/components/chat` (composer, timeline, work groups, approvals, plan card, queue, rewind, find), `diffs`, `files`, `settings`, `apps/server/src/speech` (local dictation via `transcribe-cpp`) |
 
@@ -47,9 +48,9 @@ State on November 21, 2026, at commit `5b850fb` on `main`. Everything listed as 
 **Unverified or known gaps** (fix or verify before calling parity done)
 
 - C5: thinking never seen live.
-- A1: the Manual and Read-only approval paths, with Claude and Codex.
-- K4: a picked slash command actually running, and Codex's list.
-- K6: mode and effort picks reset for new threads after a restart.
+- Codex hit its usage limit on November 21 (it resets at 10:32 PM), so full access, `$` skills, K2 and K3 are still untried with Codex.
+- Plan first with Claude: the switch is shown, but a plan approved into full access has not been run since the mode menu was removed.
+- K7: effort and fast picks reset for new threads after a restart.
 - New files show +0 −0 in the Details changes list (G1).
 - Nothing has been run with Codex in this stretch, including K2 attachments.
 - K3: not tried with Codex. Mentions stay plain text in the box (no chip yet).
@@ -76,7 +77,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C5 | Thinking shown folded | "Thought for 12s ›" with the reasoning inside | P0 | partial | Engine `think` item (from ACP `agent_thought_chunk`) and the folded row are shipped. Never seen live: Claude Haiku sent no thought chunks even at High effort. Find out whether the Claude adapter or SDK needs a setting to stream thinking summaries, then verify with Sonnet or Opus |
 | C6 | Edit rows with line counts | "Edited views.tsx +96 −12 ›", opening to the diff | P0 | done | Line counts from ACP `diff` content, a "Show the change" patch view, +N −M on the group row |
 | C7 | Command output in rows | The command and its output, folded | P1 | done | Last 4 KB of output under "Show the output" |
-| C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` is minimal |
+| C8 | Streaming markdown polish | Code blocks with copy, tables, file links that open the file | P1 | partial | `md.tsx` is minimal. Seen November 21: `/context` returns a markdown table that shows as raw pipes. Tables first |
 | C9 | Copy message, retry, edit and resend | Hover actions on messages. Retry a failed turn | P0 | partial | Copy exists. Retry and edit-resend are missing |
 | C10 | Rewind / checkpoints | Restore the code and conversation to an earlier message | P1 | open | Needs per-turn snapshots (a git stash or shadow-ref design) |
 | C11 | Find in thread (Ctrl+F) | Find bar with next and previous | P2 | open | |
@@ -96,9 +97,9 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | K1 | Voice dictation | Mic button, live level, transcribe into the box | P0 | done | `Dictation.tsx` plus engine `speech.ts` (`transcribe-cpp`, Parakeet 110M, 135 MB on first press, checksum verified, unloads after 10 idle min). Streams 1 s chunks over the WebSocket. Enter finishes, Esc discards. Later: a keyboard shortcut, a bigger-model choice in Settings, dictation in the new-project box |
 | K2 | Image and file attachments | Paste or drop images and files, thumbnails, sent to the agent | P0 | done | `Attachments.tsx` (paste, drop, paperclip picker, chips with thumbnails, per draft) plus engine `attachments.ts`. Files up to 10 MB, 10 per message, copied to `<data>/attachments/<id>/<name>`. Sent as ACP `image` (PNG, JPEG, GIF, WebP), embedded `resource` for text up to 256 KB, otherwise `resource_link` to the stored copy, checked against the agent's `promptCapabilities`. Thumbnails served at `/attachments/<id>` (images only, nosniff). Queued messages keep their files. Verified with Claude Haiku: image and text file read correctly, image-only message works. Not yet: Codex, a binary file (PDF) via `resource_link`, pruning old stored files |
 | K3 | @-mention files | `@` opens a fuzzy file picker and inserts a chip | P0 | done | `MentionMenu.tsx` plus engine `mentions.ts` and `project.search` (breadth-first index of up to 20,000 entries, skips build and dependency folders, kept 15 s, fuzzy ranked by name, word starts and runs). Arrows, Enter or Tab, Esc. Inserts `@path` (quoted when it has spaces) at the caret. On send, small text files (256 KB) go in whole as embedded resources, the way Claude Code includes them; folders and other files go as `resource_link`. Verified with Claude Haiku: two mentions including a quoted path, and an inlined file answered with no tool call. Inserts text, not a chip; a chip is P2 polish |
-| K4 | Slash commands and skills | `/` menu from the agent's own commands and skills, ranked by name then word match; arrows, Enter or Tab, Esc | P0 | partial | Menu verified with Claude. Not yet checked: a command run end to end, Codex's list, project-only skills (the list is read in the data folder, then replaced by what a thread reports) |
+| K4 | Slash commands and skills | `/` menu from the agent's own commands and skills, ranked by name then word match; arrows, Enter or Tab, Esc | P0 | done | Verified with Claude: `/context` picked from the menu ran and returned its report. Codex lists its skills as `$name`; they now insert as `$name`, not `/$name`. Not yet: running one with Codex (usage limit), project-only skills (the list is read in the data folder, then replaced by what a thread reports) |
 | K5 | Queue while working | Enter while the agent works queues the message above the box (edit or remove); the next one sends when the turn finishes cleanly. Kept in the engine, so it survives reloads | P0 | done | Stops and failures leave the queue waiting |
-| K6 | Permission / approval mode picker | Ask before edits · Auto-accept edits · Plan mode · Full access (Codex: read-only, auto, full) | P0 | done | Generic ACP config options (`AgentChoices` in `ModelPicker.tsx`). Mode chip uses the agent's own names (Claude: Manual, Accept edits, Plan, Auto, Bypass; Codex: Read-only, Workspace access, Auto review, Full access). Changeable mid-turn; the thread follows mode changes the agent makes itself. Still to do: remember the last picks for new threads across restarts |
+| K6 | Permission / approval mode picker | Ask before edits · Auto-accept edits · Plan mode · Full access | P0 | done | Replaced by Finlay's decision: always full access, no picker. Claude's plan mode is a "Plan first" switch in the effort menu, beside Codex's own plan-first switch. Existing threads in Manual mode were verified to switch to full access on their next turn |
 | K7 | Reasoning effort / speed | Effort picker (low to max), fast mode | P1 | done | Effort chip with levels plus switches for fast mode and Codex plan-first. The user's pick is set again at each turn start, because the Claude adapter resets effort on a model switch |
 | K8 | Prompt history | Up arrow recalls earlier prompts | P2 | open | |
 | K9 | Context and usage meter | Context % used, plan usage limits | P1 | open | ACP `usage_update` |
@@ -112,7 +113,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
-| A1 | Approval cards | Allow once, Always allow, Deny, with the exact command or diff | P0 | partial | Docked above the composer and shows the diff, command or plan as `body`. Still to verify with real Claude in Manual mode and Codex in Read-only |
+| A1 | Approval cards | Allow once, Always allow, Deny, with the exact command or diff | P0 | done | With full access they appear only for plans and for whatever an agent still asks. Verified with Claude in Manual before modes were removed: Yes wrote the file, No refused it and Claude said so. Plan cards now offer only "Yes, go ahead" (or start fresh with just the plan) and keep planning. A refused edit no longer reads "Edited +1 −0": it reads "Couldn't edit" with no line counts |
 | A2 | Plan mode approval |
  Agent proposes a plan, the user approves, then it executes | P0 | done | Claude `ExitPlanMode` arrives as a permission request with `rawInput.plan`; the card reads "Here's the plan. Go ahead?" with Claude's own options. Verified: approving into Auto moves the mode chip to Auto |
 | A3 | MCP input requests | Forms an MCP server asks the user to fill in mid-turn (Codex `mcp_server_elicitation`) | P2 | open | |
@@ -180,12 +181,13 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
 | X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | open | See `ade-ux-audit-2026-11-17.md` |
 | X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
-| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | open | Pairs with K9 |
+| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | open | Pairs with K9. Seen November 21: a Codex usage limit shows the agent's text plus "Codex couldn't finish: Internal error". Show one plain banner with the reset time instead |
 
 ## Work log
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
 - 2026-11-21 · K3 @-mention project files: fuzzy picker in the message box; mentioned text files go to the agent in full.
 - 2026-11-21 · K2 image and file attachments: paste, drop or pick files; thumbnails in the box and the thread; queued messages keep them.
@@ -202,11 +204,12 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. Verify K4 end to end, plus A1 in Manual mode with Claude and Read-only with Codex.
+1. C8 markdown tables (seen raw in `/context`), then X5 a plain usage-limit banner, since both showed up in testing.
 2. G1 diff pane upgrade (counts for new files, per-turn scope) and C9 retry and edit-resend.
-3. C5 thinking stream, then remember K6 and K7 picks for new threads across restarts.
+3. C5 thinking stream, then remember K7 picks for new threads across restarts.
 4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
-5. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+5. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
+6. Then the P1 items: C10/G5 rewind and undo, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

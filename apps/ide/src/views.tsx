@@ -148,7 +148,9 @@ function summarize(steps: Step[]): string {
       case "execute": return `ran ${plural(list.length, "command")}`;
       case "edit": case "delete": case "move": {
         const files = new Set(list.flatMap((step) => step.files));
-        return files.size === 1 ? `edited ${[...files][0]!.split(/[\\/]/).pop()}` : `edited ${plural(filesIn(list), "file")}`;
+        // A refused or failed edit changed nothing, so it must not read as done.
+        const verb = list.every((step) => step.status === "failed") ? "couldn't edit" : "edited";
+        return files.size === 1 ? `${verb} ${[...files][0]!.split(/[\\/]/).pop()}` : `${verb} ${plural(filesIn(list), "file")}`;
       }
       case "read": return `read ${plural(filesIn(list), "file")}`;
       case "search": return list.length === 1 ? "searched the project" : `searched ${list.length} times`;
@@ -169,8 +171,10 @@ function summarize(steps: Step[]): string {
 function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
   const failed = steps.filter((step) => step.status === "failed").length;
   const running = live && steps.some((step) => step.status === "running");
-  const added = steps.reduce((sum, step) => sum + (step.added ?? 0), 0);
-  const removed = steps.reduce((sum, step) => sum + (step.removed ?? 0), 0);
+  // Only edits that went through count. A refused edit's lines never reached the file.
+  const landed = steps.filter((step) => step.status !== "failed");
+  const added = landed.reduce((sum, step) => sum + (step.added ?? 0), 0);
+  const removed = landed.reduce((sum, step) => sum + (step.removed ?? 0), 0);
   return (
     <details className={running ? "work running" : "work"}>
       <summary>
@@ -189,7 +193,7 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
               {pending ? <Loader work /> : <Icon name={step.status === "done" ? "check" : "x"} />}
               <span className="what">
                 {step.label}{unconfirmed ? " · Unconfirmed" : ""}
-                {step.added !== undefined && <span className="counts"> <b>+{step.added}</b> <i>−{step.removed ?? 0}</i></span>}
+                {step.added !== undefined && step.status !== "failed" && <span className="counts"> <b>+{step.added}</b> <i>−{step.removed ?? 0}</i></span>}
               </span>
               {step.detail && step.detail !== step.label && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
               {(step.patch || step.output) && (

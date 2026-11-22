@@ -274,8 +274,9 @@ function Dropdown(props: { label: ReactNode; title: string; disabled?: boolean; 
 const onValue = (choice: AgentChoice) => choice.values.find((entry) => !["off", "default", "false"].includes(entry.value))?.value;
 
 /**
- * The agent's own settings beside the model: how much it asks before acting, and how hard it thinks (with fast
- * mode and plan-first as switches). Names and descriptions come from the agent itself.
+ * The agent's own settings beside the model: how hard it thinks, with fast mode and plan-first as switches. Names
+ * and descriptions come from the agent itself. There is no approval mode: Arcex always runs agents with full access,
+ * so an agent's mode setting only shows here as "Plan first" when it has a plan mode.
  */
 export function AgentChoices(props: { agentId: string; value: Record<string, string>; disabled?: boolean; onChange(id: string, value: string): void }) {
   const choices = useAgentChoices(props.agentId);
@@ -284,27 +285,22 @@ export function AgentChoices(props: { agentId: string; value: Record<string, str
   const nameIn = (choice: AgentChoice) => choice.values.find((entry) => entry.value === current(choice))?.name ?? current(choice);
   const mode = choices.find((choice) => choice.category === "mode");
   const effort = choices.find((choice) => choice.category === "thought_level");
-  const switches = choices.filter((choice) => choice.category !== "mode" && choice.category !== "thought_level" && choice.values.length === 2 && onValue(choice));
-  const onNames = switches.filter((choice) => current(choice) === onValue(choice)).map((choice) => (choice.category === "collaboration_mode" ? "Plan first" : choice.name));
+  // A mode with a plan value becomes a plan-first switch: on is "plan", off is full access (the engine enforces it).
+  const fullValue = mode?.values.find((entry) => /bypass|full/i.test(entry.value))?.value ?? mode?.values.at(-1)?.value;
+  const planMode: AgentChoice | null = mode && fullValue && mode.values.some((entry) => entry.value === "plan")
+    ? { ...mode, category: "collaboration_mode", values: mode.values.filter((entry) => entry.value === "plan" || entry.value === fullValue), current: mode.current === "plan" ? "plan" : fullValue }
+    : null;
+  const switches = [
+    ...(planMode ? [planMode] : []),
+    ...choices.filter((choice) => choice.category !== "mode" && choice.category !== "thought_level" && choice.values.length === 2 && onValue(choice)),
+  ];
+  const onValueOf = (choice: AgentChoice) => (choice === planMode ? "plan" : onValue(choice));
+  const offValueOf = (choice: AgentChoice) => (choice === planMode ? fullValue! : choice.values.find((entry) => entry.value !== onValue(choice))!.value);
+  const isOn = (choice: AgentChoice) => (choice === planMode ? current(choice) === "plan" : current(choice) === onValue(choice));
+  const onNames = switches.filter(isOn).map((choice) => (choice.category === "collaboration_mode" ? "Plan first" : choice.name));
   const effortName = effort && current(effort) !== "default" ? nameIn(effort) : null;
   return (
     <>
-      {mode && (
-        <Dropdown title="How much the agent asks before acting" disabled={props.disabled} label={<span>{nameIn(mode)}</span>}>
-          {(close) => (
-            <>
-              <div className="label">{mode.name}</div>
-              {mode.values.map((entry) => (
-                <button key={entry.value} className="mrow" role="menuitemradio" aria-checked={current(mode) === entry.value} aria-current={current(mode) === entry.value}
-                  onClick={() => { props.onChange(mode.id, entry.value); close(); }}>
-                  <b>{entry.name}</b>
-                  {entry.description && <span>{entry.description}</span>}
-                </button>
-              ))}
-            </>
-          )}
-        </Dropdown>
-      )}
       {(effort || switches.length > 0) && (
         <Dropdown title="How hard the agent thinks" disabled={props.disabled}
           label={<span>{[effortName ?? (effort ? "Effort" : null), ...onNames].filter(Boolean).join(" · ") || "Options"}</span>}>
@@ -324,10 +320,9 @@ export function AgentChoices(props: { agentId: string; value: Record<string, str
                 </>
               )}
               {switches.map((choice) => {
-                const on = current(choice) === onValue(choice);
-                const off = choice.values.find((entry) => entry.value !== onValue(choice))!.value;
+                const on = isOn(choice);
                 return (
-                  <button key={choice.id} className="switchrow" role="menuitemcheckbox" aria-checked={on} onClick={() => props.onChange(choice.id, on ? off : onValue(choice)!)}>
+                  <button key={choice.id} className="switchrow" role="menuitemcheckbox" aria-checked={on} onClick={() => props.onChange(choice.id, on ? offValueOf(choice) : onValueOf(choice)!)}>
                     <span>{choice.category === "collaboration_mode" ? "Plan first" : choice.name}</span>
                     <span className="toggle" aria-hidden="true"><i /></span>
                   </button>

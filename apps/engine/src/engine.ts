@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { About, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
+import type { About, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
 import { BUILTIN, agentList, listModels, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
@@ -41,6 +41,21 @@ type Live = {
 function message(value: unknown, attachments: Attachment[]): string {
   if (attachments.length && (value === undefined || value === null || (typeof value === "string" && !value.trim()))) return "";
   return text(value, "message", 20_000);
+}
+
+/** Mode values that mean the agent acts without asking: Claude "bypassPermissions", Codex "agent-full-access". */
+const FULL_ACCESS = /bypass|full/i;
+
+/**
+ * The choices on an approval card. For a plan, only going ahead in full access or keeping on planning are offered,
+ * since Arcex has no approval modes to go ahead into.
+ */
+function planOptions(isPlan: boolean, options: acp.PermissionOption[]): AskOption[] {
+  const all = options.map((option) => ({ id: option.optionId, name: option.name, kind: option.kind }));
+  if (!isPlan || !all.some((option) => FULL_ACCESS.test(option.id))) return all;
+  return all
+    .filter((option) => FULL_ACCESS.test(option.id) || option.kind.startsWith("reject"))
+    .map((option) => (!FULL_ACCESS.test(option.id) ? option : { ...option, name: /clear/i.test(option.id) ? "Yes, start fresh with just the plan" : "Yes, go ahead" }));
 }
 
 function text(value: unknown, name: string, max: number): string {
@@ -186,8 +201,27 @@ export function createEngine(
     }));
   };
 
-  /** Puts the thread's picked settings into the agent session, one by one. */
-  async function applyChoices(thread: ThreadRow, session: AgentSession, wanted: Record<string, string>) {
+  /**
+   * Arcex always runs agents with full access (Finlay, November 21, 2026): no approval modes. The one other mode kept
+   * is planning first, where the agent offers one. Returns the mode value to use, or null when the agent has no modes.
+   */
+  function modeFor(session: AgentSession, wanted: string | undefined): { id: string; value: string } | null {
+    const mode = session.choices.find((entry) => entry.category === "mode");
+    if (!mode) return null;
+    if (wanted === "plan" && mode.values.some((entry) => entry.value === "plan")) return { id: mode.id, value: "plan" };
+    const full = mode.values.find((entry) => FULL_ACCESS.test(entry.value)) ?? mode.values.at(-1);
+    return full ? { id: mode.id, value: full.value } : null;
+  }
+
+  /** Puts the thread's picked settings into the agent session, one by one. The mode is always full access or plan. */
+  async function applyChoices(thread: ThreadRow, session: AgentSession, picked: Record<string, string>, enforceMode = true) {
+    const mode = session.choices.find((entry) => entry.category === "mode");
+    const wanted = { ...picked };
+    if (mode && (enforceMode || mode.id in wanted)) {
+      const target = modeFor(session, wanted[mode.id]);
+      if (target) wanted[mode.id] = target.value;
+      if (target && thread.choices[mode.id] !== target.value) thread.choices = { ...thread.choices, [mode.id]: target.value };
+    }
     for (const [choiceId, value] of Object.entries(wanted)) {
       const choice = session.choices.find((entry) => entry.id === choiceId);
       if (!choice || choice.current === value) continue;
@@ -207,13 +241,13 @@ export function createEngine(
    */
   function followChoices(thread: ThreadRow, session: AgentSession) {
     let changed = false;
-    for (const choiceId of Object.keys(thread.choices)) {
-      const choice = session.choices.find((entry) => entry.id === choiceId);
-      if (choice?.category !== "mode") continue;
-      if (choice.current && choice.current !== thread.choices[choiceId]) {
-        thread.choices = { ...thread.choices, [choiceId]: choice.current };
-        changed = true;
-      }
+    const mode = session.choices.find((entry) => entry.category === "mode");
+    if (mode?.current && mode.current !== thread.choices[mode.id]) {
+      // Entering plan mode is followed. Anything else (leaving a plan into a narrower mode) goes back to full access.
+      const target = modeFor(session, mode.current);
+      if (target && target.value !== mode.current) void session.setChoice(mode.id, target.value).catch(() => {});
+      thread.choices = { ...thread.choices, [mode.id]: target?.value ?? mode.current };
+      changed = true;
     }
     if (changed) {
       db.saveThread(thread);
@@ -355,7 +389,7 @@ export function createEngine(
           ),
         detail: (call.title ?? "").slice(0, 2000),
         body: body?.slice(0, 20_000),
-        options: request.options.map((option) => ({ id: option.optionId, name: option.name, kind: option.kind })),
+        options: planOptions(plan !== null, request.options),
         answer: null,
       };
       live.asks.set(item.id, { item, resolve });
@@ -706,9 +740,11 @@ export function createEngine(
         const wanted = pickedChoices(params.choices);
         const session = lives.get(thread.id)?.session;
         // Settings can change mid-turn too, the way switching to plan mode works while an agent runs.
-        if (session) await applyChoices(thread, session, wanted);
+        if (session) await applyChoices(thread, session, wanted, false);
         if (!threads.has(thread.id)) throw new Error("thread not found");
-        thread.choices = { ...thread.choices, ...wanted };
+        // applyChoices already wrote the mode it really used (full access or plan) into the thread.
+        const modeId = session?.choices.find((entry) => entry.category === "mode")?.id;
+        thread.choices = { ...thread.choices, ...wanted, ...(modeId && thread.choices[modeId] ? { [modeId]: thread.choices[modeId]! } : {}) };
       }
       if (params.title !== undefined) thread.title = title;
       if (params.archived !== undefined) thread.archived = params.archived === true;

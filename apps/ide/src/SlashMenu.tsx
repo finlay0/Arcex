@@ -16,7 +16,7 @@ export function useSlashMenu(agentId: string, draft: string, setDraft: (value: s
   const query = typed?.toLowerCase() ?? "";
   // A name that starts with what was typed comes first, then one with a word that does, then any that contain it.
   const rank = (name: string) => {
-    const lower = name.toLowerCase();
+    const lower = name.toLowerCase().replace(/^\$/, "");
     if (lower.startsWith(query)) return 0;
     if (lower.split(/[:\-_ ]/).some((word) => word.startsWith(query))) return 1;
     return lower.includes(query) ? 2 : -1;
@@ -37,7 +37,9 @@ export function useSlashMenu(agentId: string, draft: string, setDraft: (value: s
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  const pick = (command: SlashCommand) => setDraft(`/${command.name} `);
+  // Codex lists its skills as "$name": they are typed with "$", not "/".
+  const typedAs = (command: SlashCommand) => (command.name.startsWith("$") ? command.name : `/${command.name}`);
+  const pick = (command: SlashCommand) => setDraft(`${typedAs(command)} `);
 
   /** Returns true when the key was for the menu, so the message box should not act on it. */
   const onKeyDown = (event: KeyboardEvent) => {
@@ -69,7 +71,7 @@ export function useSlashMenu(agentId: string, draft: string, setDraft: (value: s
             pick(command);
           }}
         >
-          <span className="cmd">/{command.name}</span>
+          <span className="cmd">{typedAs(command)}</span>
           <span className="what">{command.description || command.hint || ""}</span>
         </li>
       ))}
