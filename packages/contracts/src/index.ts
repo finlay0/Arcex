@@ -29,6 +29,12 @@ export type QueuedMessage = { text: string; attachments: Attachment[] };
 export type ProjectScript = { name: string; command: string };
 
 /**
+ * An agent's plan limit, as the agent last reported it during a turn. `used` is 0 to 1 when known; `resetsAt` is a
+ * time in ms. Only agents that report limits have one (Claude does).
+ */
+export type UsageLimit = { status: "ok" | "warning" | "reached"; window: "five_hour" | "weekly" | "other"; used: number | null; resetsAt: number | null; at: number };
+
+/**
  * Where the project stands with its remote, for people who use GitHub. `remote` is null when there is none, and the
  * app then shows nothing. `ahead` counts saved versions not pushed yet. `gh` means the GitHub CLI is installed.
  */
@@ -312,6 +318,8 @@ export type Requests = {
   "process.run": { params: { projectId: string; script: string }; result: ProcessInfo };
   "process.stop": { params: { processId: string }; result: { ok: true } };
   "process.list": { params: Record<string, never>; result: ProcessInfo[] };
+  /** Plan limits agents reported since Arcex started, by agent id. */
+  "agents.limits": { params: Record<string, never>; result: Record<string, UsageLimit> };
   /** The end of what the run printed, up to 200 KB. */
   "process.output": { params: { processId: string }; result: { text: string } };
   /** Opens the project's terminal, or returns the one already open with what it has shown so far. */
@@ -405,4 +413,5 @@ export type EventMessage =
   | { event: "terminal"; id: string; data: string }
   | { event: "terminalExit"; id: string; code: number }
   /** An agent's slash commands changed, for example when it found a project's own skills. */
-  | { event: "commands"; agentId: string; commands: SlashCommand[] };
+  | { event: "commands"; agentId: string; commands: SlashCommand[] }
+  | { event: "limit"; agentId: string; limit: UsageLimit };

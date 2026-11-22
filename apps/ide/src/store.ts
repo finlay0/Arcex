@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { ProcessInfo, About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, SlashCommand, SpeechState, Thread } from "@arcex/contracts";
+import type { ProcessInfo, About, Agent, DraftTarget, EventMessage, Item, Method, Project, Requests, ResponseMessage, Settings, SlashCommand, SpeechState, Thread, UsageLimit } from "@arcex/contracts";
 
 export type State = {
   /** "reconnecting" keeps the workspace on screen while the engine comes back; "lost" means it hasn't for a while. */
@@ -20,9 +20,11 @@ export type State = {
   commands: Record<string, SlashCommand[]>;
   /** Runs of project scripts, by run id. */
   processes: Record<string, ProcessInfo>;
+  /** Plan limits agents reported, by agent id. */
+  limits: Record<string, UsageLimit>;
 };
 
-let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null, speech: null, commands: {}, processes: {} };
+let state: State = { status: "connecting", agents: [], projects: [], threads: [], settings: null, about: null, items: {}, drafts: {}, browse: null, speech: null, commands: {}, processes: {}, limits: {} };
 const listeners = new Set<() => void>();
 const set = (next: Partial<State>) => {
   state = { ...state, ...next };
@@ -102,7 +104,8 @@ function connect() {
       attempts = 0;
       droppedAt = 0;
       const runs = await call("process.list", {}).catch(() => []);
-      set({ ...snapshot, status: "ready", drafts, items: {}, processes: Object.fromEntries(runs.map((run) => [run.id, run])) });
+      const limits = await call("agents.limits", {}).catch(() => ({}));
+      set({ ...snapshot, status: "ready", drafts, items: {}, processes: Object.fromEntries(runs.map((run) => [run.id, run])), limits });
       for (const key of unsavedDrafts.keys()) void persistDraft(key);
     } catch {
       connection.close();
@@ -152,6 +155,7 @@ function receive({ data }: MessageEvent) {
   else if (message.event === "terminal") for (const listener of terminalListeners) listener({ id: message.id, data: message.data });
   else if (message.event === "terminalExit") for (const listener of terminalListeners) listener({ id: message.id, exit: message.code });
   else if (message.event === "process") set({ processes: { ...state.processes, [message.process.id]: message.process } });
+  else if (message.event === "limit") set({ limits: { ...state.limits, [message.agentId]: message.limit } });
   else if (message.event === "commands") set({ commands: { ...state.commands, [message.agentId]: message.commands } });
   else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });
   else if (message.event === "settings") set({ settings: message.settings, agents: message.agents });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type TextareaHTMLAttributes } from "react";
-import type { Agent, Thread } from "@arcex/contracts";
+import type { Agent, Thread, UsageLimit } from "@arcex/contracts";
 
 declare global {
   interface Window {
@@ -67,6 +67,27 @@ export const dotClass = (thread: Thread) =>
 export const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 /** "now", "5m", "3h", "2d": how long since a thread last moved. */
+/** "3:40 PM" today, else "Tue 3:40 PM". */
+export function clock(time: number): string {
+  const when = new Date(time);
+  const sameDay = when.toDateString() === new Date().toDateString();
+  return when.toLocaleString(undefined, sameDay ? { hour: "numeric", minute: "2-digit" } : { weekday: "short", hour: "numeric", minute: "2-digit" });
+}
+
+/** A plan limit in a sentence, or null when there is nothing worth saying. */
+export function limitText(agent: string, limit: UsageLimit | undefined, always = false): string | null {
+  if (!limit) return null;
+  if (limit.resetsAt !== null && limit.resetsAt < Date.now()) return null;
+  const window = limit.window === "five_hour" ? "5-hour" : limit.window === "weekly" ? "weekly" : "usage";
+  const resets = limit.resetsAt ? clock(limit.resetsAt) : null;
+  if (limit.status === "reached") return `${agent} has reached its ${window} limit${resets ? ` until ${resets}` : ""}. Switch to another agent or model, or wait.`;
+  const reset = resets ? `. It resets at ${resets}` : "";
+  if (limit.used !== null && (limit.status === "warning" || always)) return `${agent} has used ${Math.round(limit.used * 100)}% of its ${window} limit${reset}.`;
+  if (limit.status === "warning") return `${agent} is close to its ${window} limit${reset}.`;
+  if (always) return `${agent} is within its ${window} limit${reset}.`;
+  return null;
+}
+
 export function ago(time: number): string {
   const minutes = Math.floor((Date.now() - time) / 60_000);
   if (minutes < 1) return "now";

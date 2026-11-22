@@ -11,8 +11,8 @@ import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { highlight, languageOf } from "./highlight.ts";
-import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
-import { call, clearSentDraft, saveDraft } from "./store.ts";
+import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, limitText, busy, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { call, clearSentDraft, saveDraft, useStore } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
@@ -795,12 +795,15 @@ export function Conversation(props: {
       </div>
     </div>
   );
-  const notice = notReady && (
+  const limit = limitText(nameOf(agentId), useStore().limits[agentId]);
+  const notice = notReady ? (
     <p className="notice">
       {nameOf(agentId)} {health.installed ? "isn't signed in" : "isn't installed"} on this computer.{" "}
       <button className="link" onClick={props.manageAgents}>Set it up</button>
     </p>
-  );
+  ) : limit ? (
+    <p className="notice limit" role="status">{limit}</p>
+  ) : null;
 
   if (!thread) {
     return (

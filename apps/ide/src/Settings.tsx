@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { About, Agent, DirectoryAgent, HookEntry, InstructionFile, Project, ProviderStatus, Settings as Prefs, SkillEntry, SpeechState, Thread } from "@arcex/contracts";
-import { Icon, ago, nameOf, plural } from "./shared.tsx";
+import { Icon, ago, limitText, nameOf, plural } from "./shared.tsx";
 import { call, useStore } from "./store.ts";
 import { Account } from "./Account.tsx";
 import { forgetModels } from "./ModelPicker.tsx";
@@ -466,6 +466,7 @@ function AgentDirectory({ added, fail }: { added: Agent[]; fail(error: unknown):
 }
 
 function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; fail(error: unknown): void }) {
+  const { limits } = useStore();
   const [status, setStatus] = useState<ProviderStatus[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState<string | null>(null);
@@ -564,6 +565,11 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
                 >
                   {copied === agent.id ? "Copied" : state.signInCommand}
                 </button>
+              </Row>
+            )}
+            {limits[agent.id] && limitText(agent.name, limits[agent.id], true) && (
+              <Row title="Plan limit" hint={`As ${agent.name} last reported it, during a turn ${ago(limits[agent.id]!.at)}.`}>
+                <span className="limitnote">{limitText(agent.name, limits[agent.id], true)}</span>
               </Row>
             )}
             {state && state.installed && state.update && (

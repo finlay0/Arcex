@@ -194,12 +194,13 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 | X2 | Light theme | Light and dark | P2 | partial | Check `sun` and `moon` |
 | X3 | Accessibility | Keyboard paths, focus and contrast from the November 17 audit | P1 | done | Rechecked November 22 against `ade-ux-audit-2026-11-17.md`: thread rows are real buttons beside a separate menu button; menus focus their first item, move with the arrow keys and close on Esc back to the button; panel tabs move with the arrow keys, Home and End; message boxes have names; placeholder and secondary text measure 5.4:1 or better; the animated composer outline is gone (steady ring) and reduced motion stops all animation. A page sweep finds no unnamed controls or fields; icon buttons all have hover labels; links, summaries and focusable custom controls now get the focus ring too. A 30-stop Tab walk shows a ring on every stop. Screen-reader and Windows-scaling checks on the packaged build stay with Finlay |
 | X4 | Send feedback | Report a problem with the thread attached (Codex `feedback_view`) | P2 | open | |
-| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | partial | A usage limit now ends the turn with one plain line, "Codex has reached its usage limit until 10:32 PM. Try again then, or switch…", instead of "Internal error" (verified with Codex). Still to do: limits shown before they are hit (with K9) |
+| X5 | Usage limits | Show plan limits and when they reset, with a banner when near (T3 `ComposerUsageLimits`, `UsageLimitRecoveryBanner`) | P1 | partial | A usage limit now ends the turn with one plain line, "Codex has reached its usage limit until 10:32 PM. Try again then, or switch…", instead of "Internal error" (verified with Codex). November 22: Claude reports its plan limit with each turn (the adapter's `_claude/rateLimit` on `usage_update`); Arcex keeps the latest per agent. Settings › Agents shows "Plan limit: Claude is within its 5-hour limit. It resets at 4:00 AM" (or the percentage when Claude sends one), and the message box shows a notice when the agent is close to ("has used 85% of its weekly limit…") or at its limit ("…until 4:00 AM. Switch to another agent or model, or wait"). Verified the Settings row with a real Haiku turn and after a reload. The warning notice was not seen live (needs a near-limit account). Still missing: Codex and other agents, which don't report limits over ACP |
 
 ## Work log
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · X5 Claude plan limits in Settings › Agents and a notice near the limit.
 - 2026-11-22 · K10 steer a running turn (Enter), Tab queues.
 - 2026-11-22 · G7 review a branch against main.
 - 2026-11-22 · G2 comment on diff lines into the message box.
@@ -261,7 +262,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Remaining P1 rows: X5 usage limits, then the partial rows (P4 split view, P5, H6, C14 recap).
+4. Remaining: the partial rows (X5 for agents other than Claude), (P4 split view, P5, H6, C14 recap).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

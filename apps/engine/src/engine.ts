@@ -15,7 +15,7 @@ import { open, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
-import type { About, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState } from "@arcex/contracts";
+import type { About, AskOption, Attachment, EventMessage, Item, Method, Project, Requests, Settings, Thread, ThreadState, UsageLimit } from "@arcex/contracts";
 import { BUILTIN, SignInNeeded, agentList, listModels, signIn, startSession, type AgentSession, type Models } from "./agents.ts";
 import type { Db, ThreadRow } from "./db.ts";
 import * as git from "./git.ts";
@@ -319,6 +319,25 @@ export function createEngine(
     }
   }
 
+  // Plan limits by agent, as agents report them during turns. Account-wide, so every thread of that agent shares one.
+  const limits = new Map<string, UsageLimit>();
+  const limitOf = (raw: unknown): UsageLimit | null => {
+    if (!raw || typeof raw !== "object") return null;
+    const info = raw as { status?: unknown; resetsAt?: unknown; rateLimitType?: unknown; utilization?: unknown };
+    const status = info.status === "rejected" ? "reached" : info.status === "allowed_warning" ? "warning" : info.status === "allowed" ? "ok" : null;
+    if (!status) return null;
+    const kind = String(info.rateLimitType ?? "");
+    const resets = typeof info.resetsAt === "number" && Number.isFinite(info.resetsAt) ? info.resetsAt : null;
+    const used = typeof info.utilization === "number" && Number.isFinite(info.utilization) ? Math.min(1, Math.max(0, info.utilization > 1 ? info.utilization / 100 : info.utilization)) : null;
+    return {
+      status,
+      window: kind === "five_hour" ? "five_hour" : kind.startsWith("seven_day") ? "weekly" : "other",
+      used,
+      // Seconds since 1970 from Claude; a value that big is already milliseconds.
+      resetsAt: resets === null ? null : resets < 1e12 ? resets * 1000 : resets,
+      at: Date.now(),
+    };
+  };
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => ({ ...thread, steering: lives.get(thread.id)?.session?.steering === true });
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
@@ -374,6 +393,11 @@ export function createEngine(
   function onUpdate(thread: ThreadRow, project: Project, update: acp.SessionUpdate) {
     const live = lives.get(thread.id);
     if (update.sessionUpdate === "usage_update") {
+      const limit = limitOf((update as { _meta?: Record<string, unknown> })._meta?.["_claude/rateLimit"]);
+      if (limit) {
+        limits.set(thread.provider, limit);
+        emit({ event: "limit", agentId: thread.provider, limit });
+      }
       // Kept in memory only: it changes every turn and comes back with the next one.
       const { used, size } = update;
       if (!live || !Number.isFinite(used) || !Number.isFinite(size) || size <= 0 || used < 0) return;
@@ -866,6 +890,7 @@ export function createEngine(
       return processes.scripts(projectOf(params.projectId).cwd);
     },
 
+    "agents.limits": () => Object.fromEntries(limits),
     "project.publishState": (params) => publishState(projectOf(params.projectId).cwd),
     "project.branch": (params) => branchInfo(projectOf(params.projectId).cwd),
     async "project.push"(params) {
