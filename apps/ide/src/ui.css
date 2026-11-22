@@ -483,6 +483,10 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .work li .peek summary { font-size: 12px; color: var(--ink-3); padding: 0; }
 .work li .peek summary::before { content: "›"; display: inline-block; width: 12px; transition: transform .12s; }
 .work li .peek[open] summary::before { transform: rotate(90deg); }
+.work li .subagent summary { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; }
+.work li .subagent summary .trunc { flex: 1; min-width: 0; }
+.work li .subagent ul { margin: 4px 0 2px; padding: 2px 0 2px 12px; border-left: 1px solid var(--line-2); }
+.work li .subagent li { font-size: 13px; }
 .work li pre { margin: 6px 0 2px; padding: 10px 12px; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); font: 12px/18px var(--mono); color: var(--ink-2); max-height: 280px; overflow: auto; white-space: pre; }
 .work li pre .add { color: var(--ok); }
 .work li pre .del { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--ink-4); }

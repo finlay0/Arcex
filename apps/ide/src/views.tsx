@@ -164,6 +164,7 @@ function summarize(steps: Step[]): string {
       case "fetch": return list.length === 1 ? "looked something up" : `looked up ${list.length} things`;
       case "browser": return list.length === 1 ? "used the browser" : `used the browser ${list.length} times`;
       case "think": return "thought it through";
+      case "agent": return list.length === 1 ? "used a subagent" : `used ${list.length} subagents`;
       default: {
         const only = list[0]!.label;
         return list.length === 1 ? only.charAt(0).toLowerCase() + only.slice(1) : `${list.length} other steps`;
@@ -175,7 +176,7 @@ function summarize(steps: Step[]): string {
 }
 
 /** A run of tool calls between two things the agent said, folded into one quiet line that opens to show each step. */
-function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
+function WorkGroup({ steps, live, children }: { steps: Step[]; live: boolean; children: Map<string, Step[]> }) {
   const failed = steps.filter((step) => step.status === "failed").length;
   const running = live && steps.some((step) => step.status === "running");
   // Only edits that went through count. A refused edit's lines never reached the file.
@@ -202,7 +203,8 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
                 {step.label}{unconfirmed ? " · Unconfirmed" : ""}
                 {step.added !== undefined && step.status !== "failed" && <span className="counts"> <b>+{step.added}</b> <i>−{step.removed ?? 0}</i></span>}
               </span>
-              {step.detail && step.detail !== step.label && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
+              {step.detail && step.detail !== step.label && step.tool !== "agent" && <code title={step.detail}>{step.detail.slice(0, 160)}</code>}
+              {children.has(step.id) && <SubagentSteps steps={children.get(step.id)!} live={pending} />}
               {(step.patch || step.output) && (
                 <details className="peek">
                   <summary>{step.patch ? "Show the change" : "Show the output"}</summary>
@@ -216,6 +218,29 @@ function WorkGroup({ steps, live }: { steps: Step[]; live: boolean }) {
             </li>
           );
         })}
+      </ul>
+    </details>
+  );
+}
+
+/** What a subagent did inside one Agent or Task call: a count and its latest step, opening to the full list. */
+function SubagentSteps({ steps, live }: { steps: Step[]; live: boolean }) {
+  const current = live ? steps.findLast((step) => step.status === "running") : undefined;
+  const failed = steps.filter((step) => step.status === "failed").length;
+  return (
+    <details className="peek subagent">
+      <summary>
+        {live && <Loader work />}
+        Subagent · {plural(steps.length, "step")}{failed ? ` · ${failed} failed` : ""}
+        {current && <span className="trunc"> · {current.label}</span>}
+      </summary>
+      <ul>
+        {steps.map((step) => (
+          <li key={step.id} className={step.status === "failed" ? "bad" : undefined}>
+            {step.status === "running" && live ? <Loader work /> : <Icon name={step.status === "done" ? "check" : step.status === "running" ? "dots" : "x"} />}
+            <span className="what">{step.label}</span>
+          </li>
+        ))}
       </ul>
     </details>
   );
@@ -272,14 +297,26 @@ const ENDINGS = { done: "Worked for", stopped: "Stopped after", failed: "Stopped
 /** A turn reads like the agent's own account: what it said, with the work in between folded into short lines. */
 function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread: Thread; turn: Turn; live: boolean; last: boolean; preview: boolean; actions: Actions; edit(turn: Turn): void }) {
   const blocks: Block[] = [];
+  // Steps a subagent took fold under the call that started it.
+  const children = new Map<string, Step[]>();
+  const ids = new Set(turn.parts.map((part) => part.id));
+  for (const part of turn.parts) {
+    if (part.kind !== "step" || !part.parent || !ids.has(part.parent)) continue;
+    const list = children.get(part.parent) ?? [];
+    list.push(part);
+    children.set(part.parent, list);
+  }
   for (const part of turn.parts) {
     const last = blocks[blocks.length - 1];
+    if (part.kind === "step" && part.parent && ids.has(part.parent)) continue;
     if (part.kind === "step") {
       if (last?.kind === "work") last.steps.push(part);
       else blocks.push({ kind: "work", id: part.id, steps: [part] });
     } else blocks.push(part);
   }
   const running = turn.parts.findLast((part): part is Step => part.kind === "step" && part.status === "running");
+  const runningChild = turn.parts.findLast((part): part is Step => part.kind === "step" && part.status === "running" && !!part.parent);
+  const runningLabel = runningChild ? `Subagent: ${runningChild.label}` : running?.label;
   const end = turn.parts.find((part) => part.kind === "end");
   const thinking = live && blocks.at(-1)?.kind === "think";
   return (
@@ -291,7 +328,7 @@ function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread
       )}
       {turn.user !== null && turn.user !== "" && <YouMessage thread={thread} turn={turn} edit={edit} />}
       {blocks.map((block, index) => {
-        if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} live={live && index === blocks.length - 1} />;
+        if (block.kind === "work") return <WorkGroup key={block.id} steps={block.steps} children={children} live={live && index === blocks.length - 1} />;
         if (block.kind === "say") return <Reply key={block.id} text={block.text} />;
         // A question waiting on the user sits above the message box. Here it shows once it's settled.
         if (block.kind === "ask") return live && thread.state === "needs_you" && !block.answer ? null : <AskCard key={block.id} thread={thread} item={block} actions={actions} active={false} />;
@@ -312,7 +349,7 @@ function TurnView({ thread, turn, live, last, preview, actions, edit }: { thread
       {live && thread.state !== "needs_you" && (
         <div className="live">
           <Loader work={!!running} />
-          <span>{thread.state === "stopping" ? "Stopping…" : running?.label ?? (thinking ? "Thinking" : stateLabel(thread)) ?? "Working"}</span>
+          <span>{thread.state === "stopping" ? "Stopping…" : runningLabel ?? (thinking ? "Thinking" : stateLabel(thread)) ?? "Working"}</span>
         </div>
       )}
     </>

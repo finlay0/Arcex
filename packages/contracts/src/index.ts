@@ -142,6 +142,8 @@ export type Item =
       patch?: string;
       /** The end of what a command printed. Bounded. */
       output?: string;
+      /** The step of the subagent call this step ran inside, by item id. Shown folded under it. */
+      parent?: string;
     }
   /** The agent's reasoning before it acts. `seconds` is set once it stops thinking. */
   | { id: string; kind: "think"; text: string; seconds: number | null }

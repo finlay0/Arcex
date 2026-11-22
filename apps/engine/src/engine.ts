@@ -42,7 +42,7 @@ type Live = {
   say: Say | null;
   think: { item: Think; started: number } | null;
   plan: Extract<Item, { kind: "plan" }> | null;
-  steps: Map<string, { item: Step; kind: string; title: string }>;
+  steps: Map<string, { item: Step; kind: string; title: string; agent?: boolean }>;
   /** Notes for the agent summarising older messages, by the agent's compaction id. */
   compactions: Map<string, Item & { kind: "note" }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
@@ -458,6 +458,12 @@ export function createEngine(
       put(thread, { id: randomUUID(), kind: "note", text: [title, description].filter(Boolean).join(": ") });
       return;
     }
+    // Work a subagent does inside an Agent or Task call is tagged with that call's id (Claude's adapter).
+    const claudeMeta = (update as { _meta?: { claudeCode?: { parentToolUseId?: unknown; toolName?: unknown } } })._meta?.claudeCode;
+    const parentCall = claudeMeta?.parentToolUseId;
+    const parentStep = typeof parentCall === "string" ? live.steps.get(parentCall) : undefined;
+    // A subagent's own words and reasoning are its working notes. Its result reaches the main agent, which says what matters.
+    if (parentStep && (update.sessionUpdate === "agent_thought_chunk" || update.sessionUpdate === "agent_message_chunk")) return;
     if (update.sessionUpdate === "agent_thought_chunk") {
       if (update.content.type !== "text") return;
       if (live.say) endSay(thread);
@@ -487,6 +493,21 @@ export function createEngine(
       readContent(step.item, update.content);
       step.item.label = describe(step.kind, step.title, step.item.files);
       step.item.tool = /browser_[a-z]+/.test(step.title) ? "browser" : step.kind;
+      // Claude's Agent and Task calls start a subagent. Its own steps fold under this one.
+      if (claudeMeta?.toolName === "Agent" || claudeMeta?.toolName === "Task") step.agent = true;
+      if (step.agent) {
+        step.item.tool = "agent";
+        step.item.label = step.title ? `Subagent: ${step.title.slice(0, 200)}` : "Ran a subagent";
+      }
+      if (parentStep && parentStep !== step) {
+        step.item.parent = parentStep.item.id;
+        if (!parentStep.agent) {
+          parentStep.agent = true;
+          parentStep.item.tool = "agent";
+          parentStep.item.label = parentStep.title ? `Subagent: ${parentStep.title.slice(0, 200)}` : "Ran a subagent";
+          put(thread, parentStep.item);
+        }
+      }
       put(thread, step.item);
     } else if (update.sessionUpdate === "available_commands_update" && live.session) {
       const commands = live.session.commands;
