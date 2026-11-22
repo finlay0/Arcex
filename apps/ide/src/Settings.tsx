@@ -573,7 +573,7 @@ function Agents({ agents, recheck, fail }: { agents: Agent[]; recheck(): void; f
               </Row>
             )}
             {limits[agent.id] && limitText(agent.name, limits[agent.id], true) && (
-              <Row title="Plan limit" hint={`As ${agent.name} last reported it, during a turn ${ago(limits[agent.id]!.at)}.`}>
+              <Row title="Plan limit" hint={`As ${agent.name} last reported it${ago(limits[agent.id]!.at) === "now" ? ", just now" : `, ${ago(limits[agent.id]!.at)} ago`}.`}>
                 <span className="limitnote">{limitText(agent.name, limits[agent.id], true)}</span>
               </Row>
             )}

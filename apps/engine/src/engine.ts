@@ -10,6 +10,7 @@ import { createTerminals } from "./terminals.ts";
 import { listHooks, listSkills, toggleHook, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
+import { readCodexLimit } from "./codexLimits.ts";
 import { cleanConnector, connectorServers, MAX_CONNECTORS, testConnector } from "./connectors.ts";
 import { bringIn, copyChanges, copyDiff, createCopy, removeCopy } from "./worktrees.ts";
 import { randomUUID } from "node:crypto";
@@ -347,6 +348,20 @@ export function createEngine(
 
   // Plan limits by agent, as agents report them during turns. Account-wide, so every thread of that agent shares one.
   const limits = new Map<string, UsageLimit>();
+  // Codex doesn't report its limits over ACP, so Arcex asks Codex for them: after a Codex turn, and when they're stale.
+  let codexAsking: Promise<void> | null = null;
+  const refreshCodexLimit = (olderThan = 0) => {
+    const known = limits.get("codex");
+    if (codexAsking || (known && Date.now() - known.at < olderThan)) return;
+    codexAsking = readCodexLimit()
+      .then((limit) => {
+        if (!limit) return;
+        limits.set("codex", limit);
+        emit({ event: "limit", agentId: "codex", limit });
+      })
+      .catch(() => {})
+      .finally(() => (codexAsking = null));
+  };
   const limitOf = (raw: unknown): UsageLimit | null => {
     if (!raw || typeof raw !== "object") return null;
     const info = raw as { status?: unknown; resetsAt?: unknown; rateLimitType?: unknown; utilization?: unknown };
@@ -835,6 +850,7 @@ export function createEngine(
     put(thread, { id: randomUUID(), kind: "end", seconds: Math.round((Date.now() - started) / 1000), outcome: endings[ended] ?? "done" });
     setState(thread, ended);
     tellParent(thread, ended);
+    if (thread.provider === "codex") refreshCodexLimit();
     // The next waiting message goes out only after a clean finish. After a stop or a failure the user decides.
     if (ended === "idle" && thread.queued.length && threads.has(thread.id)) {
       const [next, ...rest] = thread.queued;
@@ -1076,7 +1092,10 @@ export function createEngine(
       return processes.scripts(projectOf(params.projectId).cwd);
     },
 
-    "agents.limits": () => Object.fromEntries(limits),
+    "agents.limits": () => {
+      refreshCodexLimit(5 * 60_000);
+      return Object.fromEntries(limits);
+    },
     "memory.personal": () => personalMemory(),
     async "memory.savePersonal"(params) {
       await savePersonalMemory(text(params.agent, "agent", 40), params.text);
