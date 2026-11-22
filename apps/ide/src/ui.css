@@ -723,3 +723,9 @@ body.resizing iframe { pointer-events: none; }
 .stashtext:hover { background: var(--hover); color: var(--ink); }
 .stashtext .trunc { flex: 1; }
 .stashtext .when { color: var(--ink-4); font-size: 12px; }
+/* Timeline strip beside long threads. */
+.minimap { position: absolute; right: 14px; width: 14px; z-index: 5; }
+.minimap .mview { position: absolute; left: 3px; right: 3px; border-radius: 3px; background: var(--hover); pointer-events: none; }
+.minimap .mmark { position: absolute; left: 0; right: 0; height: 9px; margin-top: -4px; padding: 0; background: none; border-radius: 3px; }
+.minimap .mmark::after { content: ""; position: absolute; left: 3px; right: 3px; top: 3px; height: 3px; border-radius: 2px; background: var(--ink-3); }
+.minimap .mmark:hover::after, .minimap .mmark:focus-visible::after { background: var(--ink); }

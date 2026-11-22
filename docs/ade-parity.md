@@ -89,7 +89,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C16 | Quote part of a reply | Select text in a reply to quote it into the message box (T3 `AssistantSelectionToolbar`) | P2 | done | Selecting text in an agent reply shows a Quote button above it; it puts the text in that thread's message box as "> " lines (in split view, the right pane's box). Verified November 22 |
 | C17 | Rich media in replies | Mermaid diagrams, math, zoomable images, rendered HTML preview (T3 `MermaidDiagram`, `MathTypeset`, `HtmlRenderDialog`) | P2 | open | Pairs with C8 |
 | C18 | Context compaction | Summarise a long thread to free context, by hand or automatically (Claude `/compact`, T3 `compaction.logic`) | P1 | done | Arcex advertises ACP `session.compaction` (and `notices`), so a compaction shows as a plain note, "Summarising older messages…" then "Summarised older messages to free up the agent's memory", instead of a fake tool call. By hand: click the context meter (K9) and confirm, which sends the agent's own `/compact` (only offered when the agent lists that command). Agent notices show as notes too. Verified November 21 with Claude Haiku. Codex's own compaction not yet seen |
-| C19 | Timeline minimap | A strip beside long threads to jump to any turn (T3 `TimelineMinimap`) | P2 | open | |
+| C19 | Timeline minimap | A strip beside long threads to jump to any turn (T3 `TimelineMinimap`) | P2 | done | Threads taller than one and a half screens with three or more of your messages get a thin strip on the right: a mark per message (hover shows its start, click scrolls there) and a shaded block for what's on screen. Verified November 22 |
 
 ### Composer
 
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · C19 timeline strip beside long threads.
 - 2026-11-22 · K11 put drafts aside.
 - 2026-11-22 · C16 quote selected reply text.
 - 2026-11-22 · P4 split view of two threads.

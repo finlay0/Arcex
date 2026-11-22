@@ -864,6 +864,7 @@ export function Conversation(props: {
     <div className="convo">
       {finding && <FindBar root={flow} watch={props.items} close={() => setFinding(false)} />}
       <QuoteSelection root={flow} threadId={thread.id} />
+      <Minimap scroller={scroller} watch={props.items} />
       <div
         className="scroll"
         ref={scroller}
@@ -1475,6 +1476,61 @@ function diffRows(text: string): DiffRow[] {
  * { text, threadId } for a given thread's pane.
  */
 export const ADD_TO_DRAFT = "arcex:add-to-draft";
+
+/** A strip beside a long thread with a mark for each of your messages; a mark jumps there. */
+function Minimap({ scroller, watch }: { scroller: RefObject<HTMLDivElement | null>; watch: unknown }) {
+  const [marks, setMarks] = useState<{ at: number; label: string; el: HTMLElement }[]>([]);
+  const [view, setView] = useState({ top: 0, size: 1 });
+  const [frame, setFrame] = useState({ top: 0, height: 0 });
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => {
+      const height = el.scrollHeight;
+      const origin = el.getBoundingClientRect().top - el.scrollTop;
+      setMarks(
+        height > el.clientHeight * 1.5
+          ? [...el.querySelectorAll<HTMLElement>(".you")].map((you) => ({
+              at: (you.getBoundingClientRect().top - origin) / height,
+              label: (you.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80),
+              el: you,
+            }))
+          : [],
+      );
+      setView({ top: el.scrollTop / height, size: el.clientHeight / height });
+      setFrame({ top: el.offsetTop, height: el.clientHeight });
+    };
+    measure();
+    const onScroll = () => setView({ top: el.scrollTop / el.scrollHeight, size: el.clientHeight / el.scrollHeight });
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      observer.disconnect();
+    };
+  }, [watch]);
+  if (marks.length < 3) return null;
+  return (
+    <nav className="minimap" aria-label="Jump to one of your messages" style={{ top: frame.top + 8, height: Math.max(0, frame.height - 16) }}>
+      <span className="mview" style={{ top: `${view.top * 100}%`, height: `${Math.max(view.size * 100, 3)}%` }} aria-hidden />
+      {marks.map((mark, index) => (
+        <button
+          key={index}
+          className="mmark"
+          style={{ top: `${mark.at * 100}%` }}
+          title={mark.label}
+          aria-label={`Jump to your message: ${mark.label}`}
+          onClick={() => {
+            const el = scroller.current;
+            if (el) el.scrollTo({ top: Math.max(0, mark.el.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 24), behavior: "smooth" });
+          }}
+        />
+      ))}
+    </nav>
+  );
+}
 
 /** Selecting text in the agent's replies shows a Quote button that puts it in the message box as a quote. */
 function QuoteSelection({ root, threadId }: { root: RefObject<HTMLElement | null>; threadId: string }) {
