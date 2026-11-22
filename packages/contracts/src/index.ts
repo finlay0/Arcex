@@ -87,6 +87,8 @@ export type Item =
   | { id: string; kind: "plan"; entries: PlanEntry[] }
   /** `body` is what the agent wants approved in full, such as its plan, as markdown. */
   | { id: string; kind: "ask"; title: string; detail: string; body?: string; options: AskOption[]; answer: string | null }
+  /** The agent's own questions (ACP form elicitation), answered by picking options or typing. Null answer: still open. */
+  | { id: string; kind: "question"; title: string; questions: Question[]; answer: string | null }
   | { id: string; kind: "error"; text: string }
   /** Something to know about the turn that isn't a failure, such as an image the model couldn't see. */
   | { id: string; kind: "note"; text: string }
@@ -112,7 +114,20 @@ export type FileEntry = { name: string; kind: "folder" | "file" };
 /** A project file or folder found by "@" search. `path` is relative, with forward slashes. */
 export type FileMatch = { path: string; kind: "folder" | "file" };
 
-export type Change = { path: string; status: "added" | "changed" | "removed"; added: number; removed: number };
+/**
+ * One question in an agent's question card. "one" picks a single option, "many" any number, "text" is typed.
+ * `otherId` is the field for typing your own answer instead of (or beside) the options.
+ */
+export type Question = {
+  id: string;
+  header?: string;
+  text?: string;
+  kind: "one" | "many" | "text";
+  options: { value: string; label: string; description?: string }[];
+  otherId?: string;
+};
+
+export type Change ={ path: string; status: "added" | "changed" | "removed"; added: number; removed: number };
 
 /** One entry in the curated toolbox. No prices: they change too often to be trusted. */
 export type Tool = { id: string; name: string; category: string; what: string; goodFor: string; tradeoffs: string; url: string };
@@ -239,6 +254,8 @@ export type Requests = {
   "thread.unqueue": { params: { threadId: string; index: number }; result: QueuedMessage };
   "thread.cancel": { params: { threadId: string }; result: { ok: true } };
   "ask.answer": { params: { threadId: string; itemId: string; optionId: string | null }; result: { ok: true } };
+  /** Answers a question card, keyed by question (and "other") id. Null skips it. */
+  "question.answer": { params: { threadId: string; itemId: string; answers: Record<string, string | string[]> | null }; result: { ok: true } };
   /** Voice dictation runs on this computer. The speech model downloads once, when the user first asks for it. */
   "speech.status": { params: Record<string, never>; result: SpeechState };
   "speech.prepare": { params: Record<string, never>; result: SpeechState };

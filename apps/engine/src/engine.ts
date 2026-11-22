@@ -2,6 +2,7 @@
 import { createSpeech } from "./speech.ts";
 import { createAttachments } from "./attachments.ts";
 import { mentionLinks, searchFiles } from "./mentions.ts";
+import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
@@ -21,6 +22,7 @@ const RESEARCH_MCP = "https://api.arcex.dev/public/mcp";
 
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
+type QuestionItem = Extract<Item, { kind: "question" }>;
 type Say = Extract<Item, { kind: "say" }>;
 type Think = Extract<Item, { kind: "think" }>;
 
@@ -35,6 +37,8 @@ type Live = {
   plan: Extract<Item, { kind: "plan" }> | null;
   steps: Map<string, { item: Step; kind: string; title: string }>;
   asks: Map<string, { item: Ask; resolve(response: acp.RequestPermissionResponse): void }>;
+  /** The agent's questions waiting on the user, with the form they came in. */
+  questions: Map<string, { item: QuestionItem; schema: Parameters<typeof questionsOf>[0]; resolve(response: acp.CreateElicitationResponse): void }>;
   /** Told to the agent with the next message, after the user undoes a turn. */
   undoNote?: string;
 };
@@ -293,7 +297,7 @@ export function createEngine(
   const publicThread = ({ sessionId: _sessionId, ...thread }: ThreadRow): Thread => thread;
   const liveOf = (id: string): Live => {
     let live = lives.get(id);
-    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), asks: new Map() }));
+    if (!live) lives.set(id, (live = { session: null, turn: null, turnFailure: null, say: null, think: null, plan: null, steps: new Map(), asks: new Map(), questions: new Map() }));
     return live;
   };
   const projectOf = (id: unknown): Project => {
@@ -398,6 +402,12 @@ export function createEngine(
     }
   }
 
+  /** Whether the thread still has an approval or a question waiting on the user. */
+  const waiting = (threadId: string) => {
+    const live = lives.get(threadId);
+    return !!live && (live.asks.size > 0 || live.questions.size > 0);
+  };
+
   function onPermission(thread: ThreadRow, project: Project, request: acp.RequestPermissionRequest) {
     const live = lives.get(thread.id);
     if (!live?.turn || live.turn.signal.aborted) return Promise.resolve<acp.RequestPermissionResponse>({ outcome: { outcome: "cancelled" } });
@@ -433,6 +443,23 @@ export function createEngine(
     });
   }
 
+  /** An agent's questions, as a card the user answers. Only form questions are asked; others are declined. */
+  function onElicitation(thread: ThreadRow, request: acp.CreateElicitationRequest): Promise<acp.CreateElicitationResponse> {
+    const live = lives.get(thread.id);
+    if (!live?.turn || live.turn.signal.aborted) return Promise.resolve({ action: "cancel" });
+    if (request.mode !== "form" || !("requestedSchema" in request)) return Promise.resolve({ action: "decline" });
+    const schema = request.requestedSchema as Parameters<typeof questionsOf>[0];
+    const questions = questionsOf(schema);
+    if (!questions.length) return Promise.resolve({ action: "decline" });
+    return new Promise((resolve) => {
+      endSay(thread);
+      const item: QuestionItem = { id: randomUUID(), kind: "question", title: String(request.message ?? "").slice(0, 2000) || "A question for you", questions, answer: null };
+      live.questions.set(item.id, { item, schema, resolve });
+      put(thread, item);
+      setState(thread, "needs_you");
+    });
+  }
+
   function closeSession(live: Live) {
     const session = live.session;
     live.session = null;
@@ -445,6 +472,11 @@ export function createEngine(
       resolve({ outcome: { outcome: "cancelled" } });
     }
     live.asks.clear();
+    for (const { item, resolve } of live.questions.values()) {
+      if (save) put(thread, { ...item, answer: answer || "Request closed" });
+      resolve({ action: "cancel" });
+    }
+    live.questions.clear();
   }
 
   async function ensureSession(thread: ThreadRow, project: Project, live: Live, signal: AbortSignal): Promise<AgentSession> {
@@ -472,6 +504,7 @@ export function createEngine(
       ],
       onUpdate: (update) => onUpdate(thread, project, update),
       onPermission: (request) => onPermission(thread, project, request),
+      onElicitation: (request) => onElicitation(thread, request),
       onExit: (detail) => {
         if (live.session !== session) return;
         live.session = null;
@@ -977,8 +1010,24 @@ export function createEngine(
       liveOf(thread.id).asks.delete(pending.item.id);
       pending.item.answer = option ? option.name : "Not now";
       put(thread, pending.item);
-      setState(thread, liveOf(thread.id).asks.size ? "needs_you" : "working");
+      setState(thread, waiting(thread.id) ? "needs_you" : "working");
       pending.resolve({ outcome: option ? { outcome: "selected", optionId: option.id } : { outcome: "cancelled" } });
+      return { ok: true };
+    },
+
+    "question.answer"(params) {
+      const thread = threadOf(params.threadId);
+      const live = liveOf(thread.id);
+      const pending = live.questions.get(String(params.itemId));
+      if (!pending) throw new Error("that question is no longer waiting");
+      const answers = params.answers && typeof params.answers === "object" && !Array.isArray(params.answers) ? params.answers : null;
+      const content = answers ? contentOf(pending.schema, answers) : null;
+      live.questions.delete(pending.item.id);
+      pending.item.answer = content && Object.keys(content).length ? summaryOf(pending.item.questions, content) : "Skipped";
+      put(thread, pending.item);
+      setState(thread, waiting(thread.id) ? "needs_you" : "working");
+      // Skipping declines the form: Claude reads that as "the user skipped" and carries on.
+      pending.resolve(content && Object.keys(content).length ? { action: "accept", content } : { action: "decline" });
       return { ok: true };
     },
   };

@@ -126,7 +126,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .updatebar .go { font-size: 13px; color: var(--ink-2); }
 
 /* ── Main */
-.main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 64px minmax(0, 1fr); background: var(--page); }
+.main { min-width: 0; min-height: 0; display: grid; grid-template-rows: 64px minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); background: var(--page); }
 .top { display: flex; align-items: center; gap: 8px; padding: 0 16px 0 18px; border-bottom: 1px solid var(--line); -webkit-app-region: drag; }
 .desktop .top { padding-right: 150px; }
 .top h1 { margin: 0; font-size: 16px; font-weight: 500; }
@@ -249,6 +249,20 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .ask .label { color: var(--warn); }
 .ask b { font-weight: 600; font-size: 16px; }
 .ask p { color: var(--ink-2); font-size: 14px; }
+.question { gap: 10px; outline: none; }
+.qfield { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; min-width: 0; }
+.qfield legend { display: grid; gap: 2px; padding: 0; margin-bottom: 4px; color: var(--ink-2); font-size: 14px; }
+.qhead { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); }
+.qopts { display: grid; gap: 4px; }
+.qopt { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); width: 100%; }
+.qopt:hover { background: var(--hover); }
+.qopt[aria-checked="true"] { background: var(--active); border-color: var(--ink-4); }
+.qopt kbd, .qopt .qmark { flex: none; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; border: 1px solid var(--line-2); font-size: 12px; color: var(--ink-2); margin-top: 1px; }
+.qopt .qmark { border: 0; }
+.qopt .qtext { display: grid; gap: 2px; min-width: 0; }
+.qopt .qtext b { font-size: 14px; font-weight: 500; }
+.qopt .qtext span { color: var(--ink-3); font-size: 13px; }
+.question .btns { display: flex; gap: 8px; margin-top: 2px; }
 .btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .btn { height: 36px; padding: 0 14px; border-radius: 10px; font-weight: 500; font-size: 14px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; border: 1px solid var(--line-2); background: var(--raised); transition: background .12s; }
 .btn:hover:not(:disabled) { background: var(--raised-2); }

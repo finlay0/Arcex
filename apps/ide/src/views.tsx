@@ -12,6 +12,7 @@ import { call, clearSentDraft, saveDraft } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
 type Ask = Extract<Item, { kind: "ask" }>;
+type QuestionItem = Extract<Item, { kind: "question" }>;
 
 /* ───────── New project ───────── */
 
@@ -289,6 +290,7 @@ function TurnView({ thread, turn, live, actions, edit }: { thread: Thread; turn:
         // A question waiting on the user sits above the message box. Here it shows once it's settled.
         if (block.kind === "ask") return live && thread.state === "needs_you" && !block.answer ? null : <AskCard key={block.id} thread={thread} item={block} actions={actions} active={false} />;
         if (block.kind === "error") return <p key={block.id} className="oops">{block.text}</p>;
+        if (block.kind === "question") return live && thread.state === "needs_you" && !block.answer ? null : <p key={block.id} className="answered">{block.title} · {block.answer ?? "Request closed"}</p>;
         if (block.kind === "note") return <p key={block.id} className="note">{block.text}</p>;
         if (block.kind === "think") return <ThinkRow key={block.id} item={block} />;
         if (block.kind === "end") return null;
@@ -363,6 +365,117 @@ function YouMessage({ text, edit }: { text: string; edit(): void }) {
         <button className="icon" aria-label="Edit and send again" title="Edit and send again" onClick={edit}>
           <Icon name="edit" />
         </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The agent's questions above the message box. Pick an option (or press its number), type your own answer, or skip.
+ * A single one-pick question sends as soon as an option is chosen.
+ */
+function QuestionCard({ thread, item, fail }: { thread: Thread; item: QuestionItem; fail(error: unknown): void }) {
+  const [picks, setPicks] = useState<Record<string, string[]>>({});
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [sending, setSending] = useState(false);
+  const quick = item.questions.length === 1 && item.questions[0]!.kind === "one";
+
+  const send = (answers: Record<string, string | string[]> | null) => {
+    if (sending) return;
+    setSending(true);
+    call("question.answer", { threadId: thread.id, itemId: item.id, answers }).catch((error) => {
+      setSending(false);
+      fail(error);
+    });
+  };
+  const collect = (extra?: { id: string; value: string }) => {
+    const answers: Record<string, string | string[]> = {};
+    for (const question of item.questions) {
+      const picked = extra?.id === question.id ? [extra.value] : picks[question.id] ?? [];
+      if (question.kind === "many" && picked.length) answers[question.id] = picked;
+      if (question.kind === "one" && picked[0]) answers[question.id] = picked[0];
+      if (question.kind === "text" && typed[question.id]?.trim()) answers[question.id] = typed[question.id]!.trim();
+      if (question.otherId && typed[question.otherId]?.trim()) answers[question.otherId] = typed[question.otherId]!.trim();
+    }
+    return answers;
+  };
+  const pick = (questionId: string, value: string) => {
+    const question = item.questions.find((entry) => entry.id === questionId)!;
+    if (quick && !typed[question.otherId ?? ""]?.trim()) return send(collect({ id: questionId, value }));
+    setPicks((current) => {
+      const now = current[questionId] ?? [];
+      const next = question.kind === "many" ? (now.includes(value) ? now.filter((entry) => entry !== value) : [...now, value]) : [value];
+      return { ...current, [questionId]: next };
+    });
+  };
+  const answered = Object.keys(collect()).length > 0;
+  const card = useRef<HTMLDivElement>(null);
+  // The card takes focus when it appears, so its number keys work straight away.
+  useEffect(() => card.current?.focus({ preventScroll: true }), []);
+
+  // Number keys pick from the first question, as in the other apps, unless the user is typing.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.ctrlKey || event.metaKey || event.altKey || target?.closest("input, textarea, [contenteditable]")) return;
+      const index = Number(event.key) - 1;
+      const first = item.questions[0];
+      if (!first || first.kind === "text" || !Number.isInteger(index) || index < 0 || index >= first.options.length) return;
+      event.preventDefault();
+      pick(first.id, first.options[index]!.value);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  return (
+    <div className="ask question" ref={card} tabIndex={-1} role="group" aria-label={`${nameOf(thread.provider)} has a question`}>
+      <span className="label">{nameOf(thread.provider)} has a question</span>
+      {item.title && <b>{item.title}</b>}
+      {item.questions.map((question, number) => (
+        <fieldset key={question.id} className="qfield" disabled={sending}>
+          {(question.header || question.text) && (
+            <legend>
+              {question.header && <span className="qhead">{question.header}</span>}
+              {question.text && <span>{question.text}</span>}
+            </legend>
+          )}
+          {question.options.length > 0 && (
+            <div className="qopts" role={question.kind === "many" ? "group" : "radiogroup"}>
+              {question.options.map((option, index) => {
+                const on = (picks[question.id] ?? []).includes(option.value);
+                return (
+                  <button key={option.value} className="qopt" role={question.kind === "many" ? "checkbox" : "radio"} aria-checked={on} onClick={() => pick(question.id, option.value)}>
+                    {number === 0 && index < 9 ? <kbd>{index + 1}</kbd> : <span className="qmark" aria-hidden>{question.kind === "many" ? (on ? "☑" : "☐") : on ? "●" : "○"}</span>}
+                    <span className="qtext">
+                      <b>{option.label}</b>
+                      {option.description && <span>{option.description}</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {(question.kind === "text" || question.otherId) && (
+            <input
+              className="textfield"
+              maxLength={4000}
+              placeholder={question.kind === "text" ? "Type your answer" : "Or type your own answer"}
+              aria-label={question.kind === "text" ? question.header ?? question.text ?? "Answer" : "Your own answer"}
+              value={typed[question.otherId ?? question.id] ?? ""}
+              onChange={(event) => setTyped({ ...typed, [question.otherId ?? question.id]: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && answered) send(collect());
+              }}
+            />
+          )}
+        </fieldset>
+      ))}
+      <div className="btns">
+        {(!quick || Object.values(typed).some((value) => value.trim())) && (
+          <button className="btn primary" disabled={!answered || sending} onClick={() => send(collect())}>Send answer</button>
+        )}
+        <button className="btn" disabled={sending} onClick={() => send(null)}>Skip</button>
       </div>
     </div>
   );
@@ -628,6 +741,9 @@ export function Conversation(props: {
   const pendingAsk = working && thread.state === "needs_you"
     ? list.at(-1)?.parts.findLast((part): part is Ask => part.kind === "ask" && !part.answer)
     : undefined;
+  const pendingQuestion = working && thread.state === "needs_you"
+    ? list.at(-1)?.parts.findLast((part): part is QuestionItem => part.kind === "question" && !part.answer)
+    : undefined;
   return (
     <div className="convo">
       <div
@@ -666,6 +782,7 @@ export function Conversation(props: {
         )}
         {working && thread.state !== "needs_you" && list.at(-1)?.plan && <PlanList plan={list.at(-1)!.plan!} docked />}
         {pendingAsk && <AskCard thread={thread} item={pendingAsk} actions={actions} active />}
+        {!pendingAsk && pendingQuestion && <QuestionCard key={pendingQuestion.id} thread={thread} item={pendingQuestion} fail={actions.fail} />}
         {(thread.queued?.length ?? 0) > 0 && (
           <ol className="queue" aria-label="Queued messages">
             {thread.queued.map(({ text, attachments }, index) => (

@@ -162,6 +162,8 @@ export async function startSession(options: {
   mcpServers: acp.McpServer[];
   onUpdate(update: acp.SessionUpdate): void;
   onPermission(request: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse>;
+  /** The agent's own questions, as a form. Without this, Claude turns its question tool off. */
+  onElicitation(request: acp.CreateElicitationRequest): Promise<acp.CreateElicitationResponse>;
   onExit(detail: string): void;
 }): Promise<AgentSession> {
   const timeout = new AbortController();
@@ -228,6 +230,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
       if (live) options.onUpdate(params.update);
     })
     .onRequest("session/request_permission", ({ params }) => options.onPermission(params))
+    .onRequest("elicitation/create", ({ params }) => options.onElicitation(params))
     .connect(stream);
   const agent = connection.agent;
 
@@ -235,7 +238,8 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
     const init = await wait(
       agent.request("initialize", {
         protocolVersion: acp.PROTOCOL_VERSION,
-        clientCapabilities: {},
+        // Arcex answers form questions (question cards). It doesn't take URL ones.
+        clientCapabilities: { elicitation: { form: {} } },
         clientInfo: { name: "arcex", title: "Arcex", version: "0.1.0" },
       }),
     );
@@ -392,6 +396,7 @@ export async function listModels(agentId: string, settings: Settings, cwd: strin
     agentId, settings, cwd, resumeId: null, mcpServers: [],
     onUpdate: () => {},
     onPermission: async () => ({ outcome: { outcome: "cancelled" } }),
+    onElicitation: async () => ({ action: "decline" }),
     onExit: () => {},
   });
   await session.commandsReady(3000);

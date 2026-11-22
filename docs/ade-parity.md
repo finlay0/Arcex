@@ -74,7 +74,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C1 | Narration with folded work rows | "Ran 2 commands, edited a file ›" rows between paragraphs, opening to each step | P0 | done | `views.tsx` `WorkGroup`, `summarize` (3b216aa) |
 | C2 | Live status line and loader | Shimmering current step and an animated mark | P0 | done | Arcex mark loader `shared.tsx` `Loader` (6bd6046) |
 | C3 | Agent plan / task checklist | Checklist above the composer while working | P0 | done | ACP `plan` updates. Claude needs `CLAUDE_CODE_ENABLE_TODO_TOOLS` plus the prompt note in `agents.ts` |
-| C4 | Question cards docked above composer | Numbered options, write-your-own, skip | P0 | partial | Docked `AskCard` shipped. Still missing: a free-text answer, Skip, and number keys to pick |
+| C4 | Question cards docked above composer | Numbered options, write-your-own, skip | P0 | done | Arcex now tells agents it answers form questions (ACP `elicitation.form`); without that, Claude turned its AskUserQuestion tool off entirely. The agent's questions show as a card above the message box: numbered options (press 1–9), several picks where allowed, "Or type your own answer", Send answer and Skip (declines, so the agent carries on). A single one-pick question sends on the first pick. Verified November 21 with Claude Haiku: picked Blue with the 3 key, then typed "purple". URL questions are declined |
 | C5 | Thinking shown folded | "Thought for 12s ›" with the reasoning inside | P0 | done | Engine `think` item (from ACP `agent_thought_chunk`) and the folded row. Current Claude models omit thinking unless asked, so Arcex starts the Claude adapter with `CLAUDE_CODE_THINKING_DISPLAY=summarized`. Verified November 21 with Claude Sonnet 5.5 ("Thought for 1s" with the summary inside) and OpenCode |
 | C6 | Edit rows with line counts | "Edited views.tsx +96 −12 ›", opening to the diff | P0 | done | Line counts from ACP `diff` content, a "Show the change" patch view, +N −M on the group row |
 | C7 | Command output in rows | The command and its output, folded | P1 | done | Last 4 KB of output under "Show the output" |
@@ -210,6 +210,7 @@ Newest first. One line per shipped change, with its commit.
 - 2026-11-21 · G5 undo a turn's changes, with a warning when files changed again since.
 - 2026-11-21 · G5 undo one file, and redo.
 - 2026-11-21 · C5 Claude thinking summaries; K7 last pick remembered for new threads.
+- 2026-11-21 · C4 the agent's own questions as a card (options, number keys, own answer, skip); the main column no longer grows past the window.
 - 2026-11-21 · C8 GitHub-flavoured markdown (tables, code with Copy, links, checklists) and X5 a plain usage-limit line. Gemini "yolo" counts as full access.
 - 2026-11-21 · Full access always: mode picker removed, "Plan first" switch, plan cards trimmed. K4 and A1 verified with Claude. Codex `$` skills insert correctly. Refused edits no longer read as done.
 - 2026-11-21 · Reference study: 25 new ledger rows from T3 Code and the Codex TUI.
@@ -230,9 +231,9 @@ Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
-4. C4 free-text answer, Skip and number keys in question cards; S1 unread dots; C14 wrap-up box.
-5. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
-6. Then the P1 items: C10 conversation rewind, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+3. S1 unread dots; C14 wrap-up box.
+4. Re-run with Codex after its limit resets: full access, `$` skills, K2 attachments, K3 mentions.
+5. Then the P1 items: C10 conversation rewind, G3 "Save a version", P2 file viewer, P3 opt-in terminal, K9 usage meter, H1 instructions editor, H2 Codex instructions, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, C18 compaction, H6 skills and hooks, H9 CLI updates, X5 usage limits.
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 
