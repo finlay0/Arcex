@@ -11,6 +11,7 @@ import { listHooks, listSkills, toggleHook, toggleSkill } from "./skills.ts";
 import { branchInfo, checkoutPullRequest, createPullRequest, listPullRequests, publishState, push } from "./github.ts";
 import { claudeNotes, personalMemory, savePersonalMemory } from "./memory.ts";
 import { readCodexLimit } from "./codexLimits.ts";
+import { openCodeSeesImages } from "./modelInputs.ts";
 import { cleanConnector, connectorServers, MAX_CONNECTORS, testConnector } from "./connectors.ts";
 import { bringIn, copyChanges, copyDiff, createCopy, removeCopy } from "./worktrees.ts";
 import { randomUUID } from "node:crypto";
@@ -788,7 +789,10 @@ export function createEngine(
       turn.signal.throwIfAborted();
       setState(thread, "working");
       const images = attached.filter((file) => file.image).length;
-      if (images && !session.promptCapabilities?.image) {
+      // OpenCode reaches many models and says per agent that it takes images; whether this model sees them, it says
+      // only in its own model list.
+      const blind = images > 0 && (!session.promptCapabilities?.image || (thread.provider === "opencode" && (await openCodeSeesImages(thread.model?.value ?? session.models?.current)) === false));
+      if (blind) {
         const model = thread.model ? shortModel(thread.model.name) : nameOf(thread.provider);
         const one = images === 1;
         put(thread, { id: randomUUID(), kind: "note", text: `${model} can't see images, so ${one ? "the image was" : "the images were"} sent as ${one ? "a file" : "files"} it may not open. Choose a model that sees images to have ${one ? "it" : "them"} looked at.` });

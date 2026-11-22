@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · OpenCode image warning per model, from its own model list.
 - 2026-11-22 · X5 Codex plan limits, read from Codex's own app server.
 - 2026-11-22 · Codex `$` skill verified end to end (no code change).
 - 2026-11-22 · H6 per-hook on/off switches.
@@ -280,7 +281,7 @@ Newest first. One line per shipped change, with its commit.
 
 Work these in order unless Finlay redirects:
 
-1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
+1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning per model: done November 22 for OpenCode, which lists each model's inputs in `opencode models --verbose` (read hourly; verified Beam Free and Big Pickle as text-only, Nemotron Super VL as seeing images). The warning path with a real image was not rerun.
 2. Remaining partial rows: X5 limits for Gemini and OpenCode (nothing to read yet), C14 recap (a written recap would need a model call, so it waits on Finlay like K12).
 
 K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
