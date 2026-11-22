@@ -6,6 +6,7 @@ import { contentOf, questionsOf, summaryOf } from "./questions.ts";
 import { createDirectory } from "./directory.ts";
 import { listEditors, openIn } from "./editors.ts";
 import { createProcesses } from "./processes.ts";
+import { createTerminals } from "./terminals.ts";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { open, readFile, realpath, writeFile } from "node:fs/promises";
@@ -206,6 +207,10 @@ export function createEngine(
 ) {
   let settings = db.settings();
   const speech = createSpeech(about.dataDir, (state) => emit({ event: "speech", speech: state }));
+  const terminals = createTerminals({
+    data: (id, data) => emit({ event: "terminal", id, data }),
+    exit: (id, code) => emit({ event: "terminalExit", id, code }),
+  });
   const processes = createProcesses({
     emit: (info) => emit({ event: "process", process: info }),
     // The first address a script prints becomes the project's preview, unless the user already chose one.
@@ -716,6 +721,7 @@ export function createEngine(
       if (params.defaultModel !== undefined) next.defaultModel = pickedModel(params.defaultModel);
       if (params.sendWith !== undefined && ["enter", "ctrl-enter"].includes(params.sendWith)) next.sendWith = params.sendWith;
       if (params.showDetails !== undefined) next.showDetails = params.showDetails === true;
+      if (params.terminal !== undefined) next.terminal = params.terminal === true;
       if (params.notify !== undefined) next.notify = params.notify === true;
       if (params.research !== undefined) next.research = params.research === true;
       settings = next;
@@ -829,6 +835,31 @@ export function createEngine(
       return project;
     },
 
+    async "terminal.open"(params) {
+      if (!settings.terminal) throw new Error("turn on the terminal in Settings first");
+      const project = projectOf(params.projectId);
+      const size = (value: unknown, max: number) => (Number.isInteger(value) && (value as number) > 1 && (value as number) <= max ? (value as number) : 80);
+      return terminals.start(project.id, project.cwd, size(params.cols, 500), Math.min(size(params.rows, 200), 200));
+    },
+
+    "terminal.write"(params) {
+      if (typeof params.data !== "string" || params.data.length > 64 * 1024) throw new Error("that is too much to type at once");
+      terminals.write(text(params.id, "terminal", 80), params.data);
+      return { ok: true as const };
+    },
+
+    "terminal.resize"(params) {
+      const ok = (value: unknown, max: number) => Number.isInteger(value) && (value as number) > 1 && (value as number) <= max;
+      if (!ok(params.cols, 500) || !ok(params.rows, 200)) throw new Error("that terminal size isn't possible");
+      terminals.resize(text(params.id, "terminal", 80), params.cols, params.rows);
+      return { ok: true as const };
+    },
+
+    "terminal.close"(params) {
+      terminals.close(text(params.id, "terminal", 80));
+      return { ok: true as const };
+    },
+
     "project.scripts"(params) {
       return processes.scripts(projectOf(params.projectId).cwd);
     },
@@ -878,6 +909,7 @@ export function createEngine(
       const project = projectOf(params.projectId);
       for (const thread of [...threads.values()].filter((t) => t.projectId === project.id)) dropThread(thread);
       processes.stopProject(project.id);
+      terminals.closeProject(project.id);
       db.removeProject(project.id);
       projects.delete(project.id);
       emit({ event: "gone", kind: "project", id: project.id });
@@ -1294,6 +1326,7 @@ export function createEngine(
     close() {
       speech.close();
       processes.close();
+      terminals.closeAll();
       for (const live of lives.values()) {
         clearTimeout(live.stopTimer);
         live.turn?.abort();

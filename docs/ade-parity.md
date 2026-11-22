@@ -139,7 +139,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | --- | --- | --- | --- | --- | --- |
 | P1 | Browser / preview pane with agent control | Preview with dev server start and agent browsing tools | P0 | done | a885e7a. The dev server starts from the project's own scripts (P6); the first local address it prints becomes the preview when none is set |
 | P2 | File viewer | Click a file in the tree to read it, with syntax highlighting | P1 | done | Click a file in the side panel's Files list to read it there: line numbers, grey syntax tones for common languages (own small highlighter, no blue), Copy, Back or Esc. Binary files and files over 1 MB say so. Reads stay inside the project folder, also through links. Verified November 21 |
-| P3 | Terminal pane (opt-in) | A real shell per project, hidden by default | P1 | open | node-pty or ConPTY in the engine. Opt-in only |
+| P3 | Terminal pane (opt-in) | A real shell per project, hidden by default | P1 | done | Settings › General › Terminal adds a Terminal tab to the side panel (Ctrl+` and the palette open it). Engine runs PowerShell 7 or Windows PowerShell through @lydell/node-pty (ConPTY, no window), one per project, keeps the last 100 KB so reopening shows it; client is xterm.js in grey tones. Refused when the setting is off |
 | P4 | Resizable and expandable panels | Drag to resize, expand a pane, split view | P1 | partial | Drag the sidebar's and the side panel's inner edge (or focus it and use the arrow keys); double-click resets. The panel keeps separate widths for its normal and wide (browser, file, output) views, and the conversation always keeps at least 440 px. Widths are remembered on this computer. Expand already existed. Verified November 22. Still missing: split view of two threads |
 | P5 | Tasks / background processes pane | Running background commands with timers | P2 | partial | Scripts the user runs (P6) show running time, Stop and their output. Still missing: background commands an agent starts itself, which ACP reports only as tool calls |
 | P6 | Project scripts as buttons | Run dev, test or build with one click, from package.json or the user's own list (T3 `ProjectScriptsControl`) | P1 | done | "Run" in the side panel lists package.json scripts (dev, start, preview, build, test and lint first; four, then Show all) with the lock file's package manager. The engine (`processes.ts`) runs one hidden with `BROWSER=none`, keeps 200 KB of output without colour codes, and Stop ends the whole process tree. A local address it prints shows as "Running at …" with Preview, and becomes the project's preview if none is set. Output opens in the panel and follows along. Runs stop when the engine closes or the project is removed. Verified November 22: dev server previewed, build finished, test failed with exit 1, Stop freed the port. Still missing: a user's own script list for projects without package.json |
@@ -200,6 +200,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-22 · P3 opt-in terminal tab in the side panel.
 - 2026-11-22 · C11 find in thread, K8 Up-arrow prompt history, K13 full-size images.
 - 2026-11-22 · H9 agent updates in Settings › Agents.
 - 2026-11-22 · P4 drag to resize the sidebar and the side panel.
@@ -252,7 +253,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning: Arcex notes when the agent reports no image support, but ACP reports this per agent, not per model, so OpenCode's text-only free model isn't caught (it says so itself). Find a per-model signal.
 2. G1 whole-branch view (waits on G4, since threads share one branch today).
 3. Run a Codex `$` skill end to end.
-4. Then the P1 items: P3 opt-in terminal, then the P1 rows from the study: A4 approvals across threads, G7 review mode, P6 project scripts, S6 command palette, H6 skills and hooks, H9 CLI updates, X5 usage limits.
+4. Remaining P1 rows: H6 skills and hooks, X5 usage limits, S5 shortcuts sheet, X1 settings sections, X3 accessibility pass, G3 push and pull requests, then the partial rows (G7, P4, P5).
 
 G4 (worktree per thread), K12 (suggested prompts), S7 (model-written titles), S10 (phone follow) and H10 (scheduled runs) need Finlay's decision before any work.
 

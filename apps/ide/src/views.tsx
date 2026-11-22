@@ -6,6 +6,7 @@ import { Dictation } from "./Dictation.tsx";
 import { useSlashMenu } from "./SlashMenu.tsx";
 import { RunOutput, Scripts } from "./Scripts.tsx";
 import { FindBar } from "./Find.tsx";
+import { TerminalTab } from "./TerminalTab.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
@@ -936,7 +937,7 @@ function OpenIn(props: { project: Project; path?: string; fail(error: unknown): 
   );
 }
 
-export type PanelTab = "details" | "browser";
+export type PanelTab = "details" | "browser" | "terminal";
 
 export function Panel(props: {
   project: Project;
@@ -950,6 +951,8 @@ export function Panel(props: {
   review(): void;
   /** A file a reply asked to show, with a changing `nonce` so the same file can be asked for again. */
   openFile: { path: string; line: number | null; nonce: number } | null;
+  /** The user turned on the opt-in terminal. */
+  terminal: boolean;
   fail(error: unknown): void;
   close(): void;
 }) {
@@ -997,7 +1000,8 @@ export function Panel(props: {
     return [...new Set(urls.reverse())].slice(0, 4);
   }, [threads, props.items]);
 
-  const isWide = !!(wide || props.tab === "browser" || ((viewing || watching) && props.tab === "details"));
+  const tabs: PanelTab[] = props.terminal ? ["details", "browser", "terminal"] : ["details", "browser"];
+  const isWide = !!(wide || props.tab === "browser" || props.tab === "terminal" || ((viewing || watching) && props.tab === "details"));
   return (
     <aside className={isWide ? "panel wide" : "panel"}>
       <Resizer
@@ -1011,13 +1015,14 @@ export function Panel(props: {
         <div className="tabs" role="tablist" aria-label="Project panel" onKeyDown={(event) => {
           if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
-          const next = event.key === "Home" ? "details" : event.key === "End" ? "browser" : props.tab === "details" ? "browser" : "details";
+          const at = tabs.indexOf(props.tab);
+          const next = event.key === "Home" ? tabs[0]! : event.key === "End" ? tabs[tabs.length - 1]! : tabs[(at + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]!;
           props.setTab(next);
           document.getElementById(`${tabsId}-${next}`)?.focus();
         }}>
-          {(["details", "browser"] as const).map((id) => (
+          {tabs.map((id) => (
             <button key={id} id={`${tabsId}-${id}`} role="tab" aria-controls={`${tabsId}-panel`} aria-selected={props.tab === id} tabIndex={props.tab === id ? 0 : -1} onClick={() => props.setTab(id)}>
-              {id === "details" ? "Details" : "Browser"}
+              {id === "details" ? "Details" : id === "browser" ? "Browser" : "Terminal"}
             </button>
           ))}
         </div>
@@ -1032,7 +1037,9 @@ export function Panel(props: {
         </button>
       </div>
       <div className="panel-content" id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${props.tab}`}>
-      {props.tab === "browser" ? (
+      {props.tab === "terminal" && props.terminal ? (
+        <TerminalTab project={project} fail={fail} />
+      ) : props.tab === "browser" ? (
         <Browser project={project} found={found} fail={fail} />
       ) : (
         <>

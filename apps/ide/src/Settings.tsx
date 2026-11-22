@@ -223,6 +223,9 @@ export function SettingsView(props: {
                 <Row title="Open the details panel at start" hint="The panel on the right with changes and the preview.">
                   <Switch on={settings.showDetails} onChange={(showDetails) => set({ showDetails })} label="Open the details panel at start" />
                 </Row>
+                <Row title="Terminal" hint="Adds a Terminal tab to the side panel with a shell in the project folder. Agents don't need it; it's there if you want to type commands yourself.">
+                  <Switch on={settings.terminal} onChange={(terminal) => set({ terminal })} label="Terminal" />
+                </Row>
                 <Row title="Research library" hint="New agent sessions can search the library at arcex.dev when you ask. Already running sessions keep their current access.">
                   <Switch on={settings.research} onChange={(research) => set({ research })} label="Research library" />
                 </Row>

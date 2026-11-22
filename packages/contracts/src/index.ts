@@ -170,6 +170,8 @@ export type Settings = {
   notify: boolean;
   /** Let agents search the Arcex research library of real products. */
   research: boolean;
+  /** Show a terminal tab in the side panel. Off by default: most people never need one. */
+  terminal: boolean;
 };
 
 /** An agent the user added: by hand with its command, or from the agent directory. */
@@ -274,6 +276,11 @@ export type Requests = {
   "process.list": { params: Record<string, never>; result: ProcessInfo[] };
   /** The end of what the run printed, up to 200 KB. */
   "process.output": { params: { processId: string }; result: { text: string } };
+  /** Opens the project's terminal, or returns the one already open with what it has shown so far. */
+  "terminal.open": { params: { projectId: string; cols: number; rows: number }; result: { id: string; buffer: string } };
+  "terminal.write": { params: { id: string; data: string }; result: { ok: true } };
+  "terminal.resize": { params: { id: string; cols: number; rows: number }; result: { ok: true } };
+  "terminal.close": { params: { id: string }; result: { ok: true } };
   "project.readFile": { params: { projectId: string; path: string }; result: { path: string; size: number; text?: string; binary?: boolean; tooLarge?: boolean } };
   "project.search": { params: { projectId: string; query: string }; result: FileMatch[] };
   "project.changes": { params: { projectId: string }; result: Change[] };
@@ -357,5 +364,7 @@ export type EventMessage =
   | { event: "browse"; projectId: string }
   | { event: "speech"; speech: SpeechState }
   | { event: "process"; process: ProcessInfo }
+  | { event: "terminal"; id: string; data: string }
+  | { event: "terminalExit"; id: string; code: number }
   /** An agent's slash commands changed, for example when it found a project's own skills. */
   | { event: "commands"; agentId: string; commands: SlashCommand[] };

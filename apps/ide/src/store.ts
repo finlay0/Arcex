@@ -29,6 +29,13 @@ const set = (next: Partial<State>) => {
   for (const listener of listeners) listener();
 };
 
+/** Terminal output goes straight to whoever shows it, not through the app's state. */
+const terminalListeners = new Set<(message: { id: string; data?: string; exit?: number }) => void>();
+export function onTerminal(listener: (message: { id: string; data?: string; exit?: number }) => void): () => void {
+  terminalListeners.add(listener);
+  return () => terminalListeners.delete(listener);
+}
+
 export const useStore = () =>
   useSyncExternalStore((listener) => (listeners.add(listener), () => listeners.delete(listener)), () => state);
 
@@ -142,6 +149,8 @@ function receive({ data }: MessageEvent) {
     });
   }
   else if (message.event === "speech") set({ speech: message.speech });
+  else if (message.event === "terminal") for (const listener of terminalListeners) listener({ id: message.id, data: message.data });
+  else if (message.event === "terminalExit") for (const listener of terminalListeners) listener({ id: message.id, exit: message.code });
   else if (message.event === "process") set({ processes: { ...state.processes, [message.process.id]: message.process } });
   else if (message.event === "commands") set({ commands: { ...state.commands, [message.agentId]: message.commands } });
   else if (message.event === "browse") set({ browse: { projectId: message.projectId, at: Date.now() } });

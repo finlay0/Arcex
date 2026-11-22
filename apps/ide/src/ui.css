@@ -334,7 +334,7 @@ kbd { font: 11.500px "Geist", sans-serif; white-space: nowrap; flex: none; }
 .pick button[aria-pressed="true"] { background: var(--raised-2); color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
 
 /* ── Right panel */
-.panel { position: relative; width: var(--panel-w, clamp(300px, 27vw, 372px)); min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--line); }
+.panel { position: relative; width: var(--panel-w, clamp(300px, 27vw, 372px)); min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); border-left: 1px solid var(--line); }
 .panel.wide { width: var(--panel-wide-w, clamp(300px, calc(100vw - 800px), 760px)); }
 .panel-content { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr); }
 .ptop { display: flex; align-items: center; gap: 4px; padding: 14px 14px 8px 18px; }
@@ -678,3 +678,10 @@ body.resizing iframe { pointer-events: none; }
 .lightbox { position: fixed; inset: 0; z-index: 95; display: grid; place-items: center; align-content: center; gap: 12px; padding: 32px; background: rgba(0, 0, 0, .82); cursor: zoom-out; outline: none; }
 .lightbox img { max-width: 100%; max-height: calc(100vh - 110px); border-radius: 10px; object-fit: contain; }
 .lightbox span { color: var(--ink-3); font-size: 13px; }
+
+/* Opt-in terminal. */
+.termtab { min-height: 0; min-width: 0; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+.termhost { min-height: 0; min-width: 0; overflow: hidden; padding: 8px 4px 4px 12px; background: var(--page); }
+.termhost .xterm { height: 100%; }
+.termhost .xterm-viewport { background: transparent !important; }
+.termend { margin: 0; padding: 10px 14px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 13px; }

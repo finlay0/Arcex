@@ -213,6 +213,8 @@ export function App() {
   backRef.current = back;
   const screenRef = useRef(setScreen);
   screenRef.current = setScreen;
+  const terminalOn = useRef(false);
+  terminalOn.current = settings?.terminal ?? false;
   const detailsDefault = useRef(settings?.showDetails ?? true);
   detailsDefault.current = settings?.showDetails ?? true;
   useEffect(() => {
@@ -224,6 +226,10 @@ export function App() {
       else if (event.key === "n") screenRef.current({ kind: "thread", threadId: null });
       else if (event.key === ",") screenRef.current({ kind: "settings", section: "general" });
       else if (event.key === "k") setPalette((open) => !open);
+      else if (event.key === "`" && terminalOn.current) {
+        setPanel(true);
+        setTab("terminal");
+      }
       else return;
       event.preventDefault();
     };
@@ -316,6 +322,7 @@ export function App() {
       ...(project ? [
         { id: "details", group: "Actions", label: panelOpen && tab === "details" ? "Hide details panel" : "Show details panel", icon: "panel", keys: "Ctrl J", run: () => { setPanel(!(panelOpen && tab === "details")); setTab("details"); } },
         { id: "browser", group: "Actions", label: "Show the project's browser", icon: "globe", run: () => { setPanel(true); setTab("browser"); } },
+        ...(settings?.terminal ? [{ id: "terminal", group: "Actions", label: "Show the terminal", icon: "code", keys: "Ctrl `", run: () => { setPanel(true); setTab("terminal"); } }] : []),
       ] : []),
       { id: "toolbox", group: "Actions", label: "Open the toolbox", icon: "box", run: () => setScreen({ kind: "toolbox" }) },
       ...(["dark", "light", "system"] as const).filter((value) => value !== settings?.theme).map((value) => ({
@@ -586,7 +593,7 @@ export function App() {
         )}
           </div>
           {showPanel && project && (
-            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} openFile={openFile} fail={fail} close={() => setPanel(false)} />
+            <Panel key={project.id} project={project} threads={threads} items={store.items} connected={store.status === "ready"} tab={tab} setTab={setTab} open={openThread} review={() => void startThread(REVIEW_PROMPT).catch(fail)} openFile={openFile} terminal={settings.terminal} fail={fail} close={() => setPanel(false)} />
           )}
         </div>
       </section>

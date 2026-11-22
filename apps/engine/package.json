@@ -13,6 +13,7 @@
     "@agentclientprotocol/codex-acp": "2.6.0",
     "@agentclientprotocol/sdk": "2.6.0",
     "@arcex/contracts": "workspace:*",
+    "@lydell/node-pty": "1.2.0-beta.18",
     "@modelcontextprotocol/sdk": "1.32.2",
     "transcribe-cpp": "0.4.2",
     "ws": "8.22.2",
