@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, Requests, Thread } from "@arcex/contracts";
+import type { Agent, Attachment, Change, FileEntry, Item, Project, ProviderStatus, PublishState, Requests, Thread } from "@arcex/contracts";
 import { AgentChoices, ModelPicker, useAgentCommands, type Choice } from "./ModelPicker.tsx";
 import { Art } from "./Art.tsx";
 import { Dictation } from "./Dictation.tsx";
@@ -1064,6 +1064,7 @@ export function Panel(props: {
           <Files project={project} refresh={settled} view={(file) => { setViewLine(null); setViewing(file); }} />
           <Changes project={project} refresh={settled} fail={fail} review={props.review} />
           <Versions project={project} refresh={settled} fail={fail} />
+          <Publish project={project} refresh={settled} fail={fail} />
           {recent.length > 0 && (
             <section className="sec">
               <header><b>Recent activity</b></header>
@@ -1290,6 +1291,62 @@ function SaveVersion({ projectId, message, fail, className = "btn" }: { projectI
     >
       {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Save a version"}
     </button>
+  );
+}
+
+/**
+ * Push and pull requests, shown only when the project already has a remote (people who use GitHub). Git and the
+ * GitHub CLI use the user's own sign-in.
+ */
+function Publish({ project, refresh, fail }: { project: Project; refresh: string; fail(error: unknown): void }) {
+  const [state, setState] = useState<PublishState | null>(null);
+  const [doing, setDoing] = useState<"push" | "pr" | null>(null);
+  useEffect(() => {
+    let current = true;
+    call("project.publishState", { projectId: project.id })
+      .then((result) => { if (current) setState(result); })
+      .catch(() => { if (current) setState(null); });
+    return () => { current = false; };
+  }, [project.id, refresh]);
+  if (!state?.remote || !state.branch) return null;
+  const act = (kind: "push" | "pr") => {
+    setDoing(kind);
+    call(kind === "push" ? "project.push" : "project.createPr", { projectId: project.id })
+      .then(setState)
+      .catch(fail)
+      .finally(() => setDoing(null));
+  };
+  const pr = state.pr;
+  const checks = pr && pr.state === "open" && pr.checks !== "none" ? ` · checks ${pr.checks}` : "";
+  // After a merge or close, offer a new one only once there is new work on the branch.
+  const canPr = state.gh && state.github && state.branch !== state.main && (!pr || (pr.state !== "open" && state.ahead > 0));
+  return (
+    <section className="sec publish">
+      <header><b>{state.github ? "GitHub" : `Remote · ${state.remote}`}</b></header>
+      <div className="vrow">
+        <span className="trunc">
+          <span className="mono">{state.branch}</span>
+          {state.ahead > 0 ? ` · ${plural(state.ahead, "saved version")} not pushed` : state.upstream ? " · up to date" : " · not pushed yet"}
+        </span>
+        {(state.ahead > 0 || !state.upstream) && (
+          <button className="btn small" disabled={doing !== null} onClick={() => act("push")}>{doing === "push" ? "Pushing…" : "Push"}</button>
+        )}
+      </div>
+      {pr && (
+        <div className="vrow">
+          <span className={pr.checks === "failing" && pr.state === "open" ? "trunc bad" : "trunc"} title={pr.title}>
+            Pull request #{pr.number} · {pr.state}{checks}
+          </span>
+          {pr.url && <button className="link" onClick={() => window.arcex?.openExternal(pr.url)}>Open</button>}
+        </div>
+      )}
+      {canPr && (
+        <div className="vrow">
+          <span className="trunc muted">No open pull request for this branch</span>
+          <button className="btn small" disabled={doing !== null} onClick={() => act("pr")}>{doing === "pr" ? "Opening…" : "Create pull request"}</button>
+        </div>
+      )}
+    </section>
   );
 }
 

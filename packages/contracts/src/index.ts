@@ -28,6 +28,23 @@ export type QueuedMessage = { text: string; attachments: Attachment[] };
 /** A script from the project's package.json, which Arcex can run on request. */
 export type ProjectScript = { name: string; command: string };
 
+/**
+ * Where the project stands with its remote, for people who use GitHub. `remote` is null when there is none, and the
+ * app then shows nothing. `ahead` counts saved versions not pushed yet. `gh` means the GitHub CLI is installed.
+ */
+export type PublishState = {
+  remote: string | null;
+  branch: string | null;
+  ahead: number;
+  upstream: boolean;
+  /** The remote's default branch, such as main. */
+  main: string | null;
+  pr: { number: number; url: string; state: "open" | "closed" | "merged"; title: string; checks: "none" | "running" | "passing" | "failing" } | null;
+  gh: boolean;
+  /** The remote is on github.com. */
+  github: boolean;
+};
+
 /** A skill an agent can load: a folder with a SKILL.md. `relative` is set for skills inside the project. */
 export type SkillEntry = { path: string; relative: string | null; name: string; description: string; agent: string; scope: "project" | "personal"; enabled: boolean };
 
@@ -278,6 +295,11 @@ export type Requests = {
   "project.openIn": { params: { projectId: string; editor: string; path?: string }; result: { ok: true } };
   /** The project's own scripts and the package manager that runs them. */
   "project.scripts": { params: { projectId: string }; result: { runner: string; scripts: ProjectScript[] } };
+  "project.publishState": { params: { projectId: string }; result: PublishState };
+  /** Pushes saved versions to the remote with the user's own Git sign-in. */
+  "project.push": { params: { projectId: string }; result: PublishState };
+  /** Opens a pull request for the current branch with the GitHub CLI. */
+  "project.createPr": { params: { projectId: string }; result: PublishState };
   /** Skills and hooks the project's agents will load, from the project and the user's home folder. */
   "project.skills": { params: { projectId: string }; result: { skills: SkillEntry[]; hooks: HookEntry[] } };
   /** Turns a listed skill on or off by renaming its SKILL.md. */
