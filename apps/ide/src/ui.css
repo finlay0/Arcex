@@ -828,3 +828,14 @@ textarea.textfield.cpairs { height: auto; min-height: 64px; padding: 8px 12px; r
 .schedwhen .textfield { width: auto; min-width: 120px; }
 textarea.textfield.schedprompt { width: 320px; font: inherit; font-size: 14px; line-height: 20px; }
 .warnnote { color: var(--warn); }
+
+/* First-run welcome (X11). */
+.welcome .wagents { width: min(560px, 100%); display: grid; gap: 8px; margin-top: 6px; }
+.welcome .wagent { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); }
+.welcome .wname { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.welcome .wname strong { font-weight: 600; font-size: 15px; }
+.welcome .pillstate:not(.ok):not(.warn) { color: var(--ink-3); background: var(--raised-2); }
+.welcome .wact { display: flex; gap: 8px; flex-shrink: 0; }
+.welcome .wnote { width: min(560px, 100%); color: var(--ink-2); font-size: 14px; line-height: 21px; text-align: center; margin: 0; }
+.welcome .wbuttons { display: flex; gap: 10px; }
+@media (max-width: 560px) { .welcome .wagent { flex-wrap: wrap; } }

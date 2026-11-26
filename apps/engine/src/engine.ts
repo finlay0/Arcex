@@ -1073,6 +1073,7 @@ export function createEngine(
       if (params.notify !== undefined) next.notify = params.notify === true;
       if (params.research !== undefined) next.research = params.research === true;
       if (params.wrapUp !== undefined) next.wrapUp = params.wrapUp === true;
+      if (params.welcomed !== undefined) next.welcomed = params.welcomed === true;
       settings = next;
       db.saveSettings(settings);
       emit({ event: "settings", settings, agents: agentList(settings) });

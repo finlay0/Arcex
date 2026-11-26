@@ -16,6 +16,8 @@ Rules that still apply (from AGENTS.md and Finlay's standing decisions):
 - **Never open visible windows on Finlay's PC during testing.** Test in the in-app browser pane with the `ade-engine` launch config (isolated data dir). Hidden Electron windows need `show: false`.
 - Keep the ADE folders self-contained, with no imports from the platform `src/`. Work on `main` and push. Commits end with the Co-Authored-By line.
 
+**Widened November 26, 2026.** After the second study, Finlay: "We need all of it. That's your goal." Every open and decide row in this ledger is now in scope, including section D (installer, updates, macOS, crash recovery, performance). Rows that spend the user's plan on their own (C22, K15) get a visible label and an off switch. Anything that costs money (D3 certificates, an Apple developer account) is prepared, and Finlay buys it.
+
 ## References and how to study them
 
 | Reference | Where | What to take from it |
@@ -228,7 +230,7 @@ Finlay, November 21, 2026: Arcex must work with every major model maker, not onl
 | X8 | Search settings | Type to find any setting, not only a section (T3 `settingsSearch`) | P2 | open | The palette lists sections only |
 | X9 | Storage and clean-up | See what Arcex keeps (attachments, separate copies, the dictation model, logs) and clear it; prune old attachments on its own (T3 `StorageSettings`, `storageCleanup`) | P1 | open | K2 attachments are never pruned today |
 | X10 | Diagnostics | Logs, each agent process's memory and CPU, and a "copy a report" for X4 feedback (T3 `DiagnosticsSettings`, `ResourceTelemetryDiagnostics`) | P1 | open | |
-| X11 | First run | A welcome that finds the agents already installed, checks sign-in (M4), and opens a first project (T3 `FirstRunGate`, `WelcomePage`, `PermissionChecklist`) | P0 | open | Arcex opens straight to the app today; a new user has to find Settings › Agents |
+| X11 | First run | A welcome that finds the agents already installed, checks sign-in (M4), and opens a first project (T3 `FirstRunGate`, `WelcomePage`, `PermissionChecklist`) | P0 | done | `Welcome.tsx`: shown once, while there are no projects. Each built-in agent with Ready, Sign in needed (the agent's own first sign-in method, or Sign in through a terminal) or Not installed (How to install opens the maker's guide). Check again, then Continue (Continue anyway when none is ready) marks `welcomed` and moves the default agent to a ready one if the current default isn't. Then "What are we building?". Verified November 26 on an empty data folder: Claude, Codex, OpenCode Ready, Gemini with Log in with Google, Continue went to the new-project screen. macOS permission prompts come with D4 |
 
 ### Desktop app, performance and platform
 
@@ -254,6 +256,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-26 · X11 first-run welcome.
 - 2026-11-26 · Second reference study (T3 Code, Codex TUI and app, Claude Code tab, Cursor 3) plus a first look at install, updates and performance: 45 new rows, including the D section.
 - 2026-11-22 · X5 and K9 closed: plan limits read for Claude and Codex, the agents that report them.
 - 2026-11-22 · H10 Scheduled runs, even when Arcex is closed (Windows Task Scheduler).

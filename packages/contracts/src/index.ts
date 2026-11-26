@@ -238,6 +238,8 @@ export type Settings = {
   connectors: Connector[];
   /** After a turn, the thread's agent writes a recap, next steps and (early on) the title, in a small follow-up call. */
   wrapUp: boolean;
+  /** The first-run welcome has been seen (or skipped). */
+  welcomed: boolean;
 };
 
 /** When a schedule runs, in local time ("09:00"). `day` is 0 for Sunday to 6 for Saturday. */

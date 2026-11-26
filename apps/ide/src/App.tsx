@@ -7,6 +7,7 @@ import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
 import { SchedulesView } from "./Schedules.tsx";
+import { Welcome } from "./Welcome.tsx";
 import { Palette, type PaletteEntry } from "./Palette.tsx";
 import { OPEN_FILE } from "./md.tsx";
 import { Feedback, OPEN_FEEDBACK } from "./Feedback.tsx";
@@ -460,7 +461,8 @@ export function App() {
   if (!settings || !store.about) return <div className="lost">{store.status === "lost" ? connectionNotice : <span className="starting" role="status">Starting Arcex…</span>}{toast && <p role="alert">{toast}</p>}</div>;
 
   const showPanel = panelOpen && !!project && view.kind === "thread";
-  const title = view.kind === "toolbox" ? "Toolbox" : view.kind === "schedules" ? "Schedules" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
+  const welcoming = view.kind === "new-project" && store.projects.length === 0 && !!settings && !settings.welcomed && store.status === "ready";
+  const title = welcoming ? "Welcome" : view.kind === "toolbox" ? "Toolbox" : view.kind === "schedules" ? "Schedules" : view.kind === "new-project" ? "New project" : view.kind === "settings" ? "Settings" : thread ? thread.title : "New thread";
   const needle = query.trim().toLowerCase();
 
   return (
@@ -716,6 +718,8 @@ export function App() {
               setScreen({ kind: "thread", threadId: null });
             }}
           />
+        ) : welcoming && settings ? (
+          <Welcome agents={store.agents} defaultAgent={settings.defaultProvider} done={() => {}} fail={fail} />
         ) : view.kind === "new-project" ? (
           <NewProject
             ready={store.status === "ready"}

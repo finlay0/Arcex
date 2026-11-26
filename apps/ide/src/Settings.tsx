@@ -396,7 +396,7 @@ export function SettingsView(props: {
   );
 }
 
-const setupGuides: Record<string, string> = {
+export const setupGuides: Record<string, string> = {
   claude: "https://code.claude.com/docs/en/setup",
   codex: "https://learn.chatgpt.com/docs/codex/cli",
   opencode: "https://opencode.ai/docs/",
