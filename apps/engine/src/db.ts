@@ -8,7 +8,7 @@ import type { Item, Project, QueuedMessage, Settings, Thread, Schedule } from "@
 /** `named`: the user renamed the thread, so its agent no longer titles it. */
 export type ThreadRow = Thread & { sessionId: string | null; worktree: Copy | null; carry: string | null; named?: boolean };
 
-export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false, terminal: false, connectors: [], wrapUp: true, welcomed: false };
+export const DEFAULT_SETTINGS: Settings = { name: "", theme: "dark", defaultProvider: "claude", sendWith: "enter", defaultModel: null, agents: [], showDetails: true, notify: true, research: false, terminal: false, connectors: [], wrapUp: true, welcomed: false, resume: true };
 
 export function openDb(dataDir: string) {
   mkdirSync(dataDir, { recursive: true });
@@ -48,6 +48,9 @@ export function openDb(dataDir: string) {
   if (!columns.includes("parent")) db.exec("ALTER TABLE threads ADD COLUMN parent TEXT");
   if (!columns.includes("named")) db.exec("ALTER TABLE threads ADD COLUMN named INTEGER NOT NULL DEFAULT 0");
   if (!columns.includes("state")) db.exec("ALTER TABLE threads ADD COLUMN state TEXT NOT NULL DEFAULT 'idle'");
+  // Threads that were mid-turn when the engine stopped (a crash, or Arcex closed), from the last day. The engine can pick
+  // them up again (C23). One waiting on the user's answer, or being stopped, is left for the user.
+  const resumable = (db.prepare("SELECT id FROM threads WHERE state IN ('starting', 'working') AND archived = 0 AND updated_at > ?").all(Date.now() - 24 * 3600_000) as { id: string }[]).map((row) => row.id);
   db.exec("UPDATE threads SET state = 'interrupted' WHERE state IN ('starting', 'working', 'needs_you', 'stopping')");
 
   const project = (row: Record<string, unknown>): Project => ({
@@ -86,6 +89,7 @@ export function openDb(dataDir: string) {
   );
 
   return {
+    resumable,
     close: () => db.close(),
     drafts: () => Object.fromEntries(db.prepare("SELECT * FROM drafts").all().map((row) => [row.thread_id || row.project_id, row.text as string])),
     saveDraft(projectId: string, threadId: string, text: string) {

@@ -97,7 +97,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | C20 | Fork a thread | Copy a thread at any point into a new thread, optionally into its own copy of the project (Codex `/fork` and the title-menu fork, 26.1111) | P1 | open | The engine already forks sessions for C15 and K12 (ACP `session/fork`); this makes it a user action in the thread menu and on each message, with "into a separate copy" using G4 |
 | C21 | Export a thread | Save or copy the conversation as Markdown (Codex `/export`, T3 `copySnapshot`) | P2 | open | Messages, step summaries and changed files; nothing hidden from the user included |
 | C22 | Work toward a goal | Set a goal that the agent keeps working on across turns until it is met, with pause, resume and elapsed time (Codex `/goal`, Claude `/goal`) | P1 | decide | Keeps spending the user's plan without a message each turn, so Finlay decides how it is shown and capped first |
-| C23 | Pick up after a crash or quit | Threads that were working when Arcex closed carry on when it opens again (Codex session recovery, November 10: active in the last 24 hours) | P1 | open | Today they are marked "interrupted" and wait for Try again. Needs the unsent draft kept too |
+| C23 | Pick up after a crash or quit | Threads that were working when Arcex closed carry on when it opens again (Codex session recovery, November 10: active in the last 24 hours) | P1 | done | Threads that were working in the last day send a visible "carry on" message when the engine starts, with a note in the thread and a Settings switch (on by default, since it spends plan). One already picked up once that stops again is left on Try again, so a turn that crashes the engine can't loop. A thread waiting on the user's answer, or being stopped, isn't resumed. Unsent drafts were already kept in the database. Verified with Claude Haiku: killed mid-command, resumed with its memory, guard held on a second kill |
 | C24 | Undo a delete or archive | A toast with Undo after deleting or archiving a thread, and reopen the last closed view (T3 `SidebarThreadUndoNotice`, `ReopenClosedViewShortcut`) | P2 | open | Delete is permanent today, after a confirm |
 
 ### Composer
@@ -246,7 +246,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 | D6 | One window, and links into Arcex | A second launch focuses the open window; `arcex://` links open a project or a new thread with a prompt filled in (T3 `promptLinks`) | P1 | partial | A second launch now focuses the open window (single-instance lock). Open: `arcex://` links |
 | D7 | Stay awake while working | Keep the computer from sleeping while a thread works, and ask before quitting with threads running (Claude keep awake, T3 `RunningThreadKeepAlive`, `QuitHoldOverlay`) | P1 | open | |
 | D8 | Window and background | Remember window size and position; closing can keep Arcex in the tray so running threads and schedules carry on | P2 | open | H10 already runs schedules with the app closed on Windows |
-| D9 | Crash handling | The engine restarts itself if it crashes and threads reconnect; a broken screen shows a recover button instead of going blank (T3 `RenderErrorBoundary`, Codex `startup_recovery`) | P1 | open | Pairs with C23 |
+| D9 | Crash handling | The engine restarts itself if it crashes and threads reconnect; a broken screen shows a recover button instead of going blank (T3 `RenderErrorBoundary`, Codex `startup_recovery`) | P1 | done | The shell restarts a stopped engine on the same address (up to five times a minute) and the window reconnects by itself; threads carry on through C23. A screen that fails to draw shows Reload and Copy details instead of going blank (`Recover.tsx`) |
 | D10 | Performance budget | Start in under 2 s, stay smooth in a 1,000-message thread, keep idle memory low. Long threads draw only what's on screen (T3 `timelineViewport`), and startup reuses compiled code (T3 `compileCache`) | P1 | open | The timeline draws every item today. Measure a long thread before changing anything |
 | D11 | Other languages | Interface text in other languages (T3 `desktop/src/i18n`) | P2 | later | After the copy settles |
 | D12 | Remote machines | Run a project on another computer over SSH or in WSL (T3 `ssh`, `wsl`; Claude SSH environments; Cursor remote) | P2 | open | The engine and client are already split by the WebSocket contract |
@@ -256,6 +256,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-26 · C23 pick up after a crash or quit; D9 recover screen.
 - 2026-11-26 · D2 update feed: public arcex-releases repository and a publish step.
 - 2026-11-26 · D1 Windows installer and D2 automatic updates; D6 one window.
 - 2026-11-26 · P10 point at part of the page and say what should change.
@@ -348,7 +349,7 @@ Work these in order unless Finlay redirects:
 
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning per model: done November 22 for OpenCode, which lists each model's inputs in `opencode models --verbose` (read hourly; verified Beam Free and Big Pickle as text-only, Nemotron Super VL as seeing images). The warning path with a real image was not rerun.
 2. Remaining partial rows: X5 limits for Gemini and OpenCode (nothing to read yet).
-3. From the November 26 pass (P0 done: X11, P10, D1, D2), P1 in this order: C23 and D9 crash recovery, P8 file previews, P9 search inside files, P7 editing, C20 fork, H11 write the instructions, G9 and G10, X9 storage, X10 diagnostics, D6 links, D7, D10, D4 macOS.
+3. From the November 26 pass (P0 done: X11, P10, D1, D2), P1 in this order: P8 file previews, P9 search inside files, P7 editing, C20 fork, H11 write the instructions, G9 and G10, X9 storage, X10 diagnostics, D6 links, D7, D10, D4 macOS.
 4. Waiting on Finlay: C22 goals, K15 predictions, H14 plugins, D3 signing.
 
 Finlay's November 22 decisions: K12, S7 and the C14 recap (done) are written by the thread's own agent (visible, with a switch); H10 runs even when Arcex is closed; X4 is a GitHub issue; S10 waits until after parity.

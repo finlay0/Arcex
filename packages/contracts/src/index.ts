@@ -240,6 +240,8 @@ export type Settings = {
   wrapUp: boolean;
   /** The first-run welcome has been seen (or skipped). */
   welcomed: boolean;
+  /** Threads that were working when Arcex closed or its engine stopped carry on by themselves when it starts again. */
+  resume: boolean;
 };
 
 /** When a schedule runs, in local time ("09:00"). `day` is 0 for Sunday to 6 for Saturday. */

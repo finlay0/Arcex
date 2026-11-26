@@ -839,3 +839,10 @@ textarea.textfield.schedprompt { width: 320px; font: inherit; font-size: 14px; l
 .welcome .wnote { width: min(560px, 100%); color: var(--ink-2); font-size: 14px; line-height: 21px; text-align: center; margin: 0; }
 .welcome .wbuttons { display: flex; gap: 10px; }
 @media (max-width: 560px) { .welcome .wagent { flex-wrap: wrap; } }
+
+/* Shown if drawing the screen fails (Recover.tsx). */
+.recover { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px 16px; background: var(--page); color: var(--ink); text-align: center; }
+.recover h1 { font-size: 22px; font-weight: 600; margin: 0; }
+.recover p { color: var(--ink-2); margin: 0; max-width: 440px; }
+.recover-actions { display: flex; gap: 8px; margin-top: 8px; }
+.recover pre { max-width: min(560px, 100%); margin: 12px 0 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--ink-3); font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }

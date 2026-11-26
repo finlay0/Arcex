@@ -241,6 +241,9 @@ export function SettingsView(props: {
                 <Row title="Wrap-ups after each turn" hint="The thread's agent writes a short recap, next steps you can pick, and the thread's title, in a small follow-up after each turn. It uses a little of your plan.">
                   <Switch on={settings.wrapUp !== false} onChange={(wrapUp) => set({ wrapUp })} label="Wrap-ups after each turn" />
                 </Row>
+                <Row title="Pick up after Arcex closes" hint="Threads that were working when Arcex closed or stopped carry on by themselves when it opens again (within a day). The thread says when this happens. It uses your plan as the turn would have.">
+                  <Switch on={settings.resume !== false} onChange={(resume) => set({ resume })} label="Pick up after Arcex closes" />
+                </Row>
                 <Row title="Research library" hint="New agent sessions can search the library at arcex.dev when you ask. Already running sessions keep their current access.">
                   <Switch on={settings.research} onChange={(research) => set({ research })} label="Research library" />
                 </Row>

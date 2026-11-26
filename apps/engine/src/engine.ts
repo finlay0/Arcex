@@ -955,6 +955,22 @@ export function createEngine(
   }, 30_000);
   scheduleClock.unref?.();
 
+  // Threads that were working when Arcex closed or the engine stopped carry on (C23), unless the user turned that off.
+  // The thread says so, and one that was already picked up once and stopped again is left for the user, so a turn that
+  // brings the engine down can't keep restarting itself.
+  const RESUME_PROMPT = "Arcex closed while you were working on this. Carry on from where you stopped: check what is already done in the project first, then finish the task.";
+  setTimeout(() => {
+    if (!settings.resume) return;
+    for (const id of db.resumable) {
+      const thread = threads.get(id);
+      if (!thread || thread.archived || busyState(thread) || !projects.has(thread.projectId)) continue;
+      const lastAsk = db.items(id).findLast((entry) => entry.kind === "user");
+      if (lastAsk?.kind === "user" && lastAsk.text === RESUME_PROMPT) continue;
+      put(thread, { id: randomUUID(), kind: "note", text: "Arcex closed while this thread was working, so it picked up again by itself. You can turn this off in Settings." });
+      void run(thread, RESUME_PROMPT);
+    }
+  }, 1000);
+
   // After-turn wrap-ups being written, by thread, and agents found not to support them (no session forks).
   const wrapping = new Map<string, AbortController>();
   const noWrap = new Set<string>();
@@ -1076,6 +1092,7 @@ export function createEngine(
       if (params.research !== undefined) next.research = params.research === true;
       if (params.wrapUp !== undefined) next.wrapUp = params.wrapUp === true;
       if (params.welcomed !== undefined) next.welcomed = params.welcomed === true;
+      if (params.resume !== undefined) next.resume = params.resume === true;
       settings = next;
       db.saveSettings(settings);
       emit({ event: "settings", settings, agents: agentList(settings) });
