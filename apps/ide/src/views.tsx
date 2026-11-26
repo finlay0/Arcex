@@ -13,7 +13,7 @@ import { useMentionMenu } from "./MentionMenu.tsx";
 import { AttachmentChip, useAttachments } from "./Attachments.tsx";
 import { Md } from "./md.tsx";
 import { highlight, languageOf } from "./highlight.ts";
-import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, limitText, busy, dotClass, nameOf, onEnter, plural, prefs, stateLabel, type Actions } from "./shared.tsx";
+import { AutoText, Icon, Loader, Menu, Resizer, STARTERS, ago, limitText, busy, dotClass, nameOf, onEnter, plural, prefs, stateLabel, type Actions, type PickedElement } from "./shared.tsx";
 import { call, clearSentDraft, saveDraft, useStore } from "./store.ts";
 
 type Step = Extract<Item, { kind: "step" }>;
@@ -673,6 +673,9 @@ export function Conversation(props: {
   const latestDraft = useRef(draft);
   latestDraft.current = draft;
   const addSpoken = (text: string) => setDraft(latestDraft.current.trim() ? `${latestDraft.current.trimEnd()} ${text}` : text);
+  const addFiles = useRef((_files: File[]) => {});
+  const focusBox = useRef(() => {});
+  focusBox.current = () => (flow.current?.closest(".pane") ?? document).querySelector<HTMLTextAreaElement>(".composer textarea")?.focus();
   // Review comments from a diff each go on their own line.
   const addLine = useRef((_text: string) => {});
   addLine.current = (text: string) => {
@@ -684,10 +687,14 @@ export function Conversation(props: {
   useEffect(() => {
     // A string goes to the main pane; { text, threadId } goes to that thread's pane (split view has two).
     const onAdd = (event: Event) => {
-      const detail = (event as CustomEvent<string | { text: string; threadId: string }>).detail;
+      const detail = (event as CustomEvent<string | { text: string; threadId?: string; files?: File[] }>).detail;
       if (typeof detail === "string") {
         if (!flow.current?.closest(".pane.second")) addLine.current(detail);
-      } else if (detail && detail.threadId === threadIdRef.current) addLine.current(detail.text);
+      } else if (detail && (detail.threadId === undefined ? !flow.current?.closest(".pane.second") : detail.threadId === threadIdRef.current)) {
+        addLine.current(detail.text);
+        if (detail.files?.length) addFiles.current(detail.files);
+        focusBox.current();
+      }
     };
     window.addEventListener(ADD_TO_DRAFT, onAdd);
     return () => window.removeEventListener(ADD_TO_DRAFT, onAdd);
@@ -760,6 +767,7 @@ export function Conversation(props: {
   const slash = useSlashMenu(agentId, draft, setDraft);
   const mention = useMentionMenu(project?.id ?? null, draft, setDraft);
   const files = useAttachments(draftKey ?? "", actions.fail);
+  addFiles.current = (list) => void files.add(list);
   const enter = onEnter(() => void send());
   // Agents that take messages mid-turn get them straight away; Tab still queues one for after the turn.
   const steerable = working && thread?.steering === true && thread.state !== "stopping";
@@ -2318,12 +2326,50 @@ function BranchChanges({ project, base, refresh }: { project: Project; base: str
   );
 }
 
+/**
+ * How a picked element reads in the message: where it is, what it is, enough of its look and its selector for the agent
+ * to find it in the code, then the user's note. The screenshot goes along as an attachment.
+ */
+export function pickedText(picked: PickedElement) {
+  const what = picked.text ? `the ${picked.tag} "${picked.text.length > 80 ? `${picked.text.slice(0, 80)}…` : picked.text}"` : `this ${picked.tag}`;
+  const page = (() => {
+    try {
+      const url = new URL(picked.url);
+      return url.pathname === "/" ? "the home page" : `the page ${url.pathname}`;
+    } catch {
+      return "the page";
+    }
+  })();
+  const look = `${picked.styles.size}, text ${picked.styles.font} ${picked.styles.color}, background ${picked.styles.background}`;
+  const detail = `(on ${picked.url}; selector \`${picked.selector}\`; ${look}; \`${picked.html}\`)`;
+  return [`On ${page} in the Browser tab, ${what} (screenshot attached):`, picked.note || "…", detail].join("\n");
+}
+
 /** Shows the user's running app next to the conversation. */
 function Browser({ project, found, fail }: { project: Project; found: string[]; fail(error: unknown): void }) {
   const [address, setAddress] = useState(project.previewUrl ?? "");
   const [nonce, setNonce] = useState(0);
   const [phone, setPhone] = useState(false);
+  const [picking, setPicking] = useState(false);
   useEffect(() => setAddress(project.previewUrl ?? ""), [project.previewUrl]);
+  // Ends a pick left open when the tab closes or the project changes.
+  useEffect(() => () => void window.arcex?.cancelPick?.(), [project.id]);
+
+  const point = async () => {
+    if (picking) return void window.arcex?.cancelPick?.();
+    setPicking(true);
+    try {
+      const picked = await window.arcex!.pickElement!();
+      if (!picked) return;
+      const bytes = Uint8Array.from(atob(picked.image), (c) => c.charCodeAt(0));
+      const file = new File([bytes], "picked from the page.png", { type: "image/png" });
+      window.dispatchEvent(new CustomEvent(ADD_TO_DRAFT, { detail: { text: pickedText(picked), files: [file] } }));
+    } catch (error) {
+      fail(error);
+    } finally {
+      setPicking(false);
+    }
+  };
 
   const go = (value: string) => {
     const trimmed = value.trim();
@@ -2352,6 +2398,18 @@ function Browser({ project, found, fail }: { project: Project; found: string[]; 
             onKeyDown={(event) => event.key === "Enter" && go(address)}
           />
         </label>
+        {window.arcex?.pickElement && (
+          <button
+            className="icon"
+            aria-pressed={picking}
+            aria-label={picking ? "Stop pointing" : "Point at something on the page"}
+            title={picking ? "Stop pointing (Esc)" : "Point at something on the page and say what should change"}
+            disabled={!project.previewUrl}
+            onClick={() => void point()}
+          >
+            <Icon name="target" />
+          </button>
+        )}
         <button className="icon" aria-pressed={phone} aria-label="Phone size" disabled={!project.previewUrl} onClick={() => setPhone(!phone)}>
           <Icon name="phone" />
         </button>

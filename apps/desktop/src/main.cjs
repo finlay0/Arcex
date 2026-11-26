@@ -220,6 +220,12 @@ app.whenReady().then(async () => {
   const fromWorkspace = (event) => event.sender === win.webContents && event.senderFrame?.parent === null && event.senderFrame.url.startsWith(engineUrl);
   ipcMain.handle("update-check", (event) => (fromWorkspace(event) ? checkForUpdate() : null));
   ipcMain.handle("update-app", (event) => (fromWorkspace(event) ? updateApp() : { error: "Only the Arcex workspace can update." }));
+  // The user points at part of the page in the Browser tab (P10). Only the Arcex interface itself may ask.
+  ipcMain.handle("pick-element", async (event, cancel) => {
+    if (!fromWorkspace(event)) return null;
+    if (cancel === true) return void (await agentBrowser.cancelPick());
+    return agentBrowser.pick();
+  });
   ipcMain.handle("pick-folder", async (_event, title) => {
     const result = await dialog.showOpenDialog(win, { title: typeof title === "string" && title ? title.slice(0, 100) : "Choose your project folder", properties: ["openDirectory"] });
     return result.canceled ? null : (result.filePaths[0] ?? null);

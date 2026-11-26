@@ -162,7 +162,7 @@ Priority: **P0** core parity people notice in the first session · **P1** expect
 | P7 | Edit files by hand | Type into a file in the viewer and save (Claude's in-app file editor, T3 `fileSaveCoordinator`) | P1 | open | P2 is read only. Needs a conflict check when the agent changed the file meanwhile |
 | P8 | Rich file previews | Images, PDF, CSV as a table, Markdown rendered or as source (remembered), ZIP folders, notebooks, audio, fonts (Codex 26.1117 and 26.1120, T3 `files/`) | P1 | open | P2 says "binary file" for all of these today |
 | P9 | Search inside files | Find text across the whole project, with results that open the file at the line (T3 `ProjectContentSearchDialog`) | P1 | open | K3 and Ctrl+K search names and threads only |
-| P10 | Point at the page | Pick an element in the Browser tab, mark it up and send it to the agent with its selector and a screenshot (Cursor Design Mode, T3 preview annotations and `preview-pick-preload`) | P0 | open | The fastest way for a vibe coder to say "this button, bigger". The agent tools already drive the tab (P1) |
+| P10 | Point at the page | Pick an element in the Browser tab, mark it up and send it to the agent with its selector and a screenshot (Cursor Design Mode, T3 preview annotations and `preview-pick-preload`) | P0 | done | The target button in the Browser tab (desktop app only). Hover outlines an element and names it; a click picks it without the page receiving the click, and a box beside it asks "What should change here?". Enter puts a screenshot of that part of the page (the outline kept in it) in the message box as an attachment, with a line saying which page and element, the note, and the selector, size, colours and opening tag for the agent. Esc or the button again cancels. All of the picker lives in a closed shadow root that is removed afterwards. Verified November 26: the picker script on a test page in the browser pane (button picked, form not submitted, selector `body > main > form > button.cta.big`, note returned, Esc left nothing behind) and the message box receiving the text and image. The Electron capture was not run, since it needs the visible desktop window |
 | P11 | Browser tab polish | Find in page, zoom, recent addresses, a helpful "can't reach the page" with Start the dev server, the agent's cursor shown while it drives (T3 `preview/`) | P2 | open | |
 | P12 | Panels as tabs and windows | Drag panel tabs to reorder, and pop one into its own window (Claude Code tab, November 23) | P2 | open | P4 covers resize and split |
 | P13 | Phone-size preview | Show the Browser tab at phone and tablet sizes (T3 device panel goes further, with real emulators) | P2 | open | Start with viewport presets |
@@ -256,6 +256,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-26 · P10 point at part of the page and say what should change.
 - 2026-11-26 · X11 first-run welcome.
 - 2026-11-26 · Second reference study (T3 Code, Codex TUI and app, Claude Code tab, Cursor 3) plus a first look at install, updates and performance: 45 new rows, including the D section.
 - 2026-11-22 · X5 and K9 closed: plan limits read for Claude and Codex, the agents that report them.
