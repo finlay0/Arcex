@@ -239,7 +239,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 | ID | Feature | Behaviour | Pri | Status | Notes |
 | --- | --- | --- | --- | --- | --- |
 | D1 | Windows installer | One setup file that installs Arcex with its own Node and engine, a Start menu entry and an uninstaller. No pnpm or source folder needed (Claude, Codex, T3 and Cursor all ship one) | P0 | done | `pnpm -C apps/desktop package` writes a 136 MB per-user setup that installs in 13 s (390 files) and uninstalls in 5 s. Arcex.exe runs the engine as Node, so no Node, pnpm or source folder is needed. The engine, connector and both agent adapters are each bundled into one file; Claude Code and Codex run from the user's own install (`vendorCli.ts`) instead of being carried (800 MB). Unsigned until D3. Agents added from the directory through npx still need the user's Node |
-| D2 | Automatic updates | Download new versions in the background, "Restart to update", release notes, stable and beta tracks (T3 `desktopUpdate`, `UpdateTrackSwitchDialog`, `SidebarUpdatePill`) | P0 | partial | Installed copies check the release feed every 30 minutes, download in the background and show "Arcex 0.1.1 ready · Restart", with the release notes in its tooltip; Restart (or quitting) installs silently and reopens. Waits while a thread works. Verified 0.1.0 to 0.1.1 against a local feed. Open: a beta track, and where the feed lives (the repo is private, so the default GitHub releases URL needs Finlay's call). Source builds keep the Git-pull Update |
+| D2 | Automatic updates | Download new versions in the background, "Restart to update", release notes, stable and beta tracks (T3 `desktopUpdate`, `UpdateTrackSwitchDialog`, `SidebarUpdatePill`) | P0 | partial | Installed copies check the release feed every 30 minutes, download in the background and show "Arcex 0.1.1 ready · Restart", with the release notes in its tooltip; Restart (or quitting) installs silently and reopens. Waits while a thread works. Verified 0.1.0 to 0.1.1 against a local feed. The feed is the public github.com/finlay0/arcex-releases (Finlay, November 26); `pnpm -C apps/desktop package -- --publish --notes "..."` uploads a build there after the version is bumped. Open: a beta track. Source builds keep the Git-pull Update |
 | D3 | Signed builds | Windows signing so SmartScreen doesn't warn; macOS signing and notarisation | P1 | decide | Costs money (certificate, Apple developer account); docs/ade-plan.md says not before public release |
 | D4 | macOS app | Apple silicon and Intel builds, with the mic and screen permission prompts handled (T3 `mac-permission-preload`), and the M4 terminal sign-ins checked in Terminal | P1 | open | Phase 4 in docs/ade-plan.md. Engine and IDE are already cross-platform; Electron shell, Task Scheduler (H10) and editor detection (G6) need macOS paths |
 | D5 | Linux app | AppImage or deb, with a keyring for the account file (T3 `linuxSecretStorage`) | P2 | open | |
@@ -256,6 +256,7 @@ Finlay, November 26, 2026: parity is more than features. This section covers how
 
 Newest first. One line per shipped change, with its commit.
 
+- 2026-11-26 · D2 update feed: public arcex-releases repository and a publish step.
 - 2026-11-26 · D1 Windows installer and D2 automatic updates; D6 one window.
 - 2026-11-26 · P10 point at part of the page and say what should change.
 - 2026-11-26 · X11 first-run welcome.
@@ -348,7 +349,7 @@ Work these in order unless Finlay redirects:
 1. Every major model maker (Finlay, November 21): try a binary-download agent from the directory (M3), connect a real provider to OpenCode and check grouped models (M2, needs Finlay). Run Gemini (M1) once Finlay has signed in. Image warning per model: done November 22 for OpenCode, which lists each model's inputs in `opencode models --verbose` (read hourly; verified Beam Free and Big Pickle as text-only, Nemotron Super VL as seeing images). The warning path with a real image was not rerun.
 2. Remaining partial rows: X5 limits for Gemini and OpenCode (nothing to read yet).
 3. From the November 26 pass (P0 done: X11, P10, D1, D2), P1 in this order: C23 and D9 crash recovery, P8 file previews, P9 search inside files, P7 editing, C20 fork, H11 write the instructions, G9 and G10, X9 storage, X10 diagnostics, D6 links, D7, D10, D4 macOS.
-4. Waiting on Finlay: C22 goals, K15 predictions, H14 plugins, D3 signing, and the D2 update feed (a public releases repository, or another host).
+4. Waiting on Finlay: C22 goals, K15 predictions, H14 plugins, D3 signing.
 
 Finlay's November 22 decisions: K12, S7 and the C14 recap (done) are written by the thread's own agent (visible, with a switch); H10 runs even when Arcex is closed; X4 is a GitHub issue; S10 waits until after parity.
 
