@@ -1,10 +1,11 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import * as acp from "@agentclientprotocol/sdk";
 import type { Agent, AgentChoice, ModelOption, Settings, SlashCommand } from "@arcex/contracts";
+import { VENDOR_ENV, vendorCli } from "./vendorCli.ts";
 
 const engineRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -36,13 +37,32 @@ export function agentList(settings: Settings): Agent[] {
 
 type Launch = { command: string; args: string[]; shell: boolean; env?: Record<string, string> };
 
-function launchOf(agentId: string, settings: Settings): Launch {
+/** Whether the adapter's own copy of the vendor's program came with Arcex (from source it does; installed it doesn't). */
+const BUNDLED_CLI: Record<string, string> = {
+  claude: `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`,
+  codex: `@openai/codex-${process.platform}-${process.arch}`,
+};
+
+async function launchOf(agentId: string, settings: Settings): Promise<Launch> {
   const builtin = BUILTIN[agentId];
   if (builtin?.adapter) {
-    // Read the bin path from the package manifest. require.resolve cannot be used: these packages restrict "exports".
-    const dir = path.join(engineRoot, "node_modules", builtin.adapter.pkg);
-    const manifest = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as { bin: Record<string, string> };
-    return { command: process.execPath, args: [path.join(dir, manifest.bin[builtin.adapter.bin]!)], shell: false };
+    // Installed, each adapter is one bundled file in adapters/. From source, read the bin path from the package
+    // manifest (require.resolve cannot be used: these packages restrict "exports").
+    const bundledAdapter = path.join(engineRoot, "adapters", `${builtin.adapter.bin}.mjs`);
+    let script = bundledAdapter;
+    if (!existsSync(bundledAdapter)) {
+      const dir = path.join(engineRoot, "node_modules", builtin.adapter.pkg);
+      const manifest = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as { bin: Record<string, string> };
+      script = path.join(dir, manifest.bin[builtin.adapter.bin]!);
+    }
+    const launch: Launch = { command: process.execPath, args: [script], shell: false };
+    const bundled = BUNDLED_CLI[agentId];
+    if ((agentId === "claude" || agentId === "codex") && bundled && !existsSync(path.join(engineRoot, "node_modules", bundled))) {
+      const own = await vendorCli(agentId);
+      if (!own) throw new Error(`${builtin.name} isn't installed on this computer. Install it from Settings › Agents, then try again.`);
+      launch.env = { [VENDOR_ENV[agentId]]: own };
+    }
+    return launch;
   }
   const added = settings.agents.find((agent) => agent.id === agentId);
   const command = builtin?.command ?? added?.command;
@@ -193,7 +213,7 @@ export async function startSession(options: {
 
 async function connectSession(options: Parameters<typeof startSession>[0], signal: AbortSignal): Promise<AgentSession> {
   signal.throwIfAborted();
-  const launch = launchOf(options.agentId, options.settings);
+  const launch = await launchOf(options.agentId, options.settings);
   // Claude Code leaves its task list tools off in SDK sessions unless asked. Arcex shows that list as the plan.
   // Current Claude models leave their thinking out of the stream unless asked for a summary of it.
   const env = { ...process.env, ...launch.env, CLAUDE_CODE_ENABLE_TODO_TOOLS: "true", CLAUDE_CODE_THINKING_DISPLAY: process.env.CLAUDE_CODE_THINKING_DISPLAY ?? "summarized" };
@@ -428,7 +448,7 @@ async function connectSession(options: Parameters<typeof startSession>[0], signa
  * whatever it receives. Arcex only waits for it to say it is done, for up to five minutes.
  */
 export async function signIn(agentId: string, settings: Settings, cwd: string, methodId: string): Promise<void> {
-  const launch = launchOf(agentId, settings);
+  const launch = await launchOf(agentId, settings);
   const child = spawn(launch.command, launch.args, { cwd, env: { ...process.env, ...launch.env }, stdio: ["pipe", "pipe", "pipe"], shell: launch.shell, windowsHide: true });
   const connection = acp.client().connect(acp.ndJsonStream(
     Writable.toWeb(child.stdin!) as WritableStream<Uint8Array>,

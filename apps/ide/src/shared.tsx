@@ -5,14 +5,18 @@ declare global {
   interface Window {
     /** Present only inside the desktop shell. */
     arcex?: { pickFolder(title?: string): Promise<string | null>; setTheme(theme: string): void; openExternal(url: string): void; ensureEngine(): Promise<void>;
-      checkForUpdate?(): Promise<{ behind: number; changed: boolean } | null>;
+      checkForUpdate?(): Promise<UpdateInfo | null>;
       update?(): Promise<{ ok?: true; error?: string; detail?: string }>;
+      onUpdateReady?(callback: () => void): void;
       pickElement?(): Promise<PickedElement | null>;
       cancelPick?(): Promise<void> };
   }
 }
 
 /** Agent names by id. App keeps this in step with the engine so any component can name an agent. */
+/** What the desktop shell knows about updates. From source: commits behind and local changes. Installed: a downloaded version. */
+export type UpdateInfo = { behind: number; changed: boolean; version?: string | null; ready?: boolean; percent?: number; notes?: string | null };
+
 /** What the user pointed at in the Browser tab, with their note and a PNG of that part of the page (base64). */
 export type PickedElement = {
   selector: string; tag: string; text: string; html: string; note: string; url: string; title: string; image: string;

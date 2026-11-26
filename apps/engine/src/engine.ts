@@ -727,6 +727,8 @@ export function createEngine(
           args: [connector.script],
           env: [
             { name: "ARCEX_TOOLBOX", value: connector.toolboxFile },
+            // In the installed app process.execPath is Arcex itself, which runs scripts only in Node mode.
+            ...(process.versions.electron ? [{ name: "ELECTRON_RUN_AS_NODE", value: "1" }] : []),
             { name: "ARCEX_PROJECT_NAME", value: project.name },
             { name: "ARCEX_PROJECT_GOAL", value: project.goal },
             { name: "ARCEX_PROJECT_ID", value: project.id },

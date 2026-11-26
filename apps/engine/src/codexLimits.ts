@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import type { UsageLimit } from "@arcex/contracts";
+import { vendorCli } from "./vendorCli.ts";
 
 /**
  * Codex's plan limits, asked of Codex itself. Its ACP adapter only shows them inside the text of its /status command,
@@ -22,11 +23,15 @@ function codexScript(): string | null {
 }
 
 /** The tighter of Codex's windows (five hours and weekly), as Arcex shows limits. Null when Codex can't say. */
-export function readCodexLimit(): Promise<UsageLimit | null> {
+export async function readCodexLimit(): Promise<UsageLimit | null> {
   const script = codexScript();
-  if (!script) return Promise.resolve(null);
+  // Installed, Arcex has no Codex of its own and asks the user's (an npm shim needs the shell to start on Windows).
+  const own = script ? null : await vendorCli("codex");
+  if (!script && !own) return null;
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [script, "app-server"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] });
+    const child = script
+      ? spawn(process.execPath, [script, "app-server"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"] })
+      : spawn(/\s/.test(own!) ? `"${own}"` : own!, ["app-server"], { windowsHide: true, stdio: ["pipe", "pipe", "ignore"], shell: /\.cmd$/i.test(own!) });
     let buffer = "";
     let done = false;
     const finish = (limit: UsageLimit | null) => {

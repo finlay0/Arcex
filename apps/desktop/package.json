@@ -1,12 +1,52 @@
 {
   "name": "@arcex/desktop",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "main": "src/main.cjs",
   "scripts": {
-    "dev": "electron ."
+    "dev": "electron .",
+    "package": "node scripts/package.mjs"
   },
   "devDependencies": {
-    "electron": "45.3.0"
+    "electron": "45.3.0",
+    "electron-builder": "26.18.0"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  },
+  "description": "Arcex, the AI development environment",
+  "author": "Arcex",
+  "build": {
+    "appId": "dev.arcex.app",
+    "productName": "Arcex",
+    "executableName": "Arcex",
+    "copyright": "Arcex",
+    "directories": {
+      "output": "build/out",
+      "buildResources": "resources"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "npmRebuild": false,
+    "electronDist": "node_modules/electron/dist",
+    "electronVersion": "45.3.0",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Arcex-Setup-${version}.${ext}",
+      "shortcutName": "Arcex",
+      "createDesktopShortcut": false
+    },
+    "afterPack": "scripts/after-pack.cjs"
   }
 }

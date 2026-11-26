@@ -42,7 +42,7 @@ export function createTerminals(options: { data(id: string, data: string): void;
     // Loaded on first use, so people who never open a terminal never load it.
     loaded ??= await import("@lydell/node-pty");
     const shell = shellOf();
-    const pty = loaded.spawn(shell.file, shell.args, { name: "xterm-256color", cols, rows, cwd, env: { ...process.env, TERM: "xterm-256color" } as Record<string, string> });
+    const pty = loaded.spawn(shell.file, shell.args, { name: "xterm-256color", cols, rows, cwd, env: { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "ELECTRON_RUN_AS_NODE")), TERM: "xterm-256color" } as Record<string, string> });
     const term: Open = { id: randomUUID(), projectId, pty, buffer: "", pending: "", timer: null };
     open.set(term.id, term);
     pty.onData((data) => {

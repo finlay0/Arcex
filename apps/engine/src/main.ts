@@ -39,7 +39,7 @@ const TYPES: Record<string, string> = {
 };
 
 const sockets = new Set<WebSocket>();
-const about = { version: "0.1.0", dataDir, projectsDir: path.join(os.homedir(), "Arcex Projects") };
+const about = { version: process.env.ARCEX_VERSION ?? "0.1.0", dataDir, projectsDir: path.join(os.homedir(), "Arcex Projects") };
 // The connector runs as its own process, so it reads the toolbox from a file.
 mkdirSync(dataDir, { recursive: true });
 const toolboxFile = path.join(dataDir, "toolbox.json");
@@ -112,7 +112,12 @@ const engine = createEngine(openDb(dataDir), about, connector, (message) => {
 }, account, {
   browser: browserBridge,
   // On Windows, schedules get a Task Scheduler task that starts this engine the same way it runs now.
-  ...(process.platform === "win32" ? { launch: { node: process.execPath, cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), script: "src/main.ts", dataDir } } : {}),
+  // Installed, Arcex.exe starts the engine itself when given --run-schedule (ARCEX_APP_EXE comes from the desktop shell).
+  ...(process.platform === "win32"
+    ? { launch: process.env.ARCEX_APP_EXE
+      ? { node: process.env.ARCEX_APP_EXE, args: [], cwd: path.dirname(process.env.ARCEX_APP_EXE), dataDir }
+      : { node: process.execPath, args: ["--import", "tsx", "src/main.ts"], cwd: path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), dataDir } }
+    : {}),
   connectorEnv: () => [
     { name: "ARCEX_ENGINE_URL", value: engineUrl() },
     { name: "ARCEX_BROWSER_KEY", value: browserKey },

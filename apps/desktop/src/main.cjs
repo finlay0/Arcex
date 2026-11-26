@@ -6,8 +6,17 @@ const { mkdir, readFile, rename, rm, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const { createAgentBrowser } = require("./browser.cjs");
 
-const engineDir = path.resolve(__dirname, "../../engine");
+// Installed, the engine and the client sit in the app's resources folder and Arcex.exe runs the engine in Node mode.
+// From source, the engine runs through the system's Node with tsx, and Update pulls and rebuilds this checkout.
+const packaged = app.isPackaged;
+// Installed, the engine keeps its data in %APPDATA%\Arcex; the window's own browser data goes in a folder of its own
+// there, so the two never mix. ARCEX_USER_DATA moves it, which tests use to stay apart from a real copy.
+if (process.env.ARCEX_USER_DATA) app.setPath("userData", process.env.ARCEX_USER_DATA);
+else if (packaged) app.setPath("userData", path.join(app.getPath("appData"), "Arcex", "Window"));
+const engineDir = packaged ? path.join(process.resourcesPath, "engine") : path.resolve(__dirname, "../../engine");
 const repoDir = path.resolve(__dirname, "../../..");
+const { createInstalledUpdates } = require("./updates.cjs");
+const installed = packaged ? createInstalledUpdates(() => mainWindow) : null;
 
 // ── Updating a build that runs from source.
 // Arcex is being built from inside Arcex, so "Update" means: take the latest code (pulled from GitHub when this
@@ -119,11 +128,22 @@ async function handleBrowser(child, message) {
   if (child.connected) child.send({ channel: "browser", id: message.id, ...reply }, () => {});
 }
 
+/** How the engine starts here, with any extra flags (a scheduled run passes its own). */
+function engineCommand(extra = []) {
+  if (!packaged) return { command: "node", args: ["--import", "tsx", "src/main.ts", ...extra], env: { ...process.env, ARCEX_VERSION: app.getVersion() } };
+  return {
+    command: process.execPath,
+    args: [path.join(engineDir, "dist", "main.js"), ...extra],
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", ARCEX_APP_EXE: process.execPath, ARCEX_VERSION: app.getVersion() },
+  };
+}
+
 function startEngine(port) {
   return new Promise((resolve, reject) => {
-    const child = spawn("node", ["--import", "tsx", "src/main.ts"], {
+    const launch = engineCommand();
+    const child = spawn(launch.command, launch.args, {
       cwd: engineDir,
-      env: { ...process.env, ARCEX_ENGINE_PORT: port },
+      env: { ...launch.env, ARCEX_ENGINE_PORT: port },
       stdio: ["ignore", "pipe", "inherit", "ipc"],
       // Without this Windows opens a console window for the engine, and everything it starts inherits it.
       windowsHide: true,
@@ -175,9 +195,34 @@ function ensureEngine() {
   return starting;
 }
 
-app.whenReady().then(async () => {
-  launchState = await sourceState();
-  launchLock = lockfile();
+// A scheduled task starts Arcex.exe with --run-schedule (H10). It runs that one schedule through the engine with no
+// window, then quits. If Arcex is open, the engine hands the run to it.
+const scheduleIndex = process.argv.indexOf("--run-schedule");
+const scheduled = packaged && scheduleIndex !== -1;
+if (scheduled) {
+  app.whenReady().then(() => {
+    const launch = engineCommand(process.argv.slice(scheduleIndex));
+    const child = spawn(launch.command, launch.args, { cwd: engineDir, env: launch.env, stdio: "ignore", windowsHide: true });
+    child.on("exit", () => app.quit());
+    child.on("error", () => app.quit());
+  });
+}
+
+// One Arcex at a time (D6): a second launch brings the open window forward instead of starting another engine.
+const primary = scheduled || app.requestSingleInstanceLock();
+if (!primary) app.quit();
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
+if (!scheduled && primary) app.whenReady().then(async () => {
+  if (!packaged) {
+    launchState = await sourceState();
+    launchLock = lockfile();
+  }
   let url;
   while (!url) {
     try {
@@ -201,6 +246,8 @@ app.whenReady().then(async () => {
     minHeight: 680,
     backgroundColor: "#0b0b0c",
     title: "Arcex",
+    // ARCEX_HIDDEN keeps the window off screen, for checking a build without showing anything.
+    show: !process.env.ARCEX_HIDDEN,
     // The client draws the title bar. Windows keeps its own minimise, maximise and close buttons on top of it.
     titleBarStyle: "hidden",
     titleBarOverlay: { color: "#0e0e10", symbolColor: "#f4f4f5", height: 63 },
@@ -218,8 +265,13 @@ app.whenReady().then(async () => {
     await ensureEngine();
   });
   const fromWorkspace = (event) => event.sender === win.webContents && event.senderFrame?.parent === null && event.senderFrame.url.startsWith(engineUrl);
-  ipcMain.handle("update-check", (event) => (fromWorkspace(event) ? checkForUpdate() : null));
-  ipcMain.handle("update-app", (event) => (fromWorkspace(event) ? updateApp() : { error: "Only the Arcex workspace can update." }));
+  ipcMain.handle("update-check", (event) => (!fromWorkspace(event) ? null : installed ? installed.check() : checkForUpdate()));
+  ipcMain.handle("update-app", (event) => {
+    if (!fromWorkspace(event)) return { error: "Only the Arcex workspace can update." };
+    if (!installed) return updateApp();
+    quitting = true;
+    return installed.install();
+  });
   // The user points at part of the page in the Browser tab (P10). Only the Arcex interface itself may ask.
   ipcMain.handle("pick-element", async (event, cancel) => {
     if (!fromWorkspace(event)) return null;
@@ -260,7 +312,9 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on("window-all-closed", () => app.quit());
+app.on("window-all-closed", () => {
+  if (!scheduled) app.quit();
+});
 app.on("before-quit", () => (quitting = true));
 app.on("quit", () => {
   if (engine?.connected) engine.disconnect();

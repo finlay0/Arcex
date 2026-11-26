@@ -12,7 +12,8 @@ import type { Schedule, ScheduleWhen } from "@arcex/contracts";
  */
 
 /** How to start this engine from a scheduled task. */
-export type Launch = { node: string; cwd: string; script: string; dataDir: string };
+/** How a task starts the engine: `node` with `args` before the schedule's own flags (from source: tsx and src/main.ts; installed: Arcex.exe alone). */
+export type Launch = { node: string; args: string[]; cwd: string; dataDir: string };
 
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
@@ -80,7 +81,7 @@ function trigger(when: ScheduleWhen, anchor: number): string {
 
 /** The task: start the engine for this schedule with no window, catch up once after a missed time, stop after 3 hours. */
 export function taskXml(schedule: Schedule, launch: Launch): string {
-  const args = `--headless "${launch.node}" --import tsx ${launch.script} --run-schedule ${schedule.id} --data-dir "${launch.dataDir}"`;
+  const args = `--headless "${launch.node}" ${launch.args.map((arg) => `"${arg}"`).join(" ")} --run-schedule ${schedule.id} --data-dir "${launch.dataDir}"`.replace(/  +/g, " ");
   return `<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo><Description>${xmlText(`Arcex: ${schedule.name}`)}</Description></RegistrationInfo>

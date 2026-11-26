@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld("arcex", {
   // Development builds run from source: check for newer code, and rebuild and restart onto it.
   checkForUpdate: () => ipcRenderer.invoke("update-check"),
   update: () => ipcRenderer.invoke("update-app"),
+  // Installed builds: called when a new version has finished downloading.
+  onUpdateReady: (callback) => {
+    ipcRenderer.removeAllListeners("update-ready");
+    ipcRenderer.on("update-ready", () => callback());
+  },
   // Lets the user click part of the page in the Browser tab; resolves with what they picked and their note, or null.
   pickElement: () => ipcRenderer.invoke("pick-element"),
   cancelPick: () => ipcRenderer.invoke("pick-element", true),

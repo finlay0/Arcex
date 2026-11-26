@@ -67,7 +67,9 @@ export function createProcesses(options: { emit(info: ProcessInfo): void; onUrl(
 
     const info: ProcessInfo = { id: randomUUID(), projectId, name: script, command: `${runner} run ${script}`, state: "running", exitCode: null, startedAt: Date.now(), endedAt: null, url: null };
     // `BROWSER=none` stops dev servers opening a browser window by themselves; the preview shows it instead.
-    const env = { ...process.env, BROWSER: "none", FORCE_COLOR: "0", NO_COLOR: "1" };
+    // The installed app runs the engine with ELECTRON_RUN_AS_NODE; the user's own app (perhaps an Electron one) must not.
+    const { ELECTRON_RUN_AS_NODE: _asNode, ...own } = process.env;
+    const env = { ...own, BROWSER: "none", FORCE_COLOR: "0", NO_COLOR: "1" };
     const child = spawn(runner, ["run", script], { cwd, env, shell: true, windowsHide: true, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
     const entry: Running = { info, child, output: "", stopping: false };
     all.set(info.id, entry);

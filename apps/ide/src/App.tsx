@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ProviderStatus, Thread } from "@arcex/contracts";
 import type { Choice } from "./ModelPicker.tsx";
 import { SettingsView, initials, type Section } from "./Settings.tsx";
-import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, plural, prefs, setAgents, stateLabel, type Actions } from "./shared.tsx";
+import { Icon, Menu, Resizer, ago, busy, dotClass, nameOf, plural, prefs, setAgents, stateLabel, type Actions, type UpdateInfo } from "./shared.tsx";
 import sprite from "./sprite.svg?raw";
 import { call, loadItems, reconnect, saveDraft, useStore } from "./store.ts";
 import { ToolboxView } from "./Toolbox.tsx";
@@ -25,22 +25,32 @@ const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
 const remembered = (key: string) => localStorage.getItem(key);
 
 
-/** The Update button of a development build: quiet until there is newer code, then rebuilds and restarts onto it. */
-function UpdateButton({ fail }: { fail: (error: unknown) => void }) {
+/**
+ * The Update button: quiet until there is something new. Installed, that is a newer version already downloaded in the
+ * background, and Restart installs it. From source, it is newer code, and Arcex rebuilds and restarts onto it. It
+ * waits while a thread works, so an update never cuts an agent off.
+ */
+function UpdateButton({ fail, working }: { fail: (error: unknown) => void; working: number }) {
   const desktop = window.arcex;
-  const [info, setInfo] = useState<{ behind: number; changed: boolean } | null>(null);
+  const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!desktop?.checkForUpdate) return;
     const check = () => void desktop.checkForUpdate?.().then(setInfo).catch(() => {});
     check();
+    desktop.onUpdateReady?.(check);
     const timer = setInterval(check, 120_000);
     window.addEventListener("focus", check);
     return () => (clearInterval(timer), window.removeEventListener("focus", check));
   }, [desktop]);
-  const ready = !!info && (info.behind > 0 || info.changed);
+  const ready = !!info && (info.behind > 0 || info.changed || info.ready === true);
   if (!desktop?.update || !ready) return null;
-  const hint = info.behind > 0
+  const hint = working
+    ? `Waiting for ${working === 1 ? "a thread" : `${working} threads`} to finish, so the update doesn't stop an agent mid-task.`
+    : info.ready ? `Arcex ${info.version ?? "update"} is downloaded. Restart to use it; your threads stay as they are.${info.notes ? `
+
+${info.notes}` : ""}`
+    : info.behind > 0
     ? `${info.behind} new ${info.behind === 1 ? "change" : "changes"} on GitHub. Arcex rebuilds and restarts onto them.`
     : "The code changed since Arcex started. Arcex rebuilds and restarts onto it.";
   const update = async () => {
@@ -57,10 +67,10 @@ function UpdateButton({ fail }: { fail: (error: unknown) => void }) {
   };
   return (
     <div className="updatebar">
-      <button className="update" title={hint} disabled={busy} onClick={() => void update()}>
+      <button className="update" title={hint} disabled={busy || working > 0} onClick={() => void update()}>
         <span className="dot ok" />
-        <span className="fill">{busy ? "Updating Arcex…" : "Update ready"}</span>
-        {!busy && <span className="go">Restart</span>}
+        <span className="fill">{busy ? "Updating Arcex…" : info.ready && info.version ? `Arcex ${info.version} ready` : "Update ready"}</span>
+        {!busy && <span className="go">{working ? "After this turn" : "Restart"}</span>}
       </button>
     </div>
   );
@@ -605,7 +615,7 @@ export function App() {
           })}
           {needle && !live.some((t) => t.title.toLowerCase().includes(needle)) && <div className="none flat">No thread matches "{query}".</div>}
         </div>
-        <UpdateButton fail={fail} />
+        <UpdateButton fail={fail} working={store.threads.filter(busy).length} />
         <Resizer name="side-w" edge="right" min={220} max={() => Math.min(460, window.innerWidth - 640)} label="Resize the sidebar" />
         <div className="foot">
           <button className="row profile" title="Profile and settings" onClick={() => setScreen({ kind: "settings", section: "profile" })}>
